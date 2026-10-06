@@ -17,6 +17,11 @@ function startZohoSyncJob() {
     syncNow({ reason: 'scheduled' }).catch(() => {});
   });
   logger.info(`Zoho Books stock sync scheduled (${env.zoho.syncCron})`);
+
+  // On a host that sleeps when idle, scheduled runs are missed - sync once on wake-up.
+  setTimeout(async () => {
+    if (await isZohoActive().catch(() => false)) syncNow({ reason: 'startup' }).catch(() => {});
+  }, 5000);
 }
 
 module.exports = { startZohoSyncJob };

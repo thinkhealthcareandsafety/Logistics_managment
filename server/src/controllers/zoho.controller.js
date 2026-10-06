@@ -40,8 +40,15 @@ async function statusView(conn) {
   };
 }
 
+/** A free host sleeps when idle and misses scheduled syncs - catch up when someone looks. */
+const STALE_MS = 5 * 60 * 1000;
+
 const getStatus = asyncHandler(async (req, res) => {
-  res.json({ zoho: await statusView(await ZohoConnection.get()) });
+  const conn = await ZohoConnection.get();
+  if (conn.isConnected && (!conn.lastSyncAt || Date.now() - conn.lastSyncAt.getTime() > STALE_MS)) {
+    syncNow({ reason: 'stale on view' }).catch(() => {});
+  }
+  res.json({ zoho: await statusView(conn) });
 });
 
 /** Starts the Zoho sign-in. The browser is sent to the returned URL. */
