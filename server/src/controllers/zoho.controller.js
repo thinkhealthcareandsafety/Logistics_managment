@@ -36,6 +36,7 @@ async function statusView(conn) {
     lastSyncOk: conn.lastSyncOk,
     lastSyncError: conn.lastSyncError,
     lastSyncSummary: conn.lastSyncSummary,
+    lastSyncSample: conn.lastSyncSample || [],
     linkedItems,
   };
 }

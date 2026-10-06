@@ -29,6 +29,31 @@ const lineName = (i) => (i.size ? `${i.name} ${i.size}` : i.name);
 /** Zoho can hold fractional or negative stock; the shelf here can't. */
 const shelfCount = (n) => Math.max(0, Math.floor(Number(n) || 0));
 
+/**
+ * The stock figure Zoho actually sent for an item, or null when it sent none. A missing
+ * figure must never be read as "0" - that would wipe real shelf counts.
+ */
+function stockFigure(z) {
+  for (const key of ['stock_on_hand', 'actual_available_stock', 'available_stock']) {
+    const v = z[key];
+    if (v !== '' && v != null && Number.isFinite(Number(v))) return Number(v);
+  }
+  return null;
+}
+
+/** What Zoho sends for a few items - kept with the connection so problems can be diagnosed. */
+function sampleOf(items) {
+  return items.slice(0, 3).map((z) => {
+    const out = {};
+    for (const [k, v] of Object.entries(z)) {
+      if (['item_id', 'name', 'sku', 'item_type', 'product_type', 'status', 'track_inventory', 'unit'].includes(k) || /stock/i.test(k)) {
+        out[k] = v;
+      }
+    }
+    return out;
+  });
+}
+
 function isTracked(z) {
   if (z.status && z.status !== 'active') return false;
   if (z.is_combo_product) return false;
@@ -119,18 +144,37 @@ function applyDelta(item, delta) {
 
 async function syncOnce(conn) {
   const zohoItems = (await zoho.listItems(conn)).filter(isTracked);
+  conn.lastSyncSample = sampleOf(zohoItems);
+  const withFigure = zohoItems.filter((z) => stockFigure(z) !== null);
+  // Safety stop: Zoho listed items but sent no quantities at all (inventory tracking
+  // off, or quantities kept elsewhere). Change nothing rather than guess.
+  if (zohoItems.length > 0 && withFigure.length === 0) {
+    throw new Error(
+      `Zoho Books listed ${zohoItems.length} items but sent no stock quantities for any of them, so nothing was changed. Check that inventory tracking is turned on in Zoho Books (Settings → Items → Track inventory).`
+    );
+  }
+
   const local = await StockItem.find({ isArchived: false });
   const byZohoId = new Map(local.filter((i) => i.zohoItemId).map((i) => [i.zohoItemId, i]));
   const unlinked = local.filter((i) => !i.zohoItemId);
   // Lines someone removed here stay removed - don't recreate them from Zoho.
   const removed = new Set(await StockItem.distinct('zohoItemId', { isArchived: true, zohoItemId: { $ne: '' } }));
-  const summary = { zohoItems: zohoItems.length, linked: 0, created: 0, stockIn: 0, stockOut: 0 };
+  const summary = {
+    zohoItems: zohoItems.length,
+    linked: 0,
+    created: 0,
+    stockIn: 0,
+    stockOut: 0,
+    noFigure: zohoItems.length - withFigure.length,
+    held: 0,
+    heldNames: [],
+  };
   const movements = [];
   let category = null;
 
-  for (const z of zohoItems) {
+  for (const z of withFigure) {
     const zid = String(z.item_id);
-    const target = shelfCount(z.stock_on_hand);
+    const target = shelfCount(stockFigure(z));
     let item = byZohoId.get(zid);
     let firstLink = false;
 
@@ -142,6 +186,13 @@ async function syncOnce(conn) {
         const n = norm(z.name);
         candidates = unlinked.filter((i) => norm(lineName(i)) === n);
         if (candidates.length === 0) candidates = unlinked.filter((i) => !i.size && norm(i.name) === n);
+      }
+      // Zoho says none in stock but the shelf here has some: Zoho is the one that's
+      // behind. Don't link (and wipe the count) - list it for someone to check.
+      if (candidates.length === 1 && target === 0 && candidates[0].quantity > 0) {
+        summary.held += 1;
+        if (summary.heldNames.length < 20) summary.heldNames.push(lineName(candidates[0]));
+        continue;
       }
       if (candidates.length === 1) {
         item = candidates[0];

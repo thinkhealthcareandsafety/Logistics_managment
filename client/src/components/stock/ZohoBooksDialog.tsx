@@ -219,6 +219,19 @@ function Connected({ zoho }: { zoho: ZohoStatus }) {
           </div>
         </dl>
         {failing && <p className="mt-3 text-[12px] leading-snug text-red-700">{zoho.lastSyncError}</p>}
+        {!failing && !!zoho.lastSyncSummary.held && (
+          <p className="mt-3 rounded-md bg-amber-50 px-2.5 py-2 text-[12px] leading-snug text-amber-900 ring-1 ring-inset ring-amber-200">
+            {zoho.lastSyncSummary.held} line{zoho.lastSyncSummary.held === 1 ? '' : 's'} not linked because Zoho shows 0 in
+            stock but you have stock here - update the quantity in Zoho Books and they link on the next sync
+            {zoho.lastSyncSummary.heldNames?.length ? `: ${zoho.lastSyncSummary.heldNames.join(', ')}` : ''}.
+          </p>
+        )}
+        {!failing && !!zoho.lastSyncSummary.noFigure && (
+          <p className="mt-2 text-[12px] leading-snug text-slate-500">
+            {zoho.lastSyncSummary.noFigure} Zoho item{zoho.lastSyncSummary.noFigure === 1 ? '' : 's'} came without a stock
+            quantity and {zoho.lastSyncSummary.noFigure === 1 ? 'was' : 'were'} skipped.
+          </p>
+        )}
       </div>
 
       {/* Options */}

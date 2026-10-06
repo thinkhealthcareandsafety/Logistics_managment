@@ -85,7 +85,17 @@ export interface ZohoStatus {
   lastSyncAt: string | null;
   lastSyncOk: boolean | null;
   lastSyncError: string;
-  lastSyncSummary: { zohoItems: number; linked: number; created: number; stockIn: number; stockOut: number };
+  lastSyncSummary: {
+    zohoItems: number;
+    linked: number;
+    created: number;
+    stockIn: number;
+    stockOut: number;
+    noFigure?: number;
+    held?: number;
+    heldNames?: string[];
+  };
+  lastSyncSample?: Record<string, unknown>[];
   linkedItems: number;
 }
 

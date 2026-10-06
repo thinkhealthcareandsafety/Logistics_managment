@@ -40,7 +40,14 @@ const zohoConnectionSchema = new mongoose.Schema(
       created: { type: Number, default: 0 },
       stockIn: { type: Number, default: 0 },
       stockOut: { type: Number, default: 0 },
+      /** Items Zoho listed without any stock figure - skipped, never read as 0. */
+      noFigure: { type: Number, default: 0 },
+      /** Matches left unlinked because Zoho shows 0 while the shelf here has stock. */
+      held: { type: Number, default: 0 },
+      heldNames: { type: [String], default: [] },
     },
+    /** A few items exactly as Zoho sent them (stock fields only), for diagnosis. */
+    lastSyncSample: { type: mongoose.Schema.Types.Mixed, default: [] },
 
     /** OAuth round-trip guard (CSRF) - set when "Connect" is pressed, cleared on return. */
     oauthState: { type: String, default: '' },
