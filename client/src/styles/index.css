@@ -1,0 +1,181 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    @apply antialiased;
+    /* Inter's tailed lowercase l - AWB numbers mix l, I and 1 constantly. */
+    font-feature-settings: 'cv05';
+    /* In-page jump links on the landing page. */
+    scroll-behavior: smooth;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+  }
+  body {
+    @apply bg-slate-50 text-slate-900;
+  }
+}
+
+@layer components {
+  .input {
+    @apply w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100;
+  }
+  .btn-primary {
+    @apply rounded-lg bg-brand-900 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-brand-800 disabled:cursor-not-allowed disabled:opacity-60;
+  }
+  .btn-secondary {
+    @apply rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50;
+  }
+}
+
+@layer utilities {
+  /* Dashed connector lines on the landing page's flow diagram. Purely decorative,
+     so it's dropped under reduced-motion. */
+  .flow-line {
+    stroke-dasharray: 7 7;
+    animation: flow 2.4s linear infinite;
+  }
+  @keyframes flow {
+    to {
+      stroke-dashoffset: -28;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .flow-line {
+      animation: none;
+    }
+  }
+
+  /* Infinite review marquee. The track holds two identical halves and slides exactly
+     one half-width, so the moment it wraps back to 0 the frame is pixel-identical and
+     the loop is invisible. Duration is set inline from the card count to keep the
+     speed constant however many reviews there are. */
+  .marquee-track {
+    animation: marquee var(--marquee-duration, 40s) linear infinite;
+  }
+  .marquee-track:hover,
+  .marquee-track:focus-within {
+    animation-play-state: paused;
+  }
+  @keyframes marquee {
+    to {
+      transform: translateX(-50%);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .marquee-track {
+      animation: none;
+    }
+  }
+
+  /* Pricing volume slider. A native range input restyled, so arrow keys, screen
+     readers and touch all work without extra code. --fill is set inline. */
+  .range-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    height: 6px;
+    border-radius: 9999px;
+    background: linear-gradient(
+      to right,
+      #020617 0%,
+      #020617 var(--fill, 0%),
+      #e2e8f0 var(--fill, 0%),
+      #e2e8f0 100%
+    );
+    cursor: pointer;
+    outline: none;
+  }
+  .range-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 24px;
+    height: 24px;
+    border-radius: 9999px;
+    background: #fff;
+    border: 1px solid rgba(15, 23, 42, 0.15);
+    box-shadow:
+      0 1px 2px rgba(15, 23, 42, 0.1),
+      0 6px 14px -4px rgba(15, 23, 42, 0.3);
+    transition: transform 0.15s;
+  }
+  .range-slider::-moz-range-thumb {
+    width: 24px;
+    height: 24px;
+    border-radius: 9999px;
+    background: #fff;
+    border: 1px solid rgba(15, 23, 42, 0.15);
+    box-shadow:
+      0 1px 2px rgba(15, 23, 42, 0.1),
+      0 6px 14px -4px rgba(15, 23, 42, 0.3);
+  }
+  .range-slider:hover::-webkit-slider-thumb,
+  .range-slider:active::-webkit-slider-thumb {
+    transform: scale(1.12);
+  }
+  .range-slider:focus-visible::-webkit-slider-thumb {
+    box-shadow: 0 0 0 5px rgba(44, 130, 144, 0.3);
+  }
+  .range-slider:focus-visible::-moz-range-thumb {
+    box-shadow: 0 0 0 5px rgba(44, 130, 144, 0.3);
+  }
+
+  /* Scroll reveal (components/marketing/Reveal.tsx). */
+  .reveal {
+    opacity: 0;
+    transform: translateY(18px);
+    transition:
+      opacity 0.8s cubic-bezier(0.2, 0.7, 0.2, 1),
+      transform 0.8s cubic-bezier(0.2, 0.7, 0.2, 1);
+  }
+  .reveal-in {
+    opacity: 1;
+    transform: none;
+  }
+
+  /* A timeline row arriving in the hero simulator. */
+  .step-in {
+    animation: step-in 0.45s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  }
+  @keyframes step-in {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+  }
+
+  /* A bar that fills over --fill-duration: the "next scenario in…" and "next step
+     in…" timers, so autoplay is visible rather than things changing unannounced. */
+  .fill-bar {
+    animation: fill-bar var(--fill-duration, 4s) linear both;
+    transform-origin: left;
+  }
+  @keyframes fill-bar {
+    from {
+      transform: scaleX(0);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .reveal {
+      opacity: 1;
+      transform: none;
+      transition: none;
+    }
+    .step-in,
+    .fill-bar {
+      animation: none;
+    }
+  }
+
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    @apply bg-slate-300 rounded-full;
+  }
+}

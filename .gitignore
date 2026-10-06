@@ -1,0 +1,13 @@
+node_modules/
+dist/
+build/
+.env
+.env.local
+*.log
+.DS_Store
+coverage/
+# Local dev database (npm run dev:db)
+.dev-data/
+
+# Local Claude Code settings
+.claude/settings.local.json
