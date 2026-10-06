@@ -45,9 +45,24 @@ app.use('/api/integrations/zoho', zohoRoutes);
 // app, its API and its links all share one address (no CORS or cross-site cookies).
 const clientDist = path.resolve(__dirname, '../../client/dist');
 if (fs.existsSync(path.join(clientDist, 'index.html'))) {
-  app.use(express.static(clientDist, { index: false, maxAge: '1h' }));
+  // Built files have content hashes in their names, so they can be cached for a year;
+  // index.html must never be cached, or browsers keep showing the previous release.
+  const noCache = (res) => res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  app.use(
+    express.static(clientDist, {
+      index: false,
+      maxAge: '1y',
+      immutable: true,
+      setHeaders: (res, file) => {
+        if (file.endsWith('.html')) noCache(res);
+      },
+    })
+  );
   // Any non-API path is a page of the single-page app (/dashboard, /track/:awb...).
-  app.get(/^\/(?!api(\/|$)).*/, (req, res) => res.sendFile(path.join(clientDist, 'index.html')));
+  app.get(/^\/(?!api(\/|$)).*/, (req, res) => {
+    noCache(res);
+    res.sendFile(path.join(clientDist, 'index.html'));
+  });
 }
 
 app.use(notFoundHandler);
