@@ -1,0 +1,36 @@
+# One-click hosting on Render (render.com -> New -> Blueprint -> pick this repo).
+# One web service serves both the React app and the API at the same address.
+# You'll be asked for the values marked `sync: false` - the rest is automatic.
+services:
+  - type: web
+    name: thinkhealth-logistics
+    runtime: node
+    plan: free
+    region: singapore
+    buildCommand: npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "20"
+      # MongoDB Atlas connection string, e.g.
+      # mongodb+srv://user:pass@cluster0.xxxxx.mongodb.net/logistics-tracker?retryWrites=true&w=majority
+      - key: MONGODB_URI
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: INGEST_API_KEY
+        generateValue: true
+      # Loads the demo login + sample data the first time, only into an empty database.
+      - key: SEED_IF_EMPTY
+        value: "true"
+      - key: SIGNUP_ALLOWED_DOMAINS
+        value: thinkhealth.in
+      - key: TRACKINGMORE_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-3.5-flash

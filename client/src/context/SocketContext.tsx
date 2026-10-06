@@ -6,7 +6,8 @@ import { useAuth, TOKEN_STORAGE_KEY } from './AuthContext';
 import type { Shipment } from '../types/shipment';
 import type { AppNotification } from '../types/notification';
 
-const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:5000';
+const SOCKET_URL =
+  import.meta.env.VITE_SOCKET_URL || (import.meta.env.PROD ? window.location.origin : 'http://localhost:5000');
 
 const SocketContext = createContext<Socket | null>(null);
 

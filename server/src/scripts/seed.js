@@ -87,9 +87,8 @@ function daysFromNow(d) {
   return new Date(Date.now() + d * 24 * 60 * 60 * 1000);
 }
 
-async function seed() {
-  await connectDB();
-
+/** Writes the demo data into an already-connected database. */
+async function seedData() {
   let user = await User.findOne({ email: DEMO_EMAIL });
   if (!user) {
     const passwordHash = await bcrypt.hash('Demo@12345', 12);
@@ -348,7 +347,17 @@ async function seed() {
   logger.info(
     `Seeded ${REVIEWED.length} demo reviews - all tagged "(demo)". DELETE THESE before going live.`
   );
-  process.exit(0);
+}
+
+/**
+ * For a fresh hosted database (SEED_IF_EMPTY=true): fills it with the demo data only
+ * when there are no users at all, so a redeploy never overwrites real shipments.
+ */
+async function seedIfEmpty() {
+  if (await User.exists({})) return false;
+  logger.info('Empty database - loading demo data');
+  await seedData();
+  return true;
 }
 
 async function seedStock() {
@@ -415,7 +424,15 @@ async function seedStock() {
   logger.info(`Seeded stock: ${STOCK_SNAPSHOT.length} categories, ${itemCount} items (from the 28/09 WhatsApp update)`);
 }
 
-seed().catch((err) => {
-  logger.error(`Seed failed: ${err.stack || err.message}`);
-  process.exit(1);
-});
+module.exports = { seedData, seedIfEmpty };
+
+// `npm run seed`: connect, (re)load the demo data, exit.
+if (require.main === module) {
+  connectDB()
+    .then(seedData)
+    .then(() => process.exit(0))
+    .catch((err) => {
+      logger.error(`Seed failed: ${err.stack || err.message}`);
+      process.exit(1);
+    });
+}

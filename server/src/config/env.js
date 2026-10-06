@@ -11,7 +11,9 @@ function required(name, fallback) {
 const env = {
   nodeEnv: process.env.NODE_ENV || 'development',
   port: Number(process.env.PORT) || 5000,
-  clientUrl: process.env.CLIENT_URL || 'http://localhost:5173',
+  // On Render, RENDER_EXTERNAL_URL is the site's public address (front end and API are
+  // served together there), so links in emails and redirects work without extra setup.
+  clientUrl: (process.env.CLIENT_URL || process.env.RENDER_EXTERNAL_URL || 'http://localhost:5173').replace(/\/$/, ''),
 
   mongoUri: required('MONGODB_URI', 'mongodb://127.0.0.1:27017/logistics-tracker'),
 
@@ -55,7 +57,11 @@ const env = {
 
   // Where this API is reachable from outside - Zoho redirects back to it after sign-in
   // and calls its webhook. In development that's this machine.
-  serverUrl: (process.env.SERVER_URL || `http://localhost:${Number(process.env.PORT) || 5000}`).replace(/\/$/, ''),
+  serverUrl: (
+    process.env.SERVER_URL ||
+    process.env.RENDER_EXTERNAL_URL ||
+    `http://localhost:${Number(process.env.PORT) || 5000}`
+  ).replace(/\/$/, ''),
 
   // Zoho Books stock sync. Create a "Server-based Application" at api-console.zoho.in
   // (or .com/.eu... for your data centre) and register the redirect URI shown in the app.
