@@ -4,7 +4,7 @@ import { useCarriers } from '../hooks/useCarriers';
 import { carriersApi } from '../api/carriers';
 import type { Carrier } from '../types/shipment';
 
-const MAX_RESULTS = 50;
+type Group = { label: string; start: number };
 
 export function CourierLogo({ courier, size = 18 }: { courier?: Pick<Carrier, 'name' | 'logo'> | null; size?: number }) {
   const [broken, setBroken] = useState(false);
@@ -50,8 +50,9 @@ function rank(c: Carrier, q: string) {
 }
 
 /**
- * Any courier in TrackingMore's catalog (~1,700). Indian couriers first - that's who
- * this team ships with - and well-known ones before those when nothing is typed.
+ * Every courier in TrackingMore's catalog (~1,700), all in the list. Grouped so the
+ * likely ones are at the top: well-known Indian couriers, then the other Indian
+ * couriers, then the rest of the world A-Z. Typing filters the whole catalog.
  * An accessible combobox: type to filter, arrows to move, Enter to pick, Esc to close.
  */
 export function CourierPicker({
@@ -84,21 +85,35 @@ export function CourierPicker({
   const selected = byCode.get(value) || null;
   const total = data?.carriers.length ?? 0;
 
-  const results = useMemo(() => {
+  // One flat list (so arrow keys walk straight through) plus where each group starts.
+  const { results, groups } = useMemo(() => {
     const all = data?.carriers ?? [];
     const q = query.trim().toLowerCase();
-    if (!q) {
-      return (data?.featured ?? []).map((code) => byCode.get(code)).filter(Boolean) as Carrier[];
+    if (q) {
+      const matches = all
+        .map((c) => ({ c, r: rank(c, q) }))
+        .filter((x) => x.r >= 0)
+        .sort((a, b) => a.r - b.r || Number(b.c.country === 'IN') - Number(a.c.country === 'IN') || a.c.name.localeCompare(b.c.name))
+        .map((x) => x.c);
+      return { results: matches, groups: [] as Group[] };
     }
-    return all
-      .map((c) => ({ c, r: rank(c, q) }))
-      .filter((x) => x.r >= 0)
-      .sort((a, b) => a.r - b.r || Number(b.c.country === 'IN') - Number(a.c.country === 'IN') || a.c.name.localeCompare(b.c.name))
-      .slice(0, MAX_RESULTS)
-      .map((x) => x.c);
+    const featured = (data?.featured ?? []).map((code) => byCode.get(code)).filter(Boolean) as Carrier[];
+    const featuredCodes = new Set(featured.map((c) => c.code));
+    const byName = (a: Carrier, b: Carrier) => a.name.localeCompare(b.name);
+    const indian = all.filter((c) => c.country === 'IN' && !featuredCodes.has(c.code)).sort(byName);
+    const rest = all.filter((c) => c.country !== 'IN' && !featuredCodes.has(c.code)).sort(byName);
+    const groups: Group[] = [];
+    if (featured.length) groups.push({ label: 'Popular in India', start: 0 });
+    if (indian.length) groups.push({ label: `More Indian couriers (${indian.length})`, start: featured.length });
+    if (rest.length) groups.push({ label: `All other couriers A–Z (${rest.length.toLocaleString('en-IN')})`, start: featured.length + indian.length });
+    return { results: [...featured, ...indian, ...rest], groups };
   }, [data, byCode, query]);
 
-  useEffect(() => setActiveIdx(0), [query, open]);
+  // Opening the full list lands on the courier already chosen; typing starts at the top.
+  useEffect(() => {
+    setActiveIdx(query ? 0 : Math.max(0, results.findIndex((c) => c.code === value)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query, open]);
 
   useEffect(() => {
     if (!open) return;
@@ -202,17 +217,28 @@ export function CourierPicker({
 
       {open && (
         <div className="absolute left-0 right-0 z-50 mt-1 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_12px_32px_-8px_rgba(15,23,42,0.18)]">
-          {!query && (
-            <p className="border-b border-slate-100 px-3 py-2 text-[11px] font-medium uppercase tracking-wide text-slate-400">
-              Popular in India · type to search all {total.toLocaleString('en-IN')}
-            </p>
-          )}
-          <ul ref={listRef} id={listId} role="listbox" aria-label="Couriers" className="max-h-64 overflow-y-auto p-1">
+          <p className="border-b border-slate-100 px-3 py-2 text-[11px] font-medium text-slate-500">
+            {query
+              ? `${results.length.toLocaleString('en-IN')} of ${total.toLocaleString('en-IN')} couriers match`
+              : `All ${total.toLocaleString('en-IN')} couriers · scroll, or type to search`}
+          </p>
+          <ul ref={listRef} id={listId} role="listbox" aria-label="Couriers" className="max-h-80 overflow-y-auto p-1">
             {isError && <li className="px-3 py-3 text-[13px] text-red-600">Couldn’t load the courier list.</li>}
             {!isError && results.length === 0 && (
               <li className="px-3 py-3 text-[13px] text-slate-500">No courier matches “{query}”.</li>
             )}
-            {results.map((c, i) => (
+            {results.map((c, i) => [
+              ...groups
+                .filter((g) => g.start === i)
+                .map((g) => (
+                  <li
+                    key={`group-${g.label}`}
+                    role="presentation"
+                    className="sticky top-0 z-10 -mx-1 bg-white/95 px-3.5 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400 backdrop-blur"
+                  >
+                    {g.label}
+                  </li>
+                )),
               <li
                 key={c.code}
                 id={`${listId}-${i}`}
@@ -223,7 +249,8 @@ export function CourierPicker({
                 onClick={() => pick(c.code)}
                 onMouseEnter={() => setActiveIdx(i)}
                 className={clsx(
-                  'flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px]',
+                  // content-visibility: the browser skips laying out the ~1,700 rows that are off screen.
+                  'flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] [contain-intrinsic-size:auto_36px] [content-visibility:auto]',
                   i === activeIdx ? 'bg-slate-100' : '',
                   c.code === value ? 'font-semibold text-slate-950' : 'text-slate-700'
                 )}
@@ -231,8 +258,8 @@ export function CourierPicker({
                 <CourierLogo courier={c} />
                 <span className="min-w-0 flex-1 truncate">{c.name}</span>
                 <span className="shrink-0 font-mono text-[11px] text-slate-400">{c.country}</span>
-              </li>
-            ))}
+              </li>,
+            ])}
           </ul>
         </div>
       )}
