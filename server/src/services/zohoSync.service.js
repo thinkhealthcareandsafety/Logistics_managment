@@ -286,7 +286,8 @@ async function syncOnce(conn, { reason = 'manual' } = {}) {
     }
 
     if (!item) {
-      if (!conn.autoCreate || target <= 0 || removed.has(zid)) continue;
+      // Every Zoho stock item gets a line - at 0 if Zoho has none - so the sheet mirrors Zoho.
+      if (!conn.autoCreate || removed.has(zid)) continue;
       category = category || (await autoCategory());
       const last = await StockItem.findOne({ categoryId: category._id }).sort({ sortOrder: -1 });
       // The SKU becomes the product code (so shipments can name it) unless a line already uses it.

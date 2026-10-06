@@ -101,7 +101,7 @@ function NotConnected({ zoho }: { zoho: ZohoStatus }) {
         <Point title="Purchases add stock">A bill saved in Zoho Books adds its quantities here as new stock.</Point>
         <Point title="Sales take it off">An invoice removes stock - old stock first - and shows under “Stock Out” in the WhatsApp update.</Point>
         <Point title="New products appear by themselves">
-          A product bought for the first time gets its own line in “{zoho.autoCategory}”.
+          Every stock item in Zoho Books gets its own line in “{zoho.autoCategory}”, including new products as you add them.
         </Point>
         <Point title="Your lines are matched for you">
           By SKU (= the line’s product code here), otherwise by the same name. Lines that aren’t in Zoho stay manual.
@@ -247,7 +247,7 @@ function Connected({ zoho }: { zoho: ZohoStatus }) {
           <span>
             <span className="font-medium text-slate-900">Add new Zoho products automatically</span>
             <span className="block text-[12px] text-slate-500">
-              A product with stock in Zoho and no matching line here gets a line in “{zoho.autoCategory}”. Move it to the
+              Every Zoho stock item without a matching line here gets one in “{zoho.autoCategory}” (at 0 if Zoho has none). Move it to the
               right category whenever you like.
             </span>
           </span>
