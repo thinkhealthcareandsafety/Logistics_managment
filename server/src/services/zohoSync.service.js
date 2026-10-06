@@ -149,8 +149,21 @@ async function syncOnce(conn) {
   // Safety stop: Zoho listed items but sent no quantities at all (inventory tracking
   // off, or quantities kept elsewhere). Change nothing rather than guess.
   if (zohoItems.length > 0 && withFigure.length === 0) {
+    // One extra call to tell the two causes apart: is stock hidden from this login, or
+    // only left out of the list view?
+    let detail = null;
+    try {
+      const full = await zoho.getItem(conn, zohoItems[0].item_id);
+      detail = Object.fromEntries(Object.entries(full).filter(([k]) => /stock|warehouse|location/i.test(k)));
+    } catch (err) {
+      detail = { error: err.message };
+    }
+    conn.lastSyncSample = [{ ...conn.lastSyncSample[0], detail }, ...conn.lastSyncSample.slice(1)];
+    const detailHasStock = detail && stockFigure(detail) !== null;
     throw new Error(
-      `Zoho Books listed ${zohoItems.length} items but sent no stock quantities for any of them, so nothing was changed. Check that inventory tracking is turned on in Zoho Books (Settings → Items → Track inventory).`
+      detailHasStock
+        ? `Zoho Books shows stock on single items but leaves it out of the item list, so nothing was changed yet.`
+        : `Zoho Books sent no stock quantities for any of its ${zohoItems.length} items, so nothing was changed. The Zoho login used to connect probably can't see stock: give it access to stock/inventory in Zoho Books, then Disconnect and Connect again here.`
     );
   }
 

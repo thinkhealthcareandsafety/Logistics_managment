@@ -156,6 +156,12 @@ async function listItems(conn) {
   return items;
 }
 
+/** One item in full (includes stock and per-warehouse figures where the list may not). */
+async function getItem(conn, itemId) {
+  const body = await booksGet(conn, `/items/${encodeURIComponent(itemId)}`, { organization_id: conn.organizationId });
+  return body.item || {};
+}
+
 /** Best effort: tell Zoho to drop the refresh token on disconnect. */
 async function revoke(conn) {
   if (!conn.refreshToken) return;
@@ -172,5 +178,6 @@ module.exports = {
   exchangeCode,
   listOrganizations,
   listItems,
+  getItem,
   revoke,
 };
