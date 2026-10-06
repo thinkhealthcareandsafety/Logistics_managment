@@ -146,10 +146,10 @@ async function listOrganizations(conn) {
 }
 
 /** Every item in the organisation (200 a page - a few pages at most for this business). */
-async function listItems(conn) {
+async function listItems(conn, extraParams = {}) {
   const items = [];
   for (let page = 1; page <= 50; page += 1) {
-    const body = await booksGet(conn, '/items', { organization_id: conn.organizationId, page, per_page: 200 });
+    const body = await booksGet(conn, '/items', { organization_id: conn.organizationId, page, per_page: 200, ...extraParams });
     items.push(...(body.items || []));
     if (!body.page_context?.has_more_page) break;
   }

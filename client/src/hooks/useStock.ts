@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { stockApi } from '../api/stock';
@@ -127,7 +128,20 @@ export function useSendStockNow() {
 // ─────────────────────────── Zoho Books ───────────────────────────
 
 export function useZohoStatus() {
-  return useQuery({ queryKey: ['stock', 'zoho'], queryFn: stockApi.zoho.status, refetchInterval: 60_000 });
+  const queryClient = useQueryClient();
+  const wasSyncing = useRef(false);
+  const query = useQuery({
+    queryKey: ['stock', 'zoho'],
+    queryFn: stockApi.zoho.status,
+    // Check often while a long sync runs, so the sheet updates as soon as it finishes.
+    refetchInterval: (q) => (q.state.data?.syncing ? 5_000 : 60_000),
+  });
+  const syncing = !!query.data?.syncing;
+  useEffect(() => {
+    if (wasSyncing.current && !syncing) queryClient.invalidateQueries({ queryKey: ['stock'] });
+    wasSyncing.current = syncing;
+  }, [syncing, queryClient]);
+  return query;
 }
 
 export function useConnectZoho() {
@@ -148,7 +162,8 @@ export function useUpdateZoho() {
 
 export function useSyncZoho() {
   return useStockMutation(() => stockApi.zoho.sync(), {
-    success: ({ summary: s }) => {
+    success: ({ summary: s, running }) => {
+      if (running || !s) return 'Syncing with Zoho Books - reading every item takes a few minutes; stock updates by itself when done';
       const parts = [
         s.stockIn && `${s.stockIn} in`,
         s.stockOut && `${s.stockOut} out`,

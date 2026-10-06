@@ -34,11 +34,87 @@ const shelfCount = (n) => Math.max(0, Math.floor(Number(n) || 0));
  * figure must never be read as "0" - that would wipe real shelf counts.
  */
 function stockFigure(z) {
-  for (const key of ['stock_on_hand', 'actual_available_stock', 'available_stock']) {
-    const v = z[key];
-    if (v !== '' && v != null && Number.isFinite(Number(v))) return Number(v);
+  const num = (v) => (v !== '' && v != null && Number.isFinite(Number(v)) ? Number(v) : null);
+  for (const key of ['stock_on_hand', 'location_stock_on_hand', 'actual_available_stock', 'available_stock']) {
+    if (num(z[key]) !== null) return num(z[key]);
+  }
+  // Zoho Books with Locations keeps stock per warehouse: the item's stock is their sum.
+  if (Array.isArray(z.locations)) {
+    const figures = z.locations
+      .filter((l) => !l.status || l.status === 'active')
+      .map((l) => num(l.location_stock_on_hand))
+      .filter((n) => n !== null);
+    if (figures.length) return figures.reduce((a, b) => a + b, 0);
   }
   return null;
+}
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/** Full item reads stay under Zoho's 100-requests-a-minute limit. */
+const DETAIL_GAP_MS = 750;
+const DETAIL_EVERY_MS = (Number(process.env.ZOHO_DETAIL_SYNC_HOURS) || 6) * 60 * 60 * 1000;
+
+/**
+ * Item ids whose stock to read in full on the next sync, because a bill/invoice
+ * webhook named them - so a purchase or sale shows up without waiting for the
+ * next full read.
+ */
+const pendingDetailIds = new Set();
+
+/**
+ * When the item list carries no stock (Zoho Books with Locations), fill each item's
+ * figure from somewhere that does. Tries, in order: the list filtered to the primary
+ * location (cheap), then reading items one by one (slow, so only every few hours,
+ * on "Sync now", or for the items a webhook just named). Returns the items it could
+ * put a figure on, and where the figures came from.
+ */
+async function fillStockFigures(conn, zohoItems, { reason }) {
+  // Which location is primary - from one full item read, remembered afterwards.
+  if (!conn.zohoPrimaryLocationId) {
+    let detail;
+    try {
+      const full = await zoho.getItem(conn, zohoItems[0].item_id);
+      const locs = Array.isArray(full.locations) ? full.locations : [];
+      const primary = locs.find((l) => l.is_primary_location || l.is_primary) || locs[0];
+      conn.zohoPrimaryLocationId = primary ? String(primary.location_id) : '';
+      detail = Object.fromEntries(Object.entries(full).filter(([k]) => /stock|location/i.test(k)));
+    } catch (err) {
+      detail = { error: err.message };
+    }
+    conn.lastSyncSample = [{ ...conn.lastSyncSample[0], detail }, ...conn.lastSyncSample.slice(1)];
+  }
+
+  // 1) The list, filtered to the primary location.
+  if (conn.zohoPrimaryLocationId && conn.zohoStockSource !== 'detail') {
+    const byLocation = (await zoho.listItems(conn, { location_id: conn.zohoPrimaryLocationId })).filter(isTracked);
+    if (byLocation.some((z) => stockFigure(z) !== null)) {
+      conn.zohoStockSource = 'location-list';
+      return byLocation;
+    }
+  }
+
+  // 2) One by one: all items every few hours (or when asked), else just the ones a
+  // webhook named plus whatever figures the last full read left us.
+  conn.zohoStockSource = 'detail';
+  const cache = new Map(Object.entries(conn.zohoStockCache || {}));
+  const dueFull = reason === 'manual' || reason === 'connected' || !conn.zohoDetailAt || Date.now() - conn.zohoDetailAt.getTime() > DETAIL_EVERY_MS;
+  const ids = dueFull ? zohoItems.map((z) => String(z.item_id)) : [...pendingDetailIds].filter((id) => zohoItems.some((z) => String(z.item_id) === id));
+  for (const id of ids) {
+    try {
+      const figure = stockFigure(await zoho.getItem(conn, id));
+      if (figure !== null) cache.set(id, figure);
+      pendingDetailIds.delete(id);
+    } catch (err) {
+      if (err.statusCode === 429) break; // over Zoho's limit - finish on the next run
+      logger.warn(`Zoho item ${id} read failed: ${err.message}`);
+    }
+    await sleep(DETAIL_GAP_MS);
+  }
+  if (dueFull) conn.zohoDetailAt = new Date();
+  conn.zohoStockCache = Object.fromEntries(cache);
+  conn.markModified('zohoStockCache');
+  return zohoItems.filter((z) => cache.has(String(z.item_id))).map((z) => ({ ...z, stock_on_hand: cache.get(String(z.item_id)) }));
 }
 
 /** What Zoho sends for a few items - kept with the connection so problems can be diagnosed. */
@@ -103,6 +179,7 @@ function rememberWebhook(body = {}) {
     for (const line of doc.line_items || []) {
       if (line.item_id) {
         pendingRefs.set(String(line.item_id), { note: text, customer: label === 'Invoice' || label === 'Sales order' ? party : '', at: Date.now() });
+        pendingDetailIds.add(String(line.item_id));
       }
     }
     return text;
@@ -142,28 +219,20 @@ function applyDelta(item, delta) {
   else if (delta < 0) item.takeOut(-delta);
 }
 
-async function syncOnce(conn) {
+async function syncOnce(conn, { reason = 'manual' } = {}) {
   const zohoItems = (await zoho.listItems(conn)).filter(isTracked);
   conn.lastSyncSample = sampleOf(zohoItems);
-  const withFigure = zohoItems.filter((z) => stockFigure(z) !== null);
-  // Safety stop: Zoho listed items but sent no quantities at all (inventory tracking
-  // off, or quantities kept elsewhere). Change nothing rather than guess.
+  let withFigure = zohoItems.filter((z) => stockFigure(z) !== null);
   if (zohoItems.length > 0 && withFigure.length === 0) {
-    // One extra call to tell the two causes apart: is stock hidden from this login, or
-    // only left out of the list view?
-    let detail = null;
-    try {
-      const full = await zoho.getItem(conn, zohoItems[0].item_id);
-      detail = Object.fromEntries(Object.entries(full).filter(([k]) => /stock|warehouse|location/i.test(k)));
-    } catch (err) {
-      detail = { error: err.message };
-    }
-    conn.lastSyncSample = [{ ...conn.lastSyncSample[0], detail }, ...conn.lastSyncSample.slice(1)];
-    const detailHasStock = detail && stockFigure(detail) !== null;
+    // Zoho Books with Locations leaves stock out of the list - fetch it another way.
+    withFigure = await fillStockFigures(conn, zohoItems, { reason });
+  } else {
+    conn.zohoStockSource = 'list';
+  }
+  // Safety stop: still no quantities anywhere. Change nothing rather than guess.
+  if (zohoItems.length > 0 && withFigure.length === 0) {
     throw new Error(
-      detailHasStock
-        ? `Zoho Books shows stock on single items but leaves it out of the item list, so nothing was changed yet.`
-        : `Zoho Books sent no stock quantities for any of its ${zohoItems.length} items, so nothing was changed. The Zoho login used to connect probably can't see stock: give it access to stock/inventory in Zoho Books, then Disconnect and Connect again here.`
+      `Zoho Books sent no stock quantities for any of its ${zohoItems.length} items, so nothing was changed. The Zoho login used to connect probably can't see stock: give it access to stock in Zoho Books, then Disconnect and Connect again here.`
     );
   }
 
@@ -303,7 +372,7 @@ async function syncNow({ reason = 'manual' } = {}) {
       const conn = await ZohoConnection.get();
       if (!conn.isConnected) return { skipped: 'not connected' };
       try {
-        const summary = await syncOnce(conn);
+        const summary = await syncOnce(conn, { reason });
         conn.lastSyncAt = new Date();
         conn.lastSyncOk = true;
         conn.lastSyncError = '';
@@ -344,4 +413,6 @@ async function isZohoActive() {
   return Boolean(conn?.refreshToken && conn?.organizationId);
 }
 
-module.exports = { syncNow, scheduleWebhookSync, rememberWebhook, isZohoActive, isTracked, AUTO_CATEGORY };
+const isSyncing = () => Boolean(running);
+
+module.exports = { syncNow, isSyncing, scheduleWebhookSync, rememberWebhook, isZohoActive, isTracked, AUTO_CATEGORY };

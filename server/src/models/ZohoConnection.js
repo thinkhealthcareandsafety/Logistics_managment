@@ -46,6 +46,15 @@ const zohoConnectionSchema = new mongoose.Schema(
       held: { type: Number, default: 0 },
       heldNames: { type: [String], default: [] },
     },
+    /**
+     * Where stock figures come from: 'list' (item list), 'location-list' (list filtered
+     * to the primary location) or 'detail' (one item at a time - Zoho Books with Locations).
+     */
+    zohoStockSource: { type: String, default: '' },
+    zohoPrimaryLocationId: { type: String, default: '' },
+    /** Last full one-by-one read, and the figures it found (item id -> stock). */
+    zohoDetailAt: { type: Date, default: null },
+    zohoStockCache: { type: mongoose.Schema.Types.Mixed, default: {} },
     /** A few items exactly as Zoho sent them (stock fields only), for diagnosis. */
     lastSyncSample: { type: mongoose.Schema.Types.Mixed, default: [] },
 

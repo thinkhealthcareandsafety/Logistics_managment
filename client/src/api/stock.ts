@@ -62,7 +62,7 @@ export const stockApi = {
       apiClient.patch<{ zoho: ZohoStatus }>('/integrations/zoho', body).then((r) => r.data.zoho),
     sync: () =>
       apiClient
-        .post<{ summary: ZohoStatus['lastSyncSummary']; zoho: ZohoStatus }>('/integrations/zoho/sync')
+        .post<{ summary?: ZohoStatus['lastSyncSummary']; running?: boolean; zoho: ZohoStatus }>('/integrations/zoho/sync')
         .then((r) => r.data),
     rotateWebhook: () =>
       apiClient.post<{ zoho: ZohoStatus }>('/integrations/zoho/webhook-token/rotate').then((r) => r.data.zoho),

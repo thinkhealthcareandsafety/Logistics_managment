@@ -201,10 +201,10 @@ function Connected({ zoho }: { zoho: ZohoStatus }) {
           <button
             type="button"
             onClick={() => sync.mutate()}
-            disabled={sync.isPending}
+            disabled={sync.isPending || !!zoho.syncing}
             className="btn-secondary h-8 shrink-0 px-3 py-0 text-[13px]"
           >
-            {sync.isPending ? 'Syncing…' : 'Sync now'}
+            {sync.isPending || zoho.syncing ? 'Syncing…' : 'Sync now'}
           </button>
         </div>
         <dl className="mt-4 grid grid-cols-3 gap-3 border-t border-slate-200/70 pt-3">

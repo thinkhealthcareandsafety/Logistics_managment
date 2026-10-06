@@ -9,7 +9,7 @@ const ApiError = require('../utils/ApiError');
 const asyncHandler = require('../utils/asyncHandler');
 const { safeEqual } = require('../utils/secretBox');
 const zoho = require('../services/zoho.client');
-const { syncNow, scheduleWebhookSync, rememberWebhook, AUTO_CATEGORY } = require('../services/zohoSync.service');
+const { syncNow, isSyncing, scheduleWebhookSync, rememberWebhook, AUTO_CATEGORY } = require('../services/zohoSync.service');
 
 const webhookUrl = (conn) => `${env.serverUrl}/api/integrations/zoho/webhook/${conn.webhookToken}`;
 
@@ -37,6 +37,8 @@ async function statusView(conn) {
     lastSyncError: conn.lastSyncError,
     lastSyncSummary: conn.lastSyncSummary,
     lastSyncSample: conn.lastSyncSample || [],
+    syncing: isSyncing(),
+    stockSource: conn.zohoStockSource || '',
     linkedItems,
   };
 }
@@ -121,6 +123,7 @@ const updateSettings = asyncHandler(async (req, res) => {
     }
     conn.organizationId = org.id;
     conn.organizationName = org.name;
+    if (orgChanged) Object.assign(conn, { zohoPrimaryLocationId: '', zohoStockSource: '', zohoDetailAt: null, zohoStockCache: {} });
   }
   if (req.body.autoCreate !== undefined) conn.autoCreate = Boolean(req.body.autoCreate);
   await conn.save();
@@ -128,11 +131,19 @@ const updateSettings = asyncHandler(async (req, res) => {
   res.json({ zoho: await statusView(conn) });
 });
 
+/** Reading every item one by one takes minutes; answer the click well before that. */
+const SYNC_WAIT_MS = 20_000;
+
 const runSync = asyncHandler(async (req, res) => {
   const conn = await ZohoConnection.get();
   if (!conn.isConnected) throw new ApiError(400, 'Connect Zoho Books first');
-  const summary = await syncNow({ reason: 'manual' });
-  res.json({ summary, zoho: await statusView(await ZohoConnection.get()) });
+  const job = syncNow({ reason: 'manual' });
+  const result = await Promise.race([job, new Promise((r) => setTimeout(() => r('__running__'), SYNC_WAIT_MS))]);
+  if (result === '__running__') {
+    job.catch(() => {}); // finishes in the background; the status shows how it went
+    return res.status(202).json({ running: true, zoho: await statusView(await ZohoConnection.get()) });
+  }
+  res.json({ summary: result, zoho: await statusView(await ZohoConnection.get()) });
 });
 
 const rotateWebhook = asyncHandler(async (req, res) => {

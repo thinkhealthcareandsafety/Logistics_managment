@@ -96,6 +96,9 @@ export interface ZohoStatus {
     heldNames?: string[];
   };
   lastSyncSample?: Record<string, unknown>[];
+  /** A sync is running right now (reading items one by one can take minutes). */
+  syncing?: boolean;
+  stockSource?: '' | 'list' | 'location-list' | 'detail';
   linkedItems: number;
 }
 
