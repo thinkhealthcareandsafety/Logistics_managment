@@ -1,4 +1,6 @@
+import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { Spinner } from '../components/ui/Loading';
 import { format } from 'date-fns';
 import { useAuth } from '../context/AuthContext';
 import { getInitials } from '../utils/avatar';
@@ -6,12 +8,18 @@ import { getInitials } from '../utils/avatar';
 export function Profile() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const [signingOut, setSigningOut] = useState(false);
 
   if (!user) return null;
 
   async function handleLogout() {
-    await logout();
-    navigate('/login', { replace: true });
+    setSigningOut(true);
+    try {
+      await logout();
+      navigate('/login', { replace: true });
+    } finally {
+      setSigningOut(false);
+    }
   }
 
   return (
@@ -67,9 +75,12 @@ export function Profile() {
         <div className="lg:col-span-2">
           <button
             onClick={handleLogout}
-            className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-red-200 hover:bg-red-50 hover:text-red-700"
+            disabled={signingOut}
+            aria-busy={signingOut}
+            className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-red-200 hover:bg-red-50 hover:text-red-700 disabled:cursor-wait disabled:opacity-80"
           >
-            Log out
+            {signingOut && <Spinner />}
+            {signingOut ? 'Signing out…' : 'Log out'}
           </button>
         </div>
       </section>

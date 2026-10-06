@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { useBulkImportShipments } from '../hooks/useShipments';
 import type { BulkImportResult } from '../types/shipment';
+import { Spinner } from './ui/Loading';
 
 const SAMPLE_CSV = `tracking_number,carrier_code,product_name,sku,quantity,category,customer_name,customer_email,customer_phone,customer_address,delivery_city,delivery_state,delivery_pincode,weight_kg,freight,shipping_date,estimated_delivery
 26043200316922,shreemaruticourier,N95 Respirator Masks,PPE-N95-050,20,PPE,Apollo Diagnostics,procurement@apollodx.example,+91 98765 43210,"12, Residency Road",Bengaluru,Karnataka,560025,6.5,420,2026-09-20,2026-09-25
@@ -88,9 +89,10 @@ export function BulkImportDialog({ onClose }: { onClose: () => void }) {
             <button
               type="button"
               onClick={handleImport}
-              disabled={!selectedFile || bulkImport.isPending}
+              disabled={!selectedFile || bulkImport.isPending} aria-busy={bulkImport.isPending}
               className="btn-primary"
             >
+              {bulkImport.isPending && <Spinner />}
               {bulkImport.isPending ? 'Importing…' : 'Import'}
             </button>
           )}

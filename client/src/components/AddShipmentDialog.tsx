@@ -6,6 +6,7 @@ import { AddressFields, EMPTY_ADDRESS } from './AddressFields';
 import { CourierPicker } from './CourierPicker';
 import { LabelScanner } from './LabelScanner';
 import type { DeliveryAddress, LabelDraft, LabelField } from '../types/shipment';
+import { Spinner } from './ui/Loading';
 
 const toNumberOrNull = (v: string) => (v.trim() === '' ? null : Number(v));
 
@@ -169,9 +170,10 @@ export function AddShipmentDialog({ onClose, initialLabel }: { onClose: () => vo
           <button
             type="submit"
             form="add-shipment-form"
-            disabled={createShipment.isPending}
+            disabled={createShipment.isPending} aria-busy={createShipment.isPending}
             className="btn-primary h-9 px-4 py-0 text-[13px]"
           >
+            {createShipment.isPending && <Spinner />}
             {createShipment.isPending ? 'Adding…' : 'Add shipment'}
           </button>
         </>

@@ -6,6 +6,7 @@ import toast from 'react-hot-toast';
 import { feedbackApi } from '../api/feedback';
 import { StarRating } from '../components/StarRating';
 import { STATUS_LABELS } from '../utils/status';
+import { Skeleton, SkeletonRegion, Spinner } from '../components/ui/Loading';
 
 /**
  * Public feedback form, reached from the "thank you for choosing ThinkHealth" message
@@ -73,7 +74,20 @@ export function Feedback() {
       </header>
 
       <main className="mx-auto max-w-xl px-4 py-10">
-        {isLoading && <div className="h-80 animate-pulse rounded-2xl border border-slate-200 bg-white" />}
+        {isLoading && (
+          <SkeletonRegion label="Loading the feedback form" className="rounded-2xl border border-slate-200 bg-white p-6 sm:p-8">
+            <Skeleton className="h-6 w-2/3" />
+            <Skeleton className="mt-2 h-3.5 w-1/2" />
+            <div className="mt-7 flex gap-2">
+              {[0, 1, 2, 3, 4].map((i) => (
+                <Skeleton key={i} className="h-9 w-9 rounded-lg" />
+              ))}
+            </div>
+            <Skeleton className="mt-7 h-3.5 w-40" />
+            <Skeleton className="mt-2 h-28 w-full rounded-lg" />
+            <Skeleton className="mt-6 h-10 w-40 rounded-lg" />
+          </SkeletonRegion>
+        )}
 
         {isError && (
           <div className="rounded-2xl border border-slate-200 bg-white px-6 py-14 text-center shadow-card">
@@ -165,9 +179,10 @@ export function Feedback() {
 
               <button
                 type="submit"
-                disabled={submit.isPending}
+                disabled={submit.isPending} aria-busy={submit.isPending}
                 className="mt-4 w-full rounded-xl bg-brand-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-800 disabled:cursor-not-allowed disabled:opacity-60"
               >
+                {submit.isPending && <Spinner />}
                 {submit.isPending ? 'Sending…' : alreadySubmitted ? 'Update my feedback' : 'Send feedback'}
               </button>
             </form>

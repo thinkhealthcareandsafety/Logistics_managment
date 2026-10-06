@@ -1,4 +1,6 @@
+import { Suspense, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { PageLoader, PageSkeleton } from './ui/Loading';
 import clsx from 'clsx';
 import { useAuth } from '../context/AuthContext';
 import { NotificationBell } from './NotificationBell';
@@ -23,10 +25,18 @@ export function Layout() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
 
+  const [signingOut, setSigningOut] = useState(false);
   async function signOut() {
-    await logout();
-    navigate('/login', { replace: true });
+    setSigningOut(true);
+    try {
+      await logout();
+      navigate('/login', { replace: true });
+    } finally {
+      setSigningOut(false);
+    }
   }
+
+  if (signingOut) return <PageLoader label="Signing out" />;
 
   const nav = NAV.map((item) => ({ ...item, active: item.match.some((p) => pathname.startsWith(p)) }));
 
@@ -96,7 +106,10 @@ export function Layout() {
 
       <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8">
         <ErrorBoundary key={pathname}>
-          <Outlet />
+          {/* A page opened for the first time downloads first - show its shape meanwhile. */}
+          <Suspense fallback={<PageSkeleton />}>
+            <Outlet />
+          </Suspense>
         </ErrorBoundary>
       </main>
     </div>

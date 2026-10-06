@@ -6,6 +6,7 @@ import { StarRating } from '../components/StarRating';
 import { SegmentedControl } from '../components/SegmentedControl';
 import { WeekdayChart } from '../components/WeekdayChart';
 import { LocationChart } from '../components/LocationChart';
+import { Skeleton, SkeletonRegion, Spinner } from '../components/ui/Loading';
 import type { AnalyticsSummary, ExceptionRateByCarrier } from '../api/analytics';
 
 const RANGE_PRESETS = [
@@ -40,13 +41,21 @@ export function Analytics() {
 
   const from = range === 'custom' ? customFrom : range === 'all' ? '' : isoDaysAgo(Number(range));
   const to = range === 'custom' ? customTo : '';
-  const { data, isLoading } = useAnalytics({ from: from || undefined, to: to || undefined });
+  const { data, isLoading, isError, isPlaceholderData, refetch } = useAnalytics({ from: from || undefined, to: to || undefined });
 
   return (
     <div className="space-y-6">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-[24px] font-semibold tracking-[-0.02em] text-slate-950">Analytics</h1>
+          <h1 className="flex items-center gap-3 text-[24px] font-semibold tracking-[-0.02em] text-slate-950">
+            Analytics
+            {isPlaceholderData && (
+              <span className="inline-flex items-center gap-1.5 text-[12px] font-medium tracking-normal text-slate-500">
+                <Spinner className="h-3.5 w-3.5" label="Updating analytics for the new date range" />
+                Updating…
+              </span>
+            )}
+          </h1>
           <p className="mt-1 text-[13px] text-slate-500">
             Performance across every courier you ship with, measured from real checkpoint timestamps.
           </p>
@@ -92,11 +101,14 @@ export function Analytics() {
         </div>
       </header>
 
-      {isLoading && (
-        <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-slate-200 bg-slate-200 lg:grid-cols-4">
-          {[0, 1, 2, 3].map((i) => (
-            <div key={i} className="h-32 animate-pulse bg-white" />
-          ))}
+      {isLoading && <AnalyticsSkeleton />}
+
+      {isError && !data && (
+        <div className="rounded-xl border border-slate-200 bg-white py-16 text-center">
+          <p className="text-sm font-semibold text-slate-900">Couldn’t load analytics</p>
+          <button onClick={() => refetch()} className="btn-secondary mt-4 h-8 px-3 py-0 text-[13px]">
+            Try again
+          </button>
         </div>
       )}
 
@@ -107,8 +119,58 @@ export function Analytics() {
         </div>
       )}
 
-      {data && data.totalShipments > 0 && <Summary data={data} />}
+      {data && data.totalShipments > 0 && (
+        <div className={clsx('transition-opacity', isPlaceholderData && 'opacity-60')} aria-busy={isPlaceholderData}>
+          <Summary data={data} />
+        </div>
+      )}
     </div>
+  );
+}
+
+/** The page's shape while the first numbers load: metric strip, two charts, the courier table. */
+function AnalyticsSkeleton() {
+  const card = 'rounded-xl border border-slate-200 bg-white p-5';
+  return (
+    <SkeletonRegion label="Loading analytics" className="space-y-6">
+      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-slate-200 bg-slate-200 lg:grid-cols-4">
+        {[0, 1, 2, 3].map((i) => (
+          <div key={i} className="space-y-3 bg-white px-5 py-4">
+            <Skeleton className="h-3 w-24" />
+            <Skeleton className="h-8 w-16" />
+            <Skeleton className="h-3 w-28" />
+          </div>
+        ))}
+      </div>
+      <div className={card}>
+        <Skeleton className="h-4 w-44" />
+        <Skeleton className="mt-2 h-3 w-64" />
+        <div className="mt-6 flex h-40 items-end gap-3 sm:gap-6">
+          {[55, 80, 45, 95, 70, 35, 25].map((h, i) => (
+            <Skeleton key={i} className="flex-1 rounded-t-md rounded-b-none" style={{ height: `${h}%` }} />
+          ))}
+        </div>
+      </div>
+      <div className={card}>
+        <Skeleton className="h-4 w-36" />
+        <div className="mt-5 space-y-3">
+          {[90, 72, 60, 48, 35].map((w, i) => (
+            <div key={i} className="flex items-center gap-3">
+              <Skeleton className="h-3 w-24" />
+              <Skeleton className="h-4" style={{ width: `${w}%` }} />
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className={card}>
+        <Skeleton className="h-4 w-40" />
+        <div className="mt-5 space-y-3">
+          {[0, 1, 2].map((i) => (
+            <Skeleton key={i} className="h-8 w-full" />
+          ))}
+        </div>
+      </div>
+    </SkeletonRegion>
   );
 }
 

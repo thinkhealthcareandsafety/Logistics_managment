@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import { feedbackApi } from '../api/feedback';
 import { StarRating } from './StarRating';
 import type { Shipment } from '../types/shipment';
+import { Skeleton, SkeletonRegion, Spinner } from './ui/Loading';
 
 /**
  * Dashboard-side view of the customer's rating, plus the state of the thank-you
@@ -80,16 +81,27 @@ export function CustomerFeedbackPanel({ shipment }: { shipment: Shipment }) {
           {canSend && (
             <button
               onClick={() => resend.mutate()}
-              disabled={resend.isPending}
+              disabled={resend.isPending} aria-busy={resend.isPending}
               className="rounded-md px-2 py-1 text-[13px] font-medium text-brand-700 transition hover:bg-brand-50 disabled:opacity-50"
             >
+              {resend.isPending && <Spinner className="h-3.5 w-3.5" />}
               {resend.isPending ? 'Sending…' : data?.deliveryNoticeSentAt ? 'Send again' : 'Send now'}
             </button>
           )}
         </div>
       </div>
 
-      {isLoading && <div className="mt-4 h-16 animate-pulse rounded-lg bg-slate-100" />}
+      {isLoading && (
+        <SkeletonRegion label="Loading customer feedback" className="mt-4 space-y-2.5">
+          <div className="flex gap-1">
+            {[0, 1, 2, 3, 4].map((i) => (
+              <Skeleton key={i} className="h-4 w-4 rounded-sm" />
+            ))}
+          </div>
+          <Skeleton className="h-3.5 w-full" />
+          <Skeleton className="h-3.5 w-2/3" />
+        </SkeletonRegion>
+      )}
 
       {!isLoading && feedback && (
         <div className="mt-4">
@@ -116,7 +128,7 @@ export function CustomerFeedbackPanel({ shipment }: { shipment: Shipment }) {
                 <input
                   type="checkbox"
                   checked={feedback.isPublished}
-                  disabled={publish.isPending || !feedback.comment}
+                  disabled={publish.isPending || !feedback.comment} aria-busy={publish.isPending}
                   onChange={(e) => publish.mutate(e.target.checked)}
                   className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer accent-brand-800 disabled:cursor-not-allowed"
                 />

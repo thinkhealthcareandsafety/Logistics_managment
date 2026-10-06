@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { FormField, Modal } from '../Modal';
+import { Spinner } from '../ui/Loading';
 import { useCreateStockCategory, useCreateStockItem, useUpdateStockItem } from '../../hooks/useStock';
 import { LIST_STYLE_LABELS, displayName, toDateInput } from '../../utils/stock';
 import type { ListStyle, StockCategory, StockItem } from '../../types/stock';
@@ -85,7 +86,8 @@ export function StockItemDialog({
           <button type="button" onClick={onClose} className="btn-secondary h-9 px-3 py-0 text-[13px]">
             Cancel
           </button>
-          <button type="submit" form="stock-item-form" disabled={pending} className="btn-primary h-9 px-4 py-0 text-[13px]">
+          <button type="submit" form="stock-item-form" disabled={pending} aria-busy={pending} className="btn-primary h-9 px-4 py-0 text-[13px]">
+            {pending && <Spinner />}
             {pending ? 'Saving…' : editing ? 'Save changes' : 'Add item'}
           </button>
         </>

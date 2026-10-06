@@ -31,6 +31,7 @@ import {
   stockHealth,
 } from '../utils/stock';
 import type { ListStyle, StockCategory, StockCountChange, StockItem, StockMovement } from '../types/stock';
+import { Skeleton, SkeletonRegion, Spinner } from '../components/ui/Loading';
 
 type Filter = 'all' | 'out' | 'low' | 'expiring';
 
@@ -92,7 +93,7 @@ export function Stock() {
     | null
   >(null);
 
-  const { data: zoho } = useZohoStatus();
+  const { data: zoho, isLoading: zohoLoading } = useZohoStatus();
   // While Zoho Books is connected, linked lines take their number from Zoho only.
   const zohoLive = !!zoho?.connected;
   const isLocked = (item: StockItem) => zohoLive && !!item.zohoItemId;
@@ -214,14 +215,22 @@ export function Stock() {
               onClick={() => setDialog({ kind: 'zoho' })}
               className="inline-flex items-center gap-1.5 rounded font-medium text-brand-700 hover:text-brand-900"
             >
-              <span
-                aria-hidden
-                className={clsx(
-                  'h-1.5 w-1.5 rounded-full',
-                  !zohoLive ? 'bg-slate-300' : zoho?.lastSyncOk === false ? 'bg-red-500' : 'bg-emerald-500'
-                )}
-              />
-              {!zohoLive
+              {zohoLoading || zoho?.syncing ? (
+                <Spinner className="h-3 w-3" />
+              ) : (
+                <span
+                  aria-hidden
+                  className={clsx(
+                    'h-1.5 w-1.5 rounded-full',
+                    !zohoLive ? 'bg-slate-300' : zoho?.lastSyncOk === false ? 'bg-red-500' : 'bg-emerald-500'
+                  )}
+                />
+              )}
+              {zohoLoading
+                ? 'Checking Zoho Books…'
+                : zoho?.syncing
+                ? 'Zoho Books · syncing…'
+                : !zohoLive
                 ? 'Connect Zoho Books'
                 : zoho?.lastSyncOk === false
                   ? 'Zoho Books sync failing'
@@ -409,10 +418,11 @@ export function Stock() {
             </button>
             <button
               onClick={save}
-              disabled={saveCount.isPending}
+              disabled={saveCount.isPending} aria-busy={saveCount.isPending}
               className="btn-primary h-9 px-4 py-0 text-[13px]"
               tabIndex={dirty ? 0 : -1}
             >
+              {saveCount.isPending && <Spinner />}
               {saveCount.isPending ? 'Saving…' : 'Save count'}
             </button>
           </div>
@@ -522,8 +532,19 @@ function CategorySection({
           const health = stockHealth(item, qty);
           const indent = listed ? 'sm:pl-7' : '';
           const locked = isLocked(item);
+          const removing = removeItem.isPending && removeItem.variables === item._id;
           return (
-            <li key={item._id} className={clsx('relative px-4 py-3 transition-colors', changed && 'bg-amber-50/50')}>
+            <li
+              key={item._id}
+              aria-busy={removing}
+              className={clsx('relative px-4 py-3 transition', changed && 'bg-amber-50/50', removing && 'pointer-events-none opacity-50')}
+            >
+              {removing && (
+                <span className="absolute right-14 top-3 z-10 inline-flex items-center gap-1.5 rounded-md bg-white px-2 py-1 text-[12px] font-medium text-slate-600 shadow-sm ring-1 ring-slate-200">
+                  <Spinner className="h-3 w-3" />
+                  Removing…
+                </span>
+              )}
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="min-w-0 pr-9 sm:pr-0">
                   <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -719,17 +740,28 @@ function InternalNote({ item }: { item: StockItem }) {
     );
   }
 
-  if (item.internalNote) {
+  // While saving, show what was just typed (with "Saving…"), not the old text.
+  const shown = save.isPending ? (save.variables?.internalNote ?? item.internalNote) : item.internalNote;
+
+  if (shown) {
     return (
       <button
         type="button"
         onClick={() => setEditing(true)}
+        aria-busy={save.isPending}
         className="group mt-2 flex w-full items-start gap-2 rounded-lg bg-amber-50/70 px-2.5 py-1.5 text-left text-[13px] text-amber-900 ring-1 ring-inset ring-amber-100 transition hover:bg-amber-50"
         title="Private note - click to edit"
       >
         <NoteIcon />
-        <span className="min-w-0 flex-1 whitespace-pre-wrap break-words">{item.internalNote}</span>
-        <span className="shrink-0 text-[11px] font-medium text-amber-700/0 transition group-hover:text-amber-700">Edit</span>
+        <span className="min-w-0 flex-1 whitespace-pre-wrap break-words">{shown}</span>
+        {save.isPending ? (
+          <span className="inline-flex shrink-0 items-center gap-1 text-[11px] font-medium text-amber-700">
+            <Spinner className="h-3 w-3" />
+            Saving…
+          </span>
+        ) : (
+          <span className="shrink-0 text-[11px] font-medium text-amber-700/0 transition group-hover:text-amber-700">Edit</span>
+        )}
       </button>
     );
   }
@@ -862,22 +894,27 @@ function CategoryDialog({
         <>
           <button
             type="button"
-            disabled={itemCount > 0 || remove.isPending}
+            disabled={itemCount > 0 || remove.isPending} aria-busy={remove.isPending}
             title={itemCount > 0 ? 'Remove or move its items first' : undefined}
             onClick={async () => {
               if (!confirm(`Delete the ${category.name} category?`)) return;
               await remove.mutateAsync(category._id);
               onClose();
             }}
-            className="mr-auto h-9 rounded-lg px-3 text-[13px] font-medium text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:text-slate-300 disabled:hover:bg-transparent"
+            className={clsx(
+              'mr-auto inline-flex h-9 items-center gap-2 rounded-lg px-3 text-[13px] font-medium text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:hover:bg-transparent',
+              !remove.isPending && 'disabled:text-slate-300'
+            )}
           >
-            Delete category
+            {remove.isPending && <Spinner className="h-3.5 w-3.5" />}
+            {remove.isPending ? 'Deleting…' : 'Delete category'}
           </button>
           <button type="button" onClick={onClose} className="btn-secondary h-9 px-3 py-0 text-[13px]">
             Cancel
           </button>
-          <button type="submit" form="stock-category-form" disabled={update.isPending} className="btn-primary h-9 px-4 py-0 text-[13px]">
-            Save
+          <button type="submit" form="stock-category-form" disabled={update.isPending} aria-busy={update.isPending} className="btn-primary h-9 px-4 py-0 text-[13px]">
+            {update.isPending && <Spinner />}
+            {update.isPending ? 'Saving…' : 'Save'}
           </button>
         </>
       }
@@ -935,7 +972,18 @@ function RecentChanges() {
         <span className="hidden text-[12px] text-slate-400 sm:inline">Counts, stock outs, shipments and Zoho Books, newest first</span>
       </div>
       {isLoading ? (
-        <div className="h-32 animate-pulse bg-slate-50" />
+        <SkeletonRegion label="Loading recent changes" className="divide-y divide-slate-100">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="flex items-start gap-3 px-4 py-3">
+              <Skeleton className="h-5 w-[78px] shrink-0 rounded-md" />
+              <div className="flex-1 space-y-2">
+                <Skeleton className="h-3.5 w-2/3" />
+                <Skeleton className="h-3 w-1/3" />
+              </div>
+              <Skeleton className="h-3 w-20" />
+            </div>
+          ))}
+        </SkeletonRegion>
       ) : movements.length === 0 ? (
         <p className="px-4 py-8 text-center text-[13px] text-slate-500">No changes yet.</p>
       ) : (
@@ -1083,13 +1131,51 @@ function formatTime(hhmm: string) {
 
 function StockSkeleton() {
   return (
-    <div className="space-y-6" aria-busy="true" aria-label="Loading stock">
-      <div className="h-8 w-40 animate-pulse rounded bg-slate-200" />
-      <div className="h-28 animate-pulse rounded-xl bg-white ring-1 ring-slate-200" />
-      {[0, 1].map((i) => (
-        <div key={i} className="h-56 animate-pulse rounded-xl bg-white ring-1 ring-slate-200" />
+    <SkeletonRegion label="Loading stock" className="space-y-6">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div className="space-y-2">
+          <Skeleton className="h-7 w-28" />
+          <Skeleton className="h-3.5 w-72 max-w-full" />
+        </div>
+        <div className="flex gap-2">
+          <Skeleton className="h-9 w-28 rounded-lg" />
+          <Skeleton className="h-9 w-24 rounded-lg" />
+          <Skeleton className="h-9 w-32 rounded-lg" />
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-slate-200 bg-slate-200 lg:grid-cols-4">
+        {[0, 1, 2, 3].map((i) => (
+          <div key={i} className="space-y-3 bg-white px-5 py-4">
+            <Skeleton className="h-3 w-24" />
+            <Skeleton className="h-7 w-14" />
+            <Skeleton className="h-3 w-32" />
+          </div>
+        ))}
+      </div>
+      <div className="flex items-center justify-between gap-3">
+        <Skeleton className="h-8 w-72 max-w-full rounded-lg" />
+        <Skeleton className="hidden h-8 w-80 rounded-lg sm:block" />
+      </div>
+      {[4, 3].map((rows, c) => (
+        <div key={c} className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+          <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50/70 px-4 py-3">
+            <Skeleton className="h-4 w-40" />
+            <Skeleton className="h-3.5 w-20" />
+          </div>
+          <div className="divide-y divide-slate-100">
+            {Array.from({ length: rows }).map((_, r) => (
+              <div key={r} className="flex items-center justify-between gap-4 px-4 py-3.5">
+                <div className="flex-1 space-y-2">
+                  <Skeleton className="h-3.5" style={{ width: `${30 + ((r * 13 + c * 7) % 30)}%` }} />
+                  <Skeleton className="h-3 w-28" />
+                </div>
+                <Skeleton className="h-8 w-28 rounded-lg" />
+              </div>
+            ))}
+          </div>
+        </div>
       ))}
-    </div>
+    </SkeletonRegion>
   );
 }
 

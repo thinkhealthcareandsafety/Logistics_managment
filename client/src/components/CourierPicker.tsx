@@ -2,6 +2,7 @@ import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import clsx from 'clsx';
 import { useCarriers } from '../hooks/useCarriers';
 import { carriersApi } from '../api/carriers';
+import { Spinner } from './ui/Loading';
 import type { Carrier } from '../types/shipment';
 
 type Group = { label: string; start: number };
@@ -224,7 +225,13 @@ export function CourierPicker({
           </p>
           <ul ref={listRef} id={listId} role="listbox" aria-label="Couriers" className="max-h-80 overflow-y-auto p-1">
             {isError && <li className="px-3 py-3 text-[13px] text-red-600">Couldn’t load the courier list.</li>}
-            {!isError && results.length === 0 && (
+            {isLoading && (
+              <li className="flex items-center gap-2 px-3 py-3 text-[13px] text-slate-500">
+                <Spinner className="h-3.5 w-3.5" label="Loading couriers" />
+                Loading couriers…
+              </li>
+            )}
+            {!isError && !isLoading && results.length === 0 && (
               <li className="px-3 py-3 text-[13px] text-slate-500">No courier matches “{query}”.</li>
             )}
             {results.map((c, i) => [
@@ -277,7 +284,12 @@ export function CourierPicker({
               Suggest from AWB
             </button>
           )}
-          {suggestions.state === 'loading' && 'Checking the number’s format…'}
+          {suggestions.state === 'loading' && (
+            <span className="inline-flex items-center gap-1.5">
+              <Spinner className="h-3 w-3" />
+              Checking the number’s format…
+            </span>
+          )}
           {suggestions.state === 'error' && 'Couldn’t check that number - pick the courier from the list.'}
           {suggestions.state === 'done' &&
             (suggestions.list.length === 0 ? (

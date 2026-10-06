@@ -11,6 +11,7 @@ import {
   useZohoStatus,
 } from '../../hooks/useStock';
 import type { ZohoStatus } from '../../types/stock';
+import { Skeleton, SkeletonRegion, Spinner } from '../ui/Loading';
 
 /** "*\/15 * * * *" -> "every 15 minutes"; anything fancier is shown as written. */
 export function describeSchedule(cron: string) {
@@ -45,15 +46,16 @@ export function ZohoBooksDialog({ onClose }: { onClose: () => void }) {
       {zoho?.connected && (
         <button
           type="button"
-          disabled={disconnect.isPending}
+          disabled={disconnect.isPending} aria-busy={disconnect.isPending}
           onClick={() => {
             if (confirm('Disconnect Zoho Books? Stock stops following Zoho and every line can be counted by hand again.')) {
               disconnect.mutate();
             }
           }}
-          className="mr-auto h-9 rounded-lg px-3 text-[13px] font-medium text-red-600 transition hover:bg-red-50 disabled:opacity-50"
+          className="mr-auto inline-flex h-9 items-center gap-2 rounded-lg px-3 text-[13px] font-medium text-red-600 transition hover:bg-red-50 disabled:opacity-60"
         >
-          Disconnect
+          {disconnect.isPending && <Spinner className="h-3.5 w-3.5" />}
+          {disconnect.isPending ? 'Disconnecting…' : 'Disconnect'}
         </button>
       )}
       <button type="button" onClick={onClose} className="btn-secondary h-9 px-3 py-0 text-[13px]">
@@ -62,11 +64,12 @@ export function ZohoBooksDialog({ onClose }: { onClose: () => void }) {
       {zoho && !zoho.connected && !zoho.needsOrganization && (
         <button
           type="button"
-          disabled={!zoho.configured || connect.isPending}
+          disabled={!zoho.configured || connect.isPending} aria-busy={connect.isPending}
           title={!zoho.configured ? 'Add the Zoho keys on the server first' : undefined}
           onClick={() => connect.mutate()}
           className="btn-primary h-9 px-4 py-0 text-[13px]"
         >
+          {connect.isPending && <Spinner />}
           {connect.isPending ? 'Opening Zoho…' : 'Connect Zoho Books'}
         </button>
       )}
@@ -82,7 +85,28 @@ export function ZohoBooksDialog({ onClose }: { onClose: () => void }) {
       footer={footer}
     >
       {isLoading || !zoho ? (
-        <div className="h-48 animate-pulse rounded-lg bg-slate-50" />
+        <SkeletonRegion label="Loading Zoho Books status" className="space-y-5">
+          <div className="rounded-lg border border-slate-200 p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="space-y-2">
+                <Skeleton className="h-4 w-44" />
+                <Skeleton className="h-3 w-64 max-w-full" />
+              </div>
+              <Skeleton className="h-8 w-24 rounded-lg" />
+            </div>
+            <div className="mt-4 grid grid-cols-3 gap-3 border-t border-slate-100 pt-3">
+              {[0, 1, 2].map((i) => (
+                <div key={i} className="space-y-2">
+                  <Skeleton className="h-3 w-20" />
+                  <Skeleton className="h-5 w-12" />
+                </div>
+              ))}
+            </div>
+          </div>
+          <Skeleton className="h-4 w-60" />
+          <Skeleton className="h-3 w-full" />
+          <Skeleton className="h-3 w-5/6" />
+        </SkeletonRegion>
       ) : zoho.connected ? (
         <Connected zoho={zoho} />
       ) : zoho.needsOrganization ? (
@@ -165,11 +189,12 @@ function PickOrganization({ zoho }: { zoho: ZohoStatus }) {
       </div>
       <button
         type="button"
-        disabled={!org || update.isPending}
+        disabled={!org || update.isPending} aria-busy={update.isPending}
         onClick={() => update.mutate({ organizationId: org })}
         className="btn-primary h-9 px-4 py-0 text-[13px]"
       >
-        Use this organisation
+        {update.isPending && <Spinner />}
+        {update.isPending ? 'Saving…' : 'Use this organisation'}
       </button>
     </div>
   );
@@ -201,9 +226,10 @@ function Connected({ zoho }: { zoho: ZohoStatus }) {
           <button
             type="button"
             onClick={() => sync.mutate()}
-            disabled={sync.isPending || !!zoho.syncing}
+            disabled={sync.isPending || !!zoho.syncing} aria-busy={sync.isPending}
             className="btn-secondary h-8 shrink-0 px-3 py-0 text-[13px]"
           >
+            {(sync.isPending || zoho.syncing) && <Spinner className="h-3.5 w-3.5" />}
             {sync.isPending || zoho.syncing ? 'Syncing…' : 'Sync now'}
           </button>
         </div>
@@ -240,7 +266,7 @@ function Connected({ zoho }: { zoho: ZohoStatus }) {
           <input
             type="checkbox"
             checked={zoho.autoCreate}
-            disabled={update.isPending}
+            disabled={update.isPending} aria-busy={update.isPending}
             onChange={(e) => update.mutate({ autoCreate: e.target.checked })}
             className="mt-0.5 h-4 w-4 accent-brand-800"
           />
@@ -257,7 +283,7 @@ function Connected({ zoho }: { zoho: ZohoStatus }) {
             <span className="mb-1.5 block font-medium text-slate-700">Organisation</span>
             <select
               value={zoho.organizationId}
-              disabled={update.isPending}
+              disabled={update.isPending} aria-busy={update.isPending}
               onChange={(e) => {
                 if (confirm('Switch organisation? Lines are re-matched against the new organisation’s items.')) {
                   update.mutate({ organizationId: e.target.value });
@@ -302,13 +328,14 @@ function Connected({ zoho }: { zoho: ZohoStatus }) {
           </span>
           <button
             type="button"
-            disabled={rotate.isPending}
+            disabled={rotate.isPending} aria-busy={rotate.isPending}
             onClick={() => {
               if (confirm('Create a new webhook URL? The old one stops working until you update your Zoho rules.')) rotate.mutate();
             }}
-            className="rounded font-medium text-slate-500 underline-offset-2 hover:text-slate-800 hover:underline"
+            className="inline-flex items-center gap-1.5 rounded font-medium text-slate-500 underline-offset-2 hover:text-slate-800 hover:underline disabled:cursor-wait"
           >
-            Replace URL
+            {rotate.isPending && <Spinner className="h-3 w-3" />}
+            {rotate.isPending ? 'Replacing…' : 'Replace URL'}
           </button>
         </div>
         {local && (

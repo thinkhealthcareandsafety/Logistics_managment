@@ -5,6 +5,7 @@ import { publicTrackingApi } from '../api/publicTracking';
 import { StatusBadge } from '../components/StatusBadge';
 import { TrackLookup } from '../components/marketing/TrackLookup';
 import { ProgressRail } from '../components/ProgressRail';
+import { Skeleton, SkeletonRegion } from '../components/ui/Loading';
 import { STATUS_LABELS } from '../utils/status';
 import type { ShipmentStatus } from '../types/shipment';
 
@@ -39,10 +40,44 @@ export function PublicTracking() {
 
       <main className="mx-auto max-w-3xl px-4 py-10">
         {isLoading && (
-          <div className="space-y-4">
-            <div className="h-40 animate-pulse rounded-2xl border border-slate-200 bg-white" />
-            <div className="h-64 animate-pulse rounded-2xl border border-slate-200 bg-white" />
-          </div>
+          <SkeletonRegion label={`Looking up ${trackingNumber}`} className="space-y-4">
+            {/* Summary card: AWB + status, progress, three facts */}
+            <div className="rounded-2xl border border-slate-200 bg-white p-6">
+              <div className="flex items-start justify-between gap-4">
+                <div className="space-y-2">
+                  <Skeleton className="h-3 w-24" />
+                  <Skeleton className="h-6 w-48" />
+                  <Skeleton className="h-3.5 w-36" />
+                </div>
+                <Skeleton className="h-7 w-24 rounded-full" />
+              </div>
+              <Skeleton className="mt-6 h-2 w-full rounded-full" />
+              <div className="mt-6 grid gap-4 border-t border-slate-100 pt-5 sm:grid-cols-3">
+                {[0, 1, 2].map((i) => (
+                  <div key={i} className="space-y-2">
+                    <Skeleton className="h-3 w-20" />
+                    <Skeleton className="h-4 w-28" />
+                  </div>
+                ))}
+              </div>
+            </div>
+            {/* Tracking history */}
+            <div className="rounded-2xl border border-slate-200 bg-white p-6">
+              <Skeleton className="h-3 w-32" />
+              <div className="mt-5 space-y-5">
+                {[0, 1, 2, 3].map((i) => (
+                  <div key={i} className="flex gap-3">
+                    <Skeleton className="mt-0.5 h-3 w-3 shrink-0 rounded-full" />
+                    <div className="flex-1 space-y-2">
+                      <Skeleton className="h-3.5 w-40" />
+                      <Skeleton className="h-3 w-3/4" />
+                    </div>
+                    <Skeleton className="h-3 w-20" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </SkeletonRegion>
         )}
 
         {isError && (

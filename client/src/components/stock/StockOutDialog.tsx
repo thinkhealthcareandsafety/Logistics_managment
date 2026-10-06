@@ -3,6 +3,7 @@ import { FormField, Modal } from '../Modal';
 import { useStockOut } from '../../hooks/useStock';
 import { displayName } from '../../utils/stock';
 import type { StockItem } from '../../types/stock';
+import { Spinner } from '../ui/Loading';
 
 /**
  * Records goods leaving to a customer - the "Stock Out" block of the WhatsApp update.
@@ -44,9 +45,10 @@ export function StockOutDialog({ item, onClose }: { item: StockItem; onClose: ()
           <button
             type="submit"
             form="stock-out-form"
-            disabled={stockOut.isPending || qty <= 0 || tooMany}
+            disabled={stockOut.isPending || qty <= 0 || tooMany} aria-busy={stockOut.isPending}
             className="btn-primary h-9 px-4 py-0 text-[13px]"
           >
+            {stockOut.isPending && <Spinner />}
             {stockOut.isPending ? 'Saving…' : 'Record stock out'}
           </button>
         </>

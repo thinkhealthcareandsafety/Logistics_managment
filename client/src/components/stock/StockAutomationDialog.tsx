@@ -6,6 +6,7 @@ import { FormField, Modal } from '../Modal';
 import { useRotateStockLink, useUpdateStockSettings } from '../../hooks/useStock';
 import { liveStockUrl } from '../../utils/stock';
 import type { StockSettings } from '../../types/stock';
+import { Spinner } from '../ui/Loading';
 
 export function StockAutomationDialog({ settings, onClose }: { settings: StockSettings; onClose: () => void }) {
   const update = useUpdateStockSettings();
@@ -43,7 +44,8 @@ export function StockAutomationDialog({ settings, onClose }: { settings: StockSe
           <button type="button" onClick={onClose} className="btn-secondary h-9 px-3 py-0 text-[13px]">
             Cancel
           </button>
-          <button type="submit" form="stock-automation-form" disabled={update.isPending} className="btn-primary h-9 px-4 py-0 text-[13px]">
+          <button type="submit" form="stock-automation-form" disabled={update.isPending} aria-busy={update.isPending} className="btn-primary h-9 px-4 py-0 text-[13px]">
+            {update.isPending && <Spinner />}
             {update.isPending ? 'Saving…' : 'Save'}
           </button>
         </>
@@ -136,10 +138,11 @@ export function StockAutomationDialog({ settings, onClose }: { settings: StockSe
                 rotate.mutate();
               }
             }}
-            disabled={rotate.isPending}
-            className="mt-2 text-[12px] font-medium text-slate-500 underline-offset-2 hover:text-red-600 hover:underline"
+            disabled={rotate.isPending} aria-busy={rotate.isPending}
+            className="mt-2 inline-flex items-center gap-1.5 text-[12px] font-medium text-slate-500 underline-offset-2 hover:text-red-600 hover:underline disabled:cursor-wait"
           >
-            Replace link (if it was shared with the wrong people)
+            {rotate.isPending && <Spinner className="h-3 w-3" />}
+            {rotate.isPending ? 'Replacing link…' : 'Replace link (if it was shared with the wrong people)'}
           </button>
         </section>
 

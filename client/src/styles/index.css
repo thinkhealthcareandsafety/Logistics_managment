@@ -24,15 +24,28 @@
   .input {
     @apply w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100;
   }
+  /* inline-flex + gap so a Spinner sits beside the label while an action runs. */
   .btn-primary {
-    @apply rounded-lg bg-brand-900 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-brand-800 disabled:cursor-not-allowed disabled:opacity-60;
+    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-brand-900 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-brand-800 disabled:cursor-not-allowed disabled:opacity-60;
   }
   .btn-secondary {
-    @apply rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50;
+    @apply inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60;
+  }
+  /* A button whose action is running: keep its look, drop the "disabled" fade. */
+  [aria-busy='true'].btn-primary,
+  [aria-busy='true'].btn-secondary {
+    @apply cursor-wait disabled:opacity-90;
   }
 }
 
 @layer utilities {
+  /* Loading skeletons hold still for people who asked for less motion. */
+  @media (prefers-reduced-motion: reduce) {
+    .animate-pulse {
+      animation: none;
+    }
+  }
+
   /* Dashed connector lines on the landing page's flow diagram. Purely decorative,
      so it's dropped under reduced-motion. */
   .flow-line {

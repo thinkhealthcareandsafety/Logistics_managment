@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type DragEvent } from 'react';
 import { Link } from 'react-router-dom';
 import clsx from 'clsx';
 import { shipmentsApi } from '../api/shipments';
+import { Spinner } from './ui/Loading';
 import { LabelFileError, prepareLabelFile } from '../utils/labelImage';
 import type { LabelDraft, LabelField } from '../types/shipment';
 
@@ -177,7 +178,7 @@ export function LabelScanner({
         {state.kind === 'reading' && (
           <>
             <p className="flex items-center gap-2 font-semibold text-slate-900">
-              <span aria-hidden className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-brand-600 border-t-transparent" />
+              <Spinner className="h-3.5 w-3.5 text-brand-600" />
               Reading the label…
             </p>
             <p className="mt-0.5 text-[12px] text-slate-500">This usually takes 10–30 seconds.</p>

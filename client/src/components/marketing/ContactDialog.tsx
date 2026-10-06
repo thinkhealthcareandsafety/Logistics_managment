@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { marketingApi } from '../../api/marketing';
+import { Spinner } from '../ui/Loading';
 
 /**
  * The only conversion point on the marketing site, so it stays a dialog rather than a
@@ -143,7 +144,8 @@ export function ContactDialog({
               <button type="button" onClick={onClose} className="btn-secondary">
                 Cancel
               </button>
-              <button type="submit" disabled={submit.isPending} className="btn-primary">
+              <button type="submit" disabled={submit.isPending} aria-busy={submit.isPending} className="btn-primary">
+                {submit.isPending && <Spinner />}
                 {submit.isPending ? 'Sending…' : 'Send enquiry'}
               </button>
             </div>

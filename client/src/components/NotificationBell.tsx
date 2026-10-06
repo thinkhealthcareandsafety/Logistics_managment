@@ -3,11 +3,12 @@ import { Link } from 'react-router-dom';
 import { formatDistanceToNow } from 'date-fns';
 import clsx from 'clsx';
 import { useMarkAllNotificationsRead, useMarkNotificationRead, useNotifications } from '../hooks/useNotifications';
+import { Skeleton, SkeletonRegion, Spinner } from './ui/Loading';
 
 export function NotificationBell() {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
-  const { data } = useNotifications();
+  const { data, isLoading, isError } = useNotifications();
   const markRead = useMarkNotificationRead();
   const markAllRead = useMarkAllNotificationsRead();
 
@@ -55,15 +56,29 @@ export function NotificationBell() {
             {unreadCount > 0 && (
               <button
                 onClick={() => markAllRead.mutate()}
-                disabled={markAllRead.isPending}
-                className="rounded-md px-1.5 py-0.5 text-[12px] font-medium text-brand-700 transition hover:bg-brand-50 disabled:opacity-50"
+                disabled={markAllRead.isPending} aria-busy={markAllRead.isPending}
+                className="inline-flex items-center gap-1.5 rounded-md px-1.5 py-0.5 text-[12px] font-medium text-brand-700 transition hover:bg-brand-50 disabled:opacity-60"
               >
-                Mark all as read
+                {markAllRead.isPending && <Spinner className="h-3 w-3" />}
+                {markAllRead.isPending ? 'Marking…' : 'Mark all as read'}
               </button>
             )}
           </div>
           <div className="max-h-96 overflow-y-auto">
-            {!data?.notifications.length && (
+            {isLoading && (
+              <SkeletonRegion label="Loading notifications" className="divide-y divide-slate-100">
+                {[0, 1, 2].map((i) => (
+                  <div key={i} className="space-y-2 px-4 py-3">
+                    <Skeleton className="h-3.5 w-3/4" />
+                    <Skeleton className="h-3 w-1/3" />
+                  </div>
+                ))}
+              </SkeletonRegion>
+            )}
+            {!isLoading && isError && (
+              <p className="px-4 py-8 text-center text-sm text-slate-500">Couldn’t load notifications.</p>
+            )}
+            {!isLoading && !isError && !data?.notifications.length && (
               <p className="px-4 py-8 text-center text-sm text-slate-400">You're all caught up.</p>
             )}
             {data?.notifications.map((n) => (

@@ -15,6 +15,7 @@ import { ALL_STATUSES, STATUS_LABELS, STATUS_STYLES } from '../utils/status';
 import { getUrgency, needsAttention } from '../utils/urgency';
 import { exportShipmentsCsv } from '../utils/csv';
 import type { Shipment, ShipmentStatus } from '../types/shipment';
+import { Skeleton, SkeletonRegion, Spinner } from '../components/ui/Loading';
 
 type Scope = 'active' | 'archived';
 type StatusFilter = 'all' | ShipmentStatus;
@@ -58,12 +59,15 @@ export function Dashboard() {
   // Volume here is a few shipments/week, so both sets are fetched once and
   // filtered/sorted in memory - filtering feels instant and the tab counts stay
   // truthful, which a server round-trip per keystroke wouldn't give us.
-  const { data: activeShipments, isLoading } = useShipments({ archived: false });
-  const { data: archivedShipments } = useShipments({ archived: true });
+  const { data: activeShipments, isLoading: activeLoading } = useShipments({ archived: false });
+  const { data: archivedShipments, isLoading: archivedLoading } = useShipments({ archived: true });
   const refreshAll = useRefreshAllShipments();
   const bulkArchive = useBulkArchiveShipments();
 
   const archived = scope === 'archived';
+  // The summary is about active shipments; the list skeleton follows whichever shelf is open.
+  const isLoading = activeLoading;
+  const listLoading = archived ? archivedLoading : activeLoading;
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -244,14 +248,12 @@ export function Dashboard() {
                   : `${activeCouriers} couriers`}
             </span>
             <span aria-hidden className="text-slate-300">/</span>
-            <span className="inline-flex items-center gap-1.5">
-              <span
-                aria-hidden
-                className={clsx(
-                  'h-1.5 w-1.5 rounded-full',
-                  refreshAll.isPending ? 'animate-pulse bg-amber-500' : 'bg-emerald-500'
-                )}
-              />
+            <span className="inline-flex items-center gap-1.5" aria-live="polite">
+              {refreshAll.isPending ? (
+                <Spinner className="h-3 w-3 text-amber-600" />
+              ) : (
+                <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+              )}
               {refreshAll.isPending
                 ? 'Syncing with couriers…'
                 : lastSynced
@@ -309,11 +311,13 @@ export function Dashboard() {
         className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-slate-200 bg-slate-200 shadow-[0_1px_2px_rgba(15,23,42,0.04)] lg:grid-cols-4"
       >
         <Metric
+          loading={isLoading}
           label="In flight"
           value={summary.inFlight}
           detail={`${summary.onRoad} on the road · ${summary.awaitingPickup} awaiting pickup`}
         />
         <Metric
+          loading={isLoading}
           label="Needs attention"
           value={counts.attention}
           tone={counts.attention > 0 ? 'danger' : undefined}
@@ -328,6 +332,7 @@ export function Dashboard() {
           onClick={counts.attention > 0 || attentionOnly ? toggleAttention : undefined}
         />
         <Metric
+          loading={isLoading}
           label="Due in 48 hours"
           value={summary.dueToday + summary.dueTomorrow}
           detail={
@@ -339,6 +344,7 @@ export function Dashboard() {
           }
         />
         <Metric
+          loading={isLoading}
           label="Units in flight"
           value={summary.units}
           detail={`Across ${summary.inFlight} consignment${summary.inFlight === 1 ? '' : 's'}`}
@@ -390,9 +396,9 @@ export function Dashboard() {
               <span className="mr-1 inline-flex h-8 items-center rounded-lg bg-brand-900 px-2.5 text-[13px] font-medium tabular-nums text-white">
                 {selectedIds.size} selected
               </span>
-              <button onClick={archiveSelected} disabled={bulkArchive.isPending} className={toolbarButton}>
-                <ArchiveIcon />
-                {archived ? 'Restore' : 'Archive'}
+              <button onClick={archiveSelected} disabled={bulkArchive.isPending} aria-busy={bulkArchive.isPending} className={toolbarButton}>
+                {bulkArchive.isPending ? <Spinner className="h-3.5 w-3.5" /> : <ArchiveIcon />}
+                {bulkArchive.isPending ? (archived ? 'Restoring…' : 'Archiving…') : archived ? 'Restore' : 'Archive'}
               </button>
               <button
                 onClick={() => exportShipmentsCsv(all.filter((s) => selectedIds.has(s._id)))}
@@ -550,14 +556,16 @@ export function Dashboard() {
         </div>
 
         {/* Body */}
-        {isLoading ? (
-          effectiveView === 'list' ? (
-            <ShipmentSkeletonRows />
-          ) : (
-            <div className="bg-slate-50/60 p-4">
-              <ShipmentSkeletonGrid count={3} />
-            </div>
-          )
+        {listLoading ? (
+          <SkeletonRegion label={archived ? 'Loading archived shipments' : 'Loading shipments'}>
+            {effectiveView === 'list' ? (
+              <ShipmentSkeletonRows />
+            ) : (
+              <div className="bg-slate-50/60 p-4">
+                <ShipmentSkeletonGrid count={3} />
+              </div>
+            )}
+          </SkeletonRegion>
         ) : visible.length === 0 ? (
           <EmptyState
             hasAnyShipments={all.length > 0}
@@ -585,7 +593,7 @@ export function Dashboard() {
         )}
 
         {/* Footer */}
-        {!isLoading && visible.length > 0 && (
+        {!listLoading && visible.length > 0 && (
           <div className="flex items-center justify-between gap-4 border-t border-slate-200 px-4 py-2.5 text-[12px] text-slate-500">
             <span className="tabular-nums">
               {visible.length === all.length
@@ -621,6 +629,7 @@ function Metric({
   tone,
   selected = false,
   onClick,
+  loading = false,
 }: {
   label: string;
   value: number;
@@ -628,7 +637,18 @@ function Metric({
   tone?: 'danger';
   selected?: boolean;
   onClick?: () => void;
+  /** First load: show the tile's shape, not a misleading 0. */
+  loading?: boolean;
 }) {
+  if (loading) {
+    return (
+      <div className="flex min-w-0 flex-col justify-start bg-white px-4 py-4 sm:px-5" aria-hidden>
+        <span className="text-[13px] font-medium text-slate-500">{label}</span>
+        <Skeleton className="mt-2 h-7 w-12" />
+        <Skeleton className="mt-2.5 h-3 w-32" />
+      </div>
+    );
+  }
   const body = (
     <>
       <span className="flex items-center gap-2 text-[13px] font-medium text-slate-500">

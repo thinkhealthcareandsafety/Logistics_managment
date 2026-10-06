@@ -4,6 +4,7 @@ import clsx from 'clsx';
 import type { Shipment } from '../types/shipment';
 import { useAddShipmentNote, useUpdateShipment } from '../hooks/useShipments';
 import { attentionReason } from '../utils/urgency';
+import { Spinner } from './ui/Loading';
 
 /**
  * The working surface for a stuck shipment: what went wrong, who's on it, and a log of
@@ -54,7 +55,7 @@ export function ExceptionPanel({ shipment }: { shipment: Shipment }) {
         <button
           type="button"
           onClick={toggleFollowUp}
-          disabled={updateShipment.isPending}
+          disabled={updateShipment.isPending} aria-busy={updateShipment.isPending}
           aria-pressed={claimed}
           className={clsx(
             'inline-flex h-8 shrink-0 items-center gap-1.5 self-start rounded-lg px-3 text-[13px] font-medium transition disabled:opacity-60',
@@ -63,7 +64,12 @@ export function ExceptionPanel({ shipment }: { shipment: Shipment }) {
               : 'bg-red-600 text-white shadow-sm hover:bg-red-700'
           )}
         >
-          {claimed ? (
+          {updateShipment.isPending ? (
+            <>
+              <Spinner className="h-3.5 w-3.5" />
+              Saving…
+            </>
+          ) : claimed ? (
             <>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden className="text-emerald-600">
                 <path d="m5 12 5 5 9-10" strokeLinecap="round" strokeLinejoin="round" />
@@ -114,9 +120,10 @@ export function ExceptionPanel({ shipment }: { shipment: Shipment }) {
             <button
               type="button"
               onClick={submitNote}
-              disabled={!note.trim() || addNote.isPending}
+              disabled={!note.trim() || addNote.isPending} aria-busy={addNote.isPending}
               className="btn-primary ml-auto h-8 px-3 py-0 text-[13px]"
             >
+              {addNote.isPending && <Spinner />}
               {addNote.isPending ? 'Saving…' : 'Save note'}
             </button>
           </div>

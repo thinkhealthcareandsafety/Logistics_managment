@@ -5,6 +5,7 @@ import { AddressFields, EMPTY_ADDRESS } from './AddressFields';
 import { Affixed } from './AddShipmentDialog';
 import { useUpdateShipment } from '../hooks/useShipments';
 import type { DeliveryAddress, Shipment } from '../types/shipment';
+import { Spinner } from './ui/Loading';
 
 const toNumberOrNull = (v: string) => (v.trim() === '' ? null : Number(v));
 
@@ -49,7 +50,8 @@ export function EditDeliveryDialog({ shipment, onClose }: { shipment: Shipment; 
           <button type="button" onClick={onClose} className="btn-secondary h-9 px-3 py-0 text-[13px]">
             Cancel
           </button>
-          <button type="submit" form="edit-delivery-form" disabled={update.isPending} className="btn-primary h-9 px-4 py-0 text-[13px]">
+          <button type="submit" form="edit-delivery-form" disabled={update.isPending} aria-busy={update.isPending} className="btn-primary h-9 px-4 py-0 text-[13px]">
+            {update.isPending && <Spinner />}
             {update.isPending ? 'Saving…' : 'Save'}
           </button>
         </>

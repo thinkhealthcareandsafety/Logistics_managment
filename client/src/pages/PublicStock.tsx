@@ -4,6 +4,7 @@ import { format, formatDistanceToNow } from 'date-fns';
 import clsx from 'clsx';
 import toast from 'react-hot-toast';
 import { stockApi } from '../api/stock';
+import { Skeleton, SkeletonRegion } from '../components/ui/Loading';
 import { expiryState, formatExpiry, listPrefix, whatsappShareUrl } from '../utils/stock';
 
 /**
@@ -48,11 +49,24 @@ export function PublicStock() {
 
       <main className="mx-auto max-w-2xl px-4 py-6">
         {isLoading && (
-          <div className="space-y-3">
-            {[0, 1, 2].map((i) => (
-              <div key={i} className="h-40 animate-pulse rounded-xl bg-white ring-1 ring-slate-200" />
+          <SkeletonRegion label="Loading stock" className="space-y-3">
+            {[4, 3, 5].map((rows, i) => (
+              <div key={i} className="overflow-hidden rounded-xl bg-white ring-1 ring-slate-200">
+                <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/70 px-4 py-3">
+                  <Skeleton className="h-4 w-32" />
+                  <Skeleton className="h-3.5 w-14" />
+                </div>
+                <div className="divide-y divide-slate-100">
+                  {Array.from({ length: rows }).map((_, r) => (
+                    <div key={r} className="flex items-center justify-between gap-4 px-4 py-3">
+                      <Skeleton className="h-3.5" style={{ width: `${40 + ((r * 17) % 35)}%` }} />
+                      <Skeleton className="h-4 w-10" />
+                    </div>
+                  ))}
+                </div>
+              </div>
             ))}
-          </div>
+          </SkeletonRegion>
         )}
 
         {isError && (

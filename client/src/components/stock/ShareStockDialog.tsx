@@ -4,6 +4,7 @@ import { Modal } from '../Modal';
 import { useSendStockNow, useStockMessage } from '../../hooks/useStock';
 import { liveStockUrl, whatsappShareUrl } from '../../utils/stock';
 import type { StockSettings } from '../../types/stock';
+import { Skeleton, SkeletonRegion, Spinner } from '../ui/Loading';
 
 /** Renders WhatsApp's *bold* markup the way the group will see it. */
 export function WhatsAppText({ text }: { text: string }) {
@@ -88,7 +89,14 @@ export function ShareStockDialog({
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_220px]">
         {/* Preview, styled like an outgoing WhatsApp message */}
         <div className="rounded-xl bg-[#efeae2] p-3 ring-1 ring-inset ring-black/5">
-          {isLoading && <div className="h-64 animate-pulse rounded-lg bg-white/60" />}
+          {isLoading && (
+            <SkeletonRegion label="Building the stock message" className="ml-auto max-w-[85%] space-y-2 rounded-lg rounded-tr-sm bg-[#d9fdd3] px-3 py-3">
+              <Skeleton className="h-3.5 w-48 bg-emerald-900/10" />
+              {[70, 55, 80, 45, 65, 50, 75, 40].map((w, i) => (
+                <Skeleton key={i} className="h-3 bg-emerald-900/10" style={{ width: `${w}%` }} />
+              ))}
+            </SkeletonRegion>
+          )}
           {isError && <p className="p-4 text-[13px] text-red-700">Couldn’t build the message. Try again in a moment.</p>}
           {text && (
             <div className="ml-auto max-w-full rounded-lg rounded-tr-sm bg-[#d9fdd3] px-3 py-2 shadow-[0_1px_0.5px_rgba(11,20,26,0.13)]">
@@ -120,9 +128,10 @@ export function ShareStockDialog({
                 <button
                   type="button"
                   onClick={() => sendNow.mutate()}
-                  disabled={sendNow.isPending || !text}
+                  disabled={sendNow.isPending || !text} aria-busy={sendNow.isPending}
                   className="btn-secondary mt-2 h-8 w-full px-3 py-0 text-[13px]"
                 >
+                  {sendNow.isPending && <Spinner />}
                   {sendNow.isPending ? 'Sending…' : 'Send now'}
                 </button>
                 {!settings.whatsappConfigured && (

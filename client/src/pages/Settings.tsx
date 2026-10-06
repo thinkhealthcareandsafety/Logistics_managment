@@ -4,6 +4,7 @@ import toast from 'react-hot-toast';
 import { useNotificationPreferences, useUpdateNotificationPreferences } from '../hooks/useNotifications';
 import { ALL_STATUSES, STATUS_LABELS, STATUS_STYLES } from '../utils/status';
 import type { ShipmentStatus } from '../types/shipment';
+import { Skeleton, SkeletonRegion, Spinner } from '../components/ui/Loading';
 
 const STATUS_HINTS: Record<ShipmentStatus, string> = {
   pending: 'Booked, waiting for the courier to pick it up',
@@ -82,11 +83,31 @@ export function Settings() {
 
   if (isLoading) {
     return (
-      <div className="space-y-6" aria-busy="true">
-        <div className="h-7 w-56 animate-pulse rounded bg-slate-200" />
-        <div className="h-48 animate-pulse rounded-xl bg-white ring-1 ring-slate-200" />
-        <div className="h-72 animate-pulse rounded-xl bg-white ring-1 ring-slate-200" />
-      </div>
+      <SkeletonRegion label="Loading notification settings" className="space-y-8">
+        <div className="space-y-2">
+          <Skeleton className="h-7 w-56" />
+          <Skeleton className="h-3.5 w-80 max-w-full" />
+        </div>
+        {[3, 5].map((rows, s) => (
+          <div key={s} className="grid grid-cols-1 gap-4 border-t border-slate-200 pt-8 lg:grid-cols-3 lg:gap-10">
+            <div className="space-y-2">
+              <Skeleton className="h-4 w-32" />
+              <Skeleton className="h-3 w-48" />
+            </div>
+            <div className="divide-y divide-slate-100 rounded-xl border border-slate-200 bg-white lg:col-span-2">
+              {Array.from({ length: rows }).map((_, i) => (
+                <div key={i} className="flex items-center justify-between gap-4 px-5 py-4">
+                  <div className="space-y-2">
+                    <Skeleton className="h-3.5 w-36" />
+                    <Skeleton className="h-3 w-56 max-w-full" />
+                  </div>
+                  <Skeleton className="h-5 w-9 rounded-full" />
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </SkeletonRegion>
     );
   }
 
@@ -192,10 +213,11 @@ export function Settings() {
             </button>
             <button
               onClick={save}
-              disabled={updatePrefs.isPending}
+              disabled={updatePrefs.isPending} aria-busy={updatePrefs.isPending}
               className="btn-primary h-9 px-4 py-0 text-[13px]"
               tabIndex={dirty ? 0 : -1}
             >
+              {updatePrefs.isPending && <Spinner />}
               {updatePrefs.isPending ? 'Saving…' : 'Save changes'}
             </button>
           </div>
