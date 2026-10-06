@@ -189,15 +189,6 @@ export function Stock() {
         <div className="min-w-0">
           <h1 className="text-[24px] font-semibold tracking-[-0.02em] text-slate-950">Stock</h1>
           <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-slate-500">
-            {settings.lastCountAt ? (
-              <span>
-                Last counted {format(new Date(settings.lastCountAt), 'd MMM, h:mm a')}
-                {settings.lastCountBy && ` by ${settings.lastCountBy}`}
-              </span>
-            ) : (
-              <span>Not counted yet</span>
-            )}
-            <span aria-hidden className="text-slate-300">/</span>
             <button
               onClick={() => setDialog({ kind: 'automation' })}
               className="inline-flex items-center gap-1.5 rounded font-medium text-brand-700 hover:text-brand-900"

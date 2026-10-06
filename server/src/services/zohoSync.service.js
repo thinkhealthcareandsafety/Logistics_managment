@@ -4,6 +4,7 @@ const StockItem = require('../models/StockItem');
 const StockMovement = require('../models/StockMovement');
 const logger = require('../config/logger');
 const zoho = require('./zoho.client');
+const { categoryFor } = require('../config/stockCategoryRules');
 
 /**
  * Zoho Books -> stock. Zoho is the source of truth for every linked line: each sync
@@ -288,13 +289,16 @@ async function syncOnce(conn, { reason = 'manual' } = {}) {
     if (!item) {
       // Every Zoho stock item gets a line - at 0 if Zoho has none - so the sheet mirrors Zoho.
       if (!conn.autoCreate || removed.has(zid)) continue;
-      category = category || (await autoCategory());
-      const last = await StockItem.findOne({ categoryId: category._id }).sort({ sortOrder: -1 });
+      // Into the section it belongs in (AED Pads, Fire Safety…) when that section exists;
+      // otherwise the catch-all "From Zoho Books" for someone to file.
+      const fitting = categoryFor(z.name);
+      const home = (fitting && (await StockCategory.findOne({ name: fitting }))) || (category = category || (await autoCategory()));
+      const last = await StockItem.findOne({ categoryId: home._id }).sort({ sortOrder: -1 });
       // The SKU becomes the product code (so shipments can name it) unless a line already uses it.
       const sku = String(z.sku || '').trim().toUpperCase().slice(0, 60);
       const skuTaken = sku && (await StockItem.exists({ productCode: sku, isArchived: false }));
       item = await StockItem.create({
-        categoryId: category._id,
+        categoryId: home._id,
         name: String(z.name).slice(0, 120),
         quantity: target,
         productCode: skuTaken ? '' : sku,
