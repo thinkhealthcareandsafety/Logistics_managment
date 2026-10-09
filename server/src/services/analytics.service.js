@@ -12,6 +12,17 @@ function bookedAt(s) {
   return s.shippingDate || s.checkpoints[0]?.checkpointTime || s.createdAt;
 }
 
+/**
+ * When the consignment physically left with the courier: the courier's pickup
+ * milestone, else the first scan past "pending". null while it's still waiting to be
+ * collected - an order booked Monday and picked up Tuesday is a Tuesday shipment.
+ */
+function dispatchedAt(s) {
+  if (s.carrierRoute?.pickupAt) return s.carrierRoute.pickupAt;
+  const moved = s.checkpoints.find((cp) => cp.status !== 'pending');
+  return moved ? moved.checkpointTime : null;
+}
+
 function titleCase(value) {
   return String(value || '')
     .trim()
@@ -85,13 +96,18 @@ function locationBreakdown(shipments) {
  * team can see which days are busiest and staff / stock for them.
  */
 function weekdayBreakdown(shipments) {
-  const rows = WEEKDAYS.map((day) => ({ day, orders: 0, units: 0, deliveries: 0 }));
+  const rows = WEEKDAYS.map((day) => ({ day, orders: 0, shipments: 0, units: 0, deliveries: 0 }));
   const indexOf = (date) => WEEKDAYS.indexOf(weekdayInIndia.format(new Date(date)));
   for (const s of shipments) {
     const booked = indexOf(bookedAt(s));
     if (booked >= 0) {
       rows[booked].orders += 1;
       rows[booked].units += Number(s.productDetails?.quantity) || 0;
+    }
+    const left = dispatchedAt(s);
+    if (left) {
+      const d = indexOf(left);
+      if (d >= 0) rows[d].shipments += 1;
     }
     const delivered = [...s.checkpoints].reverse().find((cp) => cp.status === 'delivered');
     if (delivered) {

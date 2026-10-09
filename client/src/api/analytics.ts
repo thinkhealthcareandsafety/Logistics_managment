@@ -17,7 +17,10 @@ export interface ExceptionRateByCarrier {
 
 export interface WeekdayRow {
   day: 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday' | 'Saturday' | 'Sunday';
+  /** Booked that day. */
   orders: number;
+  /** Picked up by the courier that day (left the warehouse). */
+  shipments: number;
   units: number;
   deliveries: number;
 }

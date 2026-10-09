@@ -4,10 +4,11 @@ import { SegmentedControl } from './SegmentedControl';
 import { DownloadCsvButton } from './DownloadCsvButton';
 import type { WeekdayRow } from '../api/analytics';
 
-type Measure = 'orders' | 'units' | 'deliveries';
+type Measure = 'orders' | 'shipments' | 'units' | 'deliveries';
 
 const MEASURES: Record<Measure, { label: string; noun: [string, string]; hint: string }> = {
   orders: { label: 'Orders', noun: ['order', 'orders'], hint: 'by the day they were booked' },
+  shipments: { label: 'Shipments', noun: ['shipment', 'shipments'], hint: 'by the day the courier picked them up' },
   units: { label: 'Units', noun: ['unit', 'units'], hint: 'shipped, by booking day' },
   deliveries: { label: 'Deliveries', noun: ['delivery', 'deliveries'], hint: 'by the day they were delivered' },
 };
@@ -79,8 +80,8 @@ export function WeekdayChart({ rows }: { rows: WeekdayRow[] }) {
           {/* Same columns as the table; the share column follows the measure picked above. */}
           <DownloadCsvButton
             name={`${measure}-by-day-of-week`}
-            headers={['Day', 'Orders', 'Units', 'Deliveries', `Share of ${MEASURES[measure].noun[1]} (%)`]}
-            rows={total === 0 ? [] : rows.map((r, i) => [r.day, r.orders, r.units, r.deliveries, pct(values[i])])}
+            headers={['Day', 'Orders', 'Shipments', 'Units', 'Deliveries', `Share of ${MEASURES[measure].noun[1]} (%)`]}
+            rows={total === 0 ? [] : rows.map((r, i) => [r.day, r.orders, r.shipments, r.units, r.deliveries, pct(values[i])])}
           />
         </div>
       </div>
@@ -205,6 +206,7 @@ export function WeekdayChart({ rows }: { rows: WeekdayRow[] }) {
                   <tr className="border-b border-slate-200 text-[12px] text-slate-500">
                     <th scope="col" className="py-2 pr-4 font-medium">Day</th>
                     <th scope="col" className="py-2 pr-4 text-right font-medium">Orders</th>
+                    <th scope="col" className="py-2 pr-4 text-right font-medium">Shipments</th>
                     <th scope="col" className="py-2 pr-4 text-right font-medium">Units</th>
                     <th scope="col" className="py-2 pr-4 text-right font-medium">Deliveries</th>
                     <th scope="col" className="py-2 text-right font-medium">Share of {MEASURES[measure].noun[1]}</th>
@@ -215,6 +217,7 @@ export function WeekdayChart({ rows }: { rows: WeekdayRow[] }) {
                     <tr key={r.day} className={clsx(i === peak && ties === 1 && 'font-semibold text-slate-950')}>
                       <th scope="row" className="py-2 pr-4 text-left font-medium text-slate-800">{r.day}</th>
                       <td className="py-2 pr-4 text-right text-slate-700">{r.orders}</td>
+                      <td className="py-2 pr-4 text-right text-slate-700">{r.shipments}</td>
                       <td className="py-2 pr-4 text-right text-slate-700">{r.units.toLocaleString('en-IN')}</td>
                       <td className="py-2 pr-4 text-right text-slate-700">{r.deliveries}</td>
                       <td className="py-2 text-right text-slate-500">{pct(values[i])}%</td>
