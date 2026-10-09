@@ -6,10 +6,11 @@ import { StarRating } from '../components/StarRating';
 import { SegmentedControl } from '../components/SegmentedControl';
 import { WeekdayChart } from '../components/WeekdayChart';
 import { LocationChart } from '../components/LocationChart';
-import { Skeleton, SkeletonRegion, Spinner } from '../components/ui/Loading';
+import { Spinner } from '../components/ui/Loading';
 import { DownloadCsvButton } from '../components/DownloadCsvButton';
 import type { AnalyticsSummary, ExceptionRateByCarrier } from '../api/analytics';
 
+import { AnalyticsSkeleton } from '../components/skeletons/PageSkeletons';
 const RANGE_PRESETS = [
   { label: 'Last 7 days', days: 7 },
   { label: 'Last 30 days', days: 30 },
@@ -129,51 +130,6 @@ export function Analytics() {
   );
 }
 
-/** The page's shape while the first numbers load: metric strip, two charts, the courier table. */
-function AnalyticsSkeleton() {
-  const card = 'rounded-xl border border-slate-200 bg-white p-5';
-  return (
-    <SkeletonRegion label="Loading analytics" className="space-y-6">
-      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-slate-200 bg-slate-200 lg:grid-cols-4">
-        {[0, 1, 2, 3].map((i) => (
-          <div key={i} className="space-y-3 bg-white px-5 py-4">
-            <Skeleton className="h-3 w-24" />
-            <Skeleton className="h-8 w-16" />
-            <Skeleton className="h-3 w-28" />
-          </div>
-        ))}
-      </div>
-      <div className={card}>
-        <Skeleton className="h-4 w-44" />
-        <Skeleton className="mt-2 h-3 w-64" />
-        <div className="mt-6 flex h-40 items-end gap-3 sm:gap-6">
-          {[55, 80, 45, 95, 70, 35, 25].map((h, i) => (
-            <Skeleton key={i} className="flex-1 rounded-t-md rounded-b-none" style={{ height: `${h}%` }} />
-          ))}
-        </div>
-      </div>
-      <div className={card}>
-        <Skeleton className="h-4 w-36" />
-        <div className="mt-5 space-y-3">
-          {[90, 72, 60, 48, 35].map((w, i) => (
-            <div key={i} className="flex items-center gap-3">
-              <Skeleton className="h-3 w-24" />
-              <Skeleton className="h-4" style={{ width: `${w}%` }} />
-            </div>
-          ))}
-        </div>
-      </div>
-      <div className={card}>
-        <Skeleton className="h-4 w-40" />
-        <div className="mt-5 space-y-3">
-          {[0, 1, 2].map((i) => (
-            <Skeleton key={i} className="h-8 w-full" />
-          ))}
-        </div>
-      </div>
-    </SkeletonRegion>
-  );
-}
 
 function Summary({ data }: { data: AnalyticsSummary }) {
   const onTimePct = data.onTimeDeliveryRate === null ? null : Math.round(data.onTimeDeliveryRate * 100);

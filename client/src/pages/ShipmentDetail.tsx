@@ -14,7 +14,7 @@ import { Menu, MenuDivider, MenuItem } from '../components/Menu';
 import { EditDeliveryDialog } from '../components/EditDeliveryDialog';
 import { CourierLogo } from '../components/CourierPicker';
 import { useCarriers } from '../hooks/useCarriers';
-import { Skeleton, SkeletonRegion, Spinner } from '../components/ui/Loading';
+import { Spinner } from '../components/ui/Loading';
 import { daysLate, getUrgency } from '../utils/urgency';
 import {
   deliverTo,
@@ -28,6 +28,7 @@ import {
 } from '../utils/logistics';
 import type { Shipment } from '../types/shipment';
 
+import { DetailSkeleton } from '../components/skeletons/PageSkeletons';
 export function ShipmentDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -517,76 +518,6 @@ function ContactLine({ icon, children }: { icon: ReactNode; children: ReactNode 
   );
 }
 
-function DetailSkeleton() {
-  return (
-    <SkeletonRegion label="Loading shipment" className="space-y-6">
-      <Skeleton className="h-3.5 w-48" />
-      {/* Header: AWB + status, courier line, actions, progress rail, four facts */}
-      <div className="rounded-xl border border-slate-200 bg-white">
-        <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-start sm:justify-between sm:p-6">
-          <div className="space-y-2.5">
-            <div className="flex items-center gap-2.5">
-              <Skeleton className="h-6 w-52" />
-              <Skeleton className="h-6 w-24 rounded-full" />
-            </div>
-            <Skeleton className="h-3.5 w-64 max-w-full" />
-          </div>
-          <div className="flex gap-2">
-            <Skeleton className="h-9 w-28 rounded-lg" />
-            <Skeleton className="h-9 w-24 rounded-lg" />
-            <Skeleton className="h-9 w-9 rounded-lg" />
-          </div>
-        </div>
-        <div className="border-t border-slate-100 px-5 pb-5 pt-5 sm:px-6">
-          <Skeleton className="h-2 w-full rounded-full" />
-          <div className="mt-3 flex justify-between">
-            {[0, 1, 2, 3, 4].map((i) => (
-              <Skeleton key={i} className="h-3 w-16" />
-            ))}
-          </div>
-        </div>
-        <div className="grid grid-cols-2 gap-px border-t border-slate-100 bg-slate-100 lg:grid-cols-4">
-          {[0, 1, 2, 3].map((i) => (
-            <div key={i} className="space-y-2 bg-white px-5 py-4 sm:px-6">
-              <Skeleton className="h-3 w-20" />
-              <Skeleton className="h-4 w-28" />
-            </div>
-          ))}
-        </div>
-      </div>
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        {/* Tracking history */}
-        <div className="space-y-5 rounded-xl border border-slate-200 bg-white p-5 lg:col-span-2">
-          <Skeleton className="h-4 w-36" />
-          {[0, 1, 2, 3, 4].map((i) => (
-            <div key={i} className="flex gap-3">
-              <Skeleton className="mt-0.5 h-3 w-3 shrink-0 rounded-full" />
-              <div className="flex-1 space-y-2">
-                <Skeleton className="h-3.5 w-32" />
-                <Skeleton className="h-3 w-3/4" />
-              </div>
-              <Skeleton className="h-3 w-24" />
-            </div>
-          ))}
-        </div>
-        {/* Side cards */}
-        <div className="space-y-6">
-          {[4, 3].map((rows, c) => (
-            <div key={c} className="space-y-3 rounded-xl border border-slate-200 bg-white p-5">
-              <Skeleton className="h-4 w-28" />
-              {Array.from({ length: rows }).map((_, i) => (
-                <div key={i} className="flex justify-between gap-3">
-                  <Skeleton className="h-3 w-20" />
-                  <Skeleton className="h-3 w-28" />
-                </div>
-              ))}
-            </div>
-          ))}
-        </div>
-      </div>
-    </SkeletonRegion>
-  );
-}
 
 const iconProps = { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, 'aria-hidden': true } as const;
 

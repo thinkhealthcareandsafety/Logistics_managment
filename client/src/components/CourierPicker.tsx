@@ -9,6 +9,7 @@ type Group = { label: string; start: number };
 
 export function CourierLogo({ courier, size = 18 }: { courier?: Pick<Carrier, 'name' | 'logo'> | null; size?: number }) {
   const [broken, setBroken] = useState(false);
+  const [loaded, setLoaded] = useState(false);
   const initials = (courier?.name || '?')
     .split(/\s+/)
     .map((w) => w[0])
@@ -26,17 +27,23 @@ export function CourierLogo({ courier, size = 18 }: { courier?: Pick<Carrier, 'n
       </span>
     );
   }
+  // A grey placeholder holds the logo's spot until the image arrives, then fades out.
   return (
-    <img
-      src={courier.logo}
-      alt=""
-      width={size}
-      height={size}
-      loading="lazy"
-      onError={() => setBroken(true)}
-      className="shrink-0 rounded bg-white object-contain"
+    <span
+      className={clsx('relative inline-block shrink-0 overflow-hidden rounded', !loaded && 'animate-pulse bg-slate-200/70')}
       style={{ width: size, height: size }}
-    />
+    >
+      <img
+        src={courier.logo}
+        alt=""
+        width={size}
+        height={size}
+        loading="lazy"
+        onLoad={() => setLoaded(true)}
+        onError={() => setBroken(true)}
+        className={clsx('h-full w-full rounded bg-white object-contain transition-opacity duration-200', loaded ? 'opacity-100' : 'opacity-0')}
+      />
+    </span>
   );
 }
 

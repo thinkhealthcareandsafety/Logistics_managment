@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { marketingApi, type PublicReview } from '../../api/marketing';
 import { StarRating } from '../StarRating';
+import { Skeleton } from '../ui/Loading';
 
 /** Seconds on screen per card - tuned so text is readable as it passes. */
 const SECONDS_PER_CARD = 7;
@@ -22,7 +23,10 @@ export function Reviews() {
     staleTime: 5 * 60_000,
   });
 
-  if (isLoading || reviews.length === 0) return null;
+  // While loading, hold the section's shape (heading, score, a row of cards) so the
+  // page below doesn't jump when the reviews arrive. If there are none, it still goes.
+  if (isLoading) return <ReviewsSkeleton />;
+  if (reviews.length === 0) return null;
 
   const average = reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length;
 
@@ -113,5 +117,43 @@ function ReviewCard({ review, ariaHidden }: { review: PublicReview; ariaHidden?:
         </span>
       </figcaption>
     </figure>
+  );
+}
+
+function ReviewsSkeleton() {
+  return (
+    <section aria-busy="true" aria-label="Loading customer reviews" className="overflow-hidden py-24 lg:py-32">
+      <div className="mx-auto grid max-w-7xl gap-8 px-5 sm:px-8 lg:grid-cols-12 lg:items-end lg:gap-10">
+        <div className="space-y-4 lg:col-span-7">
+          <Skeleton className="h-3.5 w-36" />
+          <Skeleton className="h-10 w-full max-w-xl" />
+          <Skeleton className="h-10 w-2/3 max-w-md" />
+        </div>
+        <div className="flex items-center gap-4 lg:col-span-5 lg:pb-2">
+          <Skeleton className="h-11 w-16" />
+          <div className="space-y-2">
+            <Skeleton className="h-4 w-24" />
+            <Skeleton className="h-3 w-36" />
+          </div>
+        </div>
+      </div>
+      <div className="mt-14 flex gap-6 overflow-hidden px-5 sm:px-8">
+        {[0, 1, 2, 3].map((i) => (
+          <div key={i} className="w-[360px] shrink-0 space-y-3 rounded-2xl bg-slate-50 p-7 ring-1 ring-slate-900/[0.05]">
+            <Skeleton className="h-4 w-24" />
+            <Skeleton className="h-3.5 w-full" />
+            <Skeleton className="h-3.5 w-11/12" />
+            <Skeleton className="h-3.5 w-2/3" />
+            <div className="flex items-center gap-3 pt-3">
+              <Skeleton className="h-9 w-9 rounded-full" />
+              <div className="space-y-1.5">
+                <Skeleton className="h-3 w-28" />
+                <Skeleton className="h-3 w-20" />
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }

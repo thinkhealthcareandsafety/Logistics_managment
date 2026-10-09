@@ -33,6 +33,7 @@ import {
 import type { ListStyle, StockCategory, StockCountChange, StockItem, StockMovement } from '../types/stock';
 import { Skeleton, SkeletonRegion, Spinner } from '../components/ui/Loading';
 
+import { StockSkeleton } from '../components/skeletons/PageSkeletons';
 type Filter = 'all' | 'out' | 'low' | 'expiring';
 
 /**
@@ -1120,55 +1121,6 @@ function formatTime(hhmm: string) {
   return format(new Date(2000, 0, 1, h, m), 'h:mm a');
 }
 
-function StockSkeleton() {
-  return (
-    <SkeletonRegion label="Loading stock" className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div className="space-y-2">
-          <Skeleton className="h-7 w-28" />
-          <Skeleton className="h-3.5 w-72 max-w-full" />
-        </div>
-        <div className="flex gap-2">
-          <Skeleton className="h-9 w-28 rounded-lg" />
-          <Skeleton className="h-9 w-24 rounded-lg" />
-          <Skeleton className="h-9 w-32 rounded-lg" />
-        </div>
-      </div>
-      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-slate-200 bg-slate-200 lg:grid-cols-4">
-        {[0, 1, 2, 3].map((i) => (
-          <div key={i} className="space-y-3 bg-white px-5 py-4">
-            <Skeleton className="h-3 w-24" />
-            <Skeleton className="h-7 w-14" />
-            <Skeleton className="h-3 w-32" />
-          </div>
-        ))}
-      </div>
-      <div className="flex items-center justify-between gap-3">
-        <Skeleton className="h-8 w-72 max-w-full rounded-lg" />
-        <Skeleton className="hidden h-8 w-80 rounded-lg sm:block" />
-      </div>
-      {[4, 3].map((rows, c) => (
-        <div key={c} className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-          <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50/70 px-4 py-3">
-            <Skeleton className="h-4 w-40" />
-            <Skeleton className="h-3.5 w-20" />
-          </div>
-          <div className="divide-y divide-slate-100">
-            {Array.from({ length: rows }).map((_, r) => (
-              <div key={r} className="flex items-center justify-between gap-4 px-4 py-3.5">
-                <div className="flex-1 space-y-2">
-                  <Skeleton className="h-3.5" style={{ width: `${30 + ((r * 13 + c * 7) % 30)}%` }} />
-                  <Skeleton className="h-3 w-28" />
-                </div>
-                <Skeleton className="h-8 w-28 rounded-lg" />
-              </div>
-            ))}
-          </div>
-        </div>
-      ))}
-    </SkeletonRegion>
-  );
-}
 
 const iconProps = { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, 'aria-hidden': true } as const;
 

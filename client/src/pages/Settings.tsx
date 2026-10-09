@@ -4,8 +4,9 @@ import toast from 'react-hot-toast';
 import { useNotificationPreferences, useUpdateNotificationPreferences } from '../hooks/useNotifications';
 import { ALL_STATUSES, STATUS_LABELS, STATUS_STYLES } from '../utils/status';
 import type { ShipmentStatus } from '../types/shipment';
-import { Skeleton, SkeletonRegion, Spinner } from '../components/ui/Loading';
+import { Spinner } from '../components/ui/Loading';
 
+import { SettingsSkeleton } from '../components/skeletons/PageSkeletons';
 const STATUS_HINTS: Record<ShipmentStatus, string> = {
   pending: 'Booked, waiting for the courier to pick it up',
   in_transit: 'Every hub scan along the way - can be several a day',
@@ -81,35 +82,8 @@ export function Settings() {
     toast.success('Notification settings saved');
   }
 
-  if (isLoading) {
-    return (
-      <SkeletonRegion label="Loading notification settings" className="space-y-8">
-        <div className="space-y-2">
-          <Skeleton className="h-7 w-56" />
-          <Skeleton className="h-3.5 w-80 max-w-full" />
-        </div>
-        {[3, 5].map((rows, s) => (
-          <div key={s} className="grid grid-cols-1 gap-4 border-t border-slate-200 pt-8 lg:grid-cols-3 lg:gap-10">
-            <div className="space-y-2">
-              <Skeleton className="h-4 w-32" />
-              <Skeleton className="h-3 w-48" />
-            </div>
-            <div className="divide-y divide-slate-100 rounded-xl border border-slate-200 bg-white lg:col-span-2">
-              {Array.from({ length: rows }).map((_, i) => (
-                <div key={i} className="flex items-center justify-between gap-4 px-5 py-4">
-                  <div className="space-y-2">
-                    <Skeleton className="h-3.5 w-36" />
-                    <Skeleton className="h-3 w-56 max-w-full" />
-                  </div>
-                  <Skeleton className="h-5 w-9 rounded-full" />
-                </div>
-              ))}
-            </div>
-          </div>
-        ))}
-      </SkeletonRegion>
-    );
-  }
+  if (isLoading) return <SettingsSkeleton />;
+
 
   const noChannel = !emailEnabled && !inAppEnabled && !whatsappEnabled;
 

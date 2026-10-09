@@ -1,6 +1,6 @@
 import { Suspense, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { PageLoader, PageSkeleton } from './ui/Loading';
+import { PageLoader } from './ui/Loading';
 import clsx from 'clsx';
 import { useAuth } from '../context/AuthContext';
 import { NotificationBell } from './NotificationBell';
@@ -8,6 +8,7 @@ import { Menu, MenuDivider, MenuItem } from './Menu';
 import { ErrorBoundary } from './ErrorBoundary';
 import { getInitials } from '../utils/avatar';
 
+import { RouteSkeleton } from './skeletons/PageSkeletons';
 /**
  * Primary nav is the work (shipments, stock, performance). Personal things - profile,
  * notification settings, signing out - live under the avatar, where every SaaS user
@@ -107,7 +108,7 @@ export function Layout() {
       <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8">
         <ErrorBoundary key={pathname}>
           {/* A page opened for the first time downloads first - show its shape meanwhile. */}
-          <Suspense fallback={<PageSkeleton />}>
+          <Suspense fallback={<RouteSkeleton />}>
             <Outlet />
           </Suspense>
         </ErrorBoundary>

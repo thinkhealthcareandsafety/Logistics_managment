@@ -239,6 +239,12 @@ export function Dashboard() {
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div className="min-w-0">
           <h1 className="text-[24px] font-semibold tracking-[-0.02em] text-slate-950">Shipments</h1>
+          {isLoading ? (
+            <div className="mt-2 flex items-center gap-2" aria-hidden>
+              <Skeleton className="h-3.5 w-28" />
+              <Skeleton className="h-3.5 w-36" />
+            </div>
+          ) : (
           <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-slate-500">
             <span>
               {activeCouriers === 0
@@ -269,6 +275,7 @@ export function Dashboard() {
               </button>
             )}
           </p>
+          )}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <button className="btn-secondary inline-flex items-center gap-2" onClick={() => setShowBulkImport(true)}>
@@ -360,6 +367,7 @@ export function Dashboard() {
               {archived ? 'Archived shipments' : 'Active shipments'}
             </h2>
             <ScopeSwitch
+              loading={isLoading || archivedLoading}
               scope={scope}
               activeCount={counts.active}
               archivedCount={counts.archived}
@@ -376,11 +384,11 @@ export function Dashboard() {
               value={status}
               onChange={setStatus}
               segments={[
-                { value: 'all', label: 'All', count: counts.all },
+                { value: 'all', label: 'All', count: listLoading ? undefined : counts.all },
                 ...ALL_STATUSES.map((s) => ({
                   value: s,
                   label: STATUS_LABELS[s],
-                  count: counts[s],
+                  count: listLoading ? undefined : counts[s],
                   dot: STATUS_STYLES[s].dot,
                 })),
               ]}
@@ -700,12 +708,16 @@ function ScopeSwitch({
   activeCount,
   archivedCount,
   onChange,
+  loading = false,
 }: {
   scope: Scope;
   activeCount: number;
   archivedCount: number;
   onChange: (scope: Scope) => void;
+  /** Counts not in yet - hold the switch's place instead of popping it in later. */
+  loading?: boolean;
 }) {
+  if (loading) return <Skeleton className="h-7 w-24 rounded-md" />;
   const toArchive = scope === 'active';
   // Nothing to switch to - don't offer an empty shelf.
   if (toArchive && archivedCount === 0) return null;
