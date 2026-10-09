@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import clsx from 'clsx';
 import { SegmentedControl } from './SegmentedControl';
+import { DownloadCsvButton } from './DownloadCsvButton';
 import type { WeekdayRow } from '../api/analytics';
 
 type Measure = 'orders' | 'units' | 'deliveries';
@@ -74,6 +75,12 @@ export function WeekdayChart({ rows }: { rows: WeekdayRow[] }) {
               { value: 'chart', label: 'Chart' },
               { value: 'table', label: 'Table' },
             ]}
+          />
+          {/* Same columns as the table; the share column follows the measure picked above. */}
+          <DownloadCsvButton
+            name={`${measure}-by-day-of-week`}
+            headers={['Day', 'Orders', 'Units', 'Deliveries', `Share of ${MEASURES[measure].noun[1]} (%)`]}
+            rows={total === 0 ? [] : rows.map((r, i) => [r.day, r.orders, r.units, r.deliveries, pct(values[i])])}
           />
         </div>
       </div>

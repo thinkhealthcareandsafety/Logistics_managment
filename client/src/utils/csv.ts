@@ -30,6 +30,24 @@ function escapeCell(value: unknown): string {
   return `"${String(value ?? '').replace(/"/g, '""')}"`;
 }
 
+/**
+ * Saves rows as a .csv file on the user's computer. Starts with a UTF-8 byte-order
+ * mark so Excel opens ₹, × and Indian names correctly instead of as garbled text.
+ */
+export function downloadCsv(filename: string, headers: string[], rows: unknown[][]) {
+  const csv = [headers, ...rows].map((row) => row.map(escapeCell).join(',')).join('\r\n');
+  const blob = new Blob(['﻿', csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename.endsWith('.csv') ? filename : `${filename}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  // Let the download start before the URL is released.
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 function isoDate(value?: string): string {
   return value ? format(new Date(value), 'yyyy-MM-dd') : '';
 }
@@ -61,12 +79,5 @@ export function exportShipmentsCsv(shipments: Shipment[]) {
     s.lastCheckedAt ? format(new Date(s.lastCheckedAt), 'yyyy-MM-dd HH:mm') : '',
   ]);
 
-  const csv = [HEADERS, ...rows].map((row) => row.map(escapeCell).join(',')).join('\n');
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = `shipments-${format(new Date(), 'yyyy-MM-dd')}.csv`;
-  link.click();
-  URL.revokeObjectURL(url);
+  downloadCsv(`shipments-${format(new Date(), 'yyyy-MM-dd')}.csv`, HEADERS, rows);
 }

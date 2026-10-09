@@ -7,6 +7,7 @@ import { SegmentedControl } from '../components/SegmentedControl';
 import { WeekdayChart } from '../components/WeekdayChart';
 import { LocationChart } from '../components/LocationChart';
 import { Skeleton, SkeletonRegion, Spinner } from '../components/ui/Loading';
+import { DownloadCsvButton } from '../components/DownloadCsvButton';
 import type { AnalyticsSummary, ExceptionRateByCarrier } from '../api/analytics';
 
 const RANGE_PRESETS = [
@@ -332,9 +333,27 @@ function CourierComparison({ rows }: { rows: ExceptionRateByCarrier[] }) {
     <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
       <div className="flex flex-wrap items-baseline justify-between gap-2 px-5 pt-5">
         <h2 className="text-[15px] font-semibold text-slate-950">Courier comparison</h2>
-        <span className="text-[13px] tabular-nums text-slate-500">
-          {rows.length} courier{rows.length === 1 ? '' : 's'} in this range
-        </span>
+        <div className="flex items-center gap-3">
+          <span className="text-[13px] tabular-nums text-slate-500">
+            {rows.length} courier{rows.length === 1 ? '' : 's'} in this range
+          </span>
+          {/* Plain numbers (hours, percentages) so the file sorts and sums in Excel. */}
+          <DownloadCsvButton
+            name="courier-comparison"
+            headers={['Courier', 'Shipments', 'Delivered', 'Avg transit (hours)', 'On time (%)', 'On time', 'Due-dated deliveries', 'Exceptions', 'Exception rate (%)']}
+            rows={rows.map((r) => [
+              r.carrierName,
+              r.total,
+              r.delivered,
+              r.averageTransitHours == null ? '' : Math.round(r.averageTransitHours * 10) / 10,
+              r.onTimeRate == null ? '' : Math.round(r.onTimeRate * 100),
+              r.onTimeCount,
+              r.onTimeEligible,
+              r.exceptions,
+              Math.round(r.rate * 100),
+            ])}
+          />
+        </div>
       </div>
       <div className="mt-3 overflow-x-auto">
         <table className="w-full min-w-[620px] text-left text-[13px]">

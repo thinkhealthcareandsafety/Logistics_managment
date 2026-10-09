@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import clsx from 'clsx';
 import { SegmentedControl } from './SegmentedControl';
+import { DownloadCsvButton } from './DownloadCsvButton';
 import type { LocationRow } from '../api/analytics';
 
 type Level = 'cities' | 'states';
@@ -85,6 +86,12 @@ export function LocationChart({
               { value: 'chart', label: 'Chart' },
               { value: 'table', label: 'Table' },
             ]}
+          />
+          {/* Every location (not just the top 10 the chart shows), ranked by the chosen measure. */}
+          <DownloadCsvButton
+            name={`orders-by-${level === 'cities' ? 'city' : 'state'}`}
+            headers={['Rank', level === 'cities' ? 'City' : 'State', 'Orders', 'Units', 'Freight (INR)', `Share of ${MEASURES[measure].label.toLowerCase()} (%)`]}
+            rows={rows.map((r, i) => [i + 1, r.label, r.orders, r.units, Math.round(r.freight), pct(r[measure])])}
           />
         </div>
       </div>
