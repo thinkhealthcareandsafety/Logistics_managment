@@ -52,6 +52,9 @@ const zohoConnectionSchema = new mongoose.Schema(
      */
     zohoStockSource: { type: String, default: '' },
     zohoPrimaryLocationId: { type: String, default: '' },
+    /** Which Zoho figure lines follow ('physical-stock-on-hand'); a change triggers one re-read. */
+    zohoStockField: { type: String, default: '' },
+    zohoDetailHasPhysical: { type: Boolean, default: false },
     /** Last full one-by-one read, and the figures it found (item id -> stock). */
     zohoDetailAt: { type: Date, default: null },
     zohoStockCache: { type: mongoose.Schema.Types.Mixed, default: {} },

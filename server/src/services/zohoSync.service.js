@@ -34,21 +34,43 @@ const shelfCount = (n) => Math.max(0, Math.floor(Number(n) || 0));
  * The stock figure Zoho actually sent for an item, or null when it sent none. A missing
  * figure must never be read as "0" - that would wipe real shelf counts.
  */
-function stockFigure(z) {
-  const num = (v) => (v !== '' && v != null && Number.isFinite(Number(v)) ? Number(v) : null);
-  for (const key of ['stock_on_hand', 'location_stock_on_hand', 'actual_available_stock', 'available_stock']) {
-    if (num(z[key]) !== null) return num(z[key]);
-  }
+/**
+ * Zoho Books keeps two stock figures per item:
+ *  - physical "Stock on Hand" (actual_*): what is on the shelf - receives add,
+ *    shipments remove. This is the number the team means by stock in hand.
+ *  - accounting stock (stock_on_hand / available_stock): moves only when a bill or
+ *    invoice is raised, so goods received but not yet billed are missing from it.
+ * We use the physical figure and fall back to accounting only when Zoho sends no
+ * physical one.
+ */
+const PHYSICAL_KEYS = ['actual_available_stock', 'location_actual_available_stock'];
+const ACCOUNTING_KEYS = ['stock_on_hand', 'location_stock_on_hand', 'available_stock'];
+const num = (v) => (v !== '' && v != null && Number.isFinite(Number(v)) ? Number(v) : null);
+
+function figureFrom(z, keys, locationKey) {
+  for (const key of keys) if (num(z[key]) !== null) return num(z[key]);
   // Zoho Books with Locations keeps stock per warehouse: the item's stock is their sum.
   if (Array.isArray(z.locations)) {
     const figures = z.locations
       .filter((l) => !l.status || l.status === 'active')
-      .map((l) => num(l.location_stock_on_hand))
+      .map((l) => num(l[locationKey]))
       .filter((n) => n !== null);
     if (figures.length) return figures.reduce((a, b) => a + b, 0);
   }
   return null;
 }
+
+/** True when Zoho sent the physical Stock on Hand for this item. */
+const hasPhysical = (z) => figureFrom(z, PHYSICAL_KEYS, 'location_actual_available_stock') !== null;
+
+function stockFigure(z) {
+  const physical = figureFrom(z, PHYSICAL_KEYS, 'location_actual_available_stock');
+  if (physical !== null) return physical;
+  return figureFrom(z, ACCOUNTING_KEYS, 'location_stock_on_hand');
+}
+
+/** Bumped when the figure we read changes, so cached figures from the old rule are dropped. */
+const STOCK_FIELD = 'physical-stock-on-hand';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -79,6 +101,7 @@ async function fillStockFigures(conn, zohoItems, { reason }) {
       const locs = Array.isArray(full.locations) ? full.locations : [];
       const primary = locs.find((l) => l.is_primary_location || l.is_primary) || locs[0];
       conn.zohoPrimaryLocationId = primary ? String(primary.location_id) : '';
+      conn.zohoDetailHasPhysical = hasPhysical(full);
       detail = Object.fromEntries(Object.entries(full).filter(([k]) => /stock|location/i.test(k)));
     } catch (err) {
       detail = { error: err.message };
@@ -89,14 +112,17 @@ async function fillStockFigures(conn, zohoItems, { reason }) {
   // 1) The list, filtered to the primary location.
   if (conn.zohoPrimaryLocationId && conn.zohoStockSource !== 'detail') {
     const byLocation = (await zoho.listItems(conn, { location_id: conn.zohoPrimaryLocationId })).filter(isTracked);
-    if (byLocation.some((z) => stockFigure(z) !== null)) {
+    if (byLocation.some(hasPhysical)) {
       conn.zohoStockSource = 'location-list';
+      conn.lastSyncSample = sampleOf(byLocation);
       return byLocation;
     }
   }
 
-  // 2) One by one: all items every few hours (or when asked), else just the ones a
-  // webhook named plus whatever figures the last full read left us.
+  // 2) One by one - only worth it when a full item read has the physical figure.
+  if (!conn.zohoDetailHasPhysical) return [];
+  // All items every few hours (or when asked), else just the ones a webhook named
+  // plus whatever figures the last full read left us.
   conn.zohoStockSource = 'detail';
   const cache = new Map(Object.entries(conn.zohoStockCache || {}));
   const dueFull = reason === 'manual' || reason === 'connected' || !conn.zohoDetailAt || Date.now() - conn.zohoDetailAt.getTime() > DETAIL_EVERY_MS;
@@ -115,7 +141,7 @@ async function fillStockFigures(conn, zohoItems, { reason }) {
   if (dueFull) conn.zohoDetailAt = new Date();
   conn.zohoStockCache = Object.fromEntries(cache);
   conn.markModified('zohoStockCache');
-  return zohoItems.filter((z) => cache.has(String(z.item_id))).map((z) => ({ ...z, stock_on_hand: cache.get(String(z.item_id)) }));
+  return zohoItems.filter((z) => cache.has(String(z.item_id))).map((z) => ({ ...z, actual_available_stock: cache.get(String(z.item_id)) }));
 }
 
 /** What Zoho sends for a few items - kept with the connection so problems can be diagnosed. */
@@ -223,10 +249,27 @@ function applyDelta(item, delta) {
 async function syncOnce(conn, { reason = 'manual' } = {}) {
   const zohoItems = (await zoho.listItems(conn)).filter(isTracked);
   conn.lastSyncSample = sampleOf(zohoItems);
-  let withFigure = zohoItems.filter((z) => stockFigure(z) !== null);
+  // Figures cached or chosen under an older rule (accounting stock) are dropped once.
+  const fieldChanged = conn.zohoStockField !== STOCK_FIELD;
+  if (fieldChanged) {
+    conn.zohoStockCache = {};
+    conn.zohoDetailAt = null;
+    conn.zohoStockSource = '';
+    conn.zohoPrimaryLocationId = '';
+    conn.markModified('zohoStockCache');
+  }
+  let withFigure = zohoItems.some(hasPhysical) ? zohoItems.filter((z) => stockFigure(z) !== null) : [];
   if (zohoItems.length > 0 && withFigure.length === 0) {
-    // Zoho Books with Locations leaves stock out of the list - fetch it another way.
+    // Physical stock not in the list (Zoho Books with Locations) - fetch it another way.
     withFigure = await fillStockFigures(conn, zohoItems, { reason });
+    // Last resort: Zoho sends no physical figure anywhere - use the list's accounting stock.
+    if (withFigure.length === 0) {
+      const accounting = zohoItems.filter((z) => stockFigure(z) !== null);
+      if (accounting.length) {
+        withFigure = accounting;
+        conn.zohoStockSource = 'list';
+      }
+    }
   } else {
     conn.zohoStockSource = 'list';
   }
@@ -334,7 +377,9 @@ async function syncOnce(conn, { reason = 'manual' } = {}) {
         reason: 'zoho',
         note: firstLink
           ? `Linked to Zoho Books “${z.name}” - quantity now follows Zoho`
-          : ref?.note || (delta > 0 ? 'Stock in recorded in Zoho Books' : 'Stock out recorded in Zoho Books'),
+          : fieldChanged
+            ? 'Corrected to Zoho’s physical Stock on Hand (was the billed/accounting figure)'
+            : ref?.note || (delta > 0 ? 'Stock in recorded in Zoho Books' : 'Stock out recorded in Zoho Books'),
         customer: delta < 0 ? ref?.customer || '' : '',
         userName: 'Zoho Books',
       });
@@ -355,6 +400,7 @@ async function syncOnce(conn, { reason = 'manual' } = {}) {
   }
 
   if (movements.length) await StockMovement.insertMany(movements);
+  conn.zohoStockField = STOCK_FIELD;
   return summary;
 }
 
