@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { formatDistanceToNow } from 'date-fns';
 import clsx from 'clsx';
+import { useCarriers } from '../hooks/useCarriers';
 import { useBulkArchiveShipments, useRefreshAllShipments, useShipments } from '../hooks/useShipments';
 import { ShipmentCard } from '../components/ShipmentCard';
 import { ShipmentTable } from '../components/ShipmentTable';
@@ -125,7 +126,17 @@ export function Dashboard() {
     }
     return [...m.values()].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
   }, [shelf]);
-  const courierActive = courier !== 'all' && couriersOnShelf.some((c) => c.code === courier);
+  // Any courier from TrackingMore's full catalogue can be picked, even with no shipments yet.
+  const { data: carrierCatalog, byCode: carrierByCode } = useCarriers();
+  const otherCouriers = useMemo(() => {
+    const onShelf = new Set(couriersOnShelf.map((c) => c.code));
+    return (carrierCatalog?.carriers ?? [])
+      .filter((c) => !onShelf.has(c.code))
+      .sort((a, b) => Number(b.country === 'IN') - Number(a.country === 'IN') || a.name.localeCompare(b.name));
+  }, [carrierCatalog, couriersOnShelf]);
+  const courierActive = courier !== 'all';
+  const courierName = (code: string) =>
+    couriersOnShelf.find((c) => c.code === code)?.name || carrierByCode.get(code)?.name || code;
   const all = useMemo(
     () => (courierActive ? shelf.filter((s) => s.carrierCode === courier) : shelf),
     [shelf, courier, courierActive]
@@ -200,7 +211,7 @@ export function Dashboard() {
   // Spelled out in the WhatsApp message so the reader knows it's a filtered view.
   const viewScope = [
     archived && 'Archived',
-    courierActive && couriersOnShelf.find((c) => c.code === courier)?.name,
+    courierActive && courierName(courier),
     attentionOnly && !archived && 'Needs attention',
     status !== 'all' && STATUS_LABELS[status],
     search.trim() && `matching “${search.trim()}”`,
@@ -474,8 +485,8 @@ export function Dashboard() {
               )}
 
               <div className="flex flex-1 items-center justify-end gap-2">
-                {/* Only worth a control once there's more than one courier to tell apart. */}
-                {(couriersOnShelf.length > 1 || courierActive) && (
+                {/* Couriers you ship with first (with counts), then every courier on TrackingMore. */}
+                {(
                   <label className="relative">
                     <span className="sr-only">Filter by courier</span>
                     <select
@@ -488,11 +499,27 @@ export function Dashboard() {
                       )}
                     >
                       <option value="all">All couriers ({shelf.length})</option>
-                      {couriersOnShelf.map((c) => (
-                        <option key={c.code} value={c.code}>
-                          {c.name} ({c.count})
-                        </option>
-                      ))}
+                      {couriersOnShelf.length > 0 && (
+                        <optgroup label="Couriers you ship with">
+                          {couriersOnShelf.map((c) => (
+                            <option key={c.code} value={c.code}>
+                              {c.name} ({c.count})
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
+                      {otherCouriers.length > 0 ? (
+                        <optgroup label={`All couriers on TrackingMore (${(carrierCatalog?.carriers.length ?? 0).toLocaleString('en-IN')})`}>
+                          {otherCouriers.map((c) => (
+                            <option key={c.code} value={c.code}>
+                              {c.name}
+                              {c.country ? ` · ${c.country}` : ''}
+                            </option>
+                          ))}
+                        </optgroup>
+                      ) : (
+                        !carrierCatalog && <option disabled>Loading all couriers…</option>
+                      )}
                     </select>
                     <svg
                       className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-slate-400"
@@ -579,6 +606,7 @@ export function Dashboard() {
             hasAnyShipments={all.length > 0}
             archived={archived}
             onClear={() => {
+              setCourier('all');
               setStatus('all');
               setAttentionOnly(false);
               setSearch('');
