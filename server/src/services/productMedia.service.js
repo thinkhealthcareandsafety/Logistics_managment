@@ -198,13 +198,17 @@ async function syncProductMedia({ dryRun = false } = {}) {
           (lastRun.preview ||= []).push({ item: name, product: best.title, score: Number(bestScore.toFixed(2)), images: best.images.length, videos: best.videos.length, brochures: best.brochures.length });
           continue;
         }
+        // The store wins where it has something; web-found videos/brochures stay where it has none.
+        const prev = item.media || {};
         item.media = {
-          images: best.images.slice(0, 8),
-          videos: best.videos,
-          brochures: best.brochures,
+          images: best.images.length ? best.images.slice(0, 8) : prev.images || [],
+          videos: best.videos.length ? best.videos : prev.videos || [],
+          brochures: best.brochures.length ? best.brochures : prev.brochures || [],
           sourceUrl: best.url,
           sourceTitle: best.title,
           matchedAt: new Date(),
+          webSearchedAt: prev.webSearchedAt || null,
+          extrasSearchedAt: prev.extrasSearchedAt || null,
         };
         await item.save();
         matched += 1;

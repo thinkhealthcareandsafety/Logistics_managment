@@ -89,7 +89,7 @@ async function callGemini(model, body) {
   const { data } = await axios.post(`${base}/v1beta/models/${model}:generateContent`, body, {
     headers: { 'x-goog-api-key': env.gemini.apiKey },
     // Kept well under the browser's 2-minute wait so a fallback model still has time.
-    timeout: 45_000,
+    timeout: 25_000,
   });
   return data;
 }
@@ -207,7 +207,8 @@ async function extractShipmentFromDocument(file) {
         ],
       },
     ],
-    generationConfig: { responseMimeType: 'application/json', responseSchema: SCHEMA, temperature: 0 },
+    // Low thinking: labels are read, not reasoned about - this halves the wait.
+    generationConfig: { responseMimeType: 'application/json', responseSchema: SCHEMA, temperature: 0, thinkingConfig: { thinkingLevel: 'low' } },
   });
 
   const candidate = response.candidates?.[0];

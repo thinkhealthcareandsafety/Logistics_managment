@@ -95,6 +95,14 @@ const KNOWN_TEMPLATES = {
     { name: 'orderupdate1', fields: ['name', 'awb'] },
   ],
   stock: [{ name: 'stock_update', fields: ['date', 'summary', 'link'] }],
+  booked: [
+    { name: 'shipment_utility', fields: ['name', 'date', 'shipmentId', 'awb', 'courier', 'link'] },
+    { name: 'shipment_utility1', fields: ['name', 'date', 'shipmentId', 'awb', 'courier', 'link'] },
+  ],
+  customerStatus: [
+    { name: 'new_order_3', fields: ['status', 'awb', 'link'] },
+    { name: 'new_order2', fields: ['status', 'awb', 'link'] },
+  ],
 };
 
 /** The kind's choices: the *_TEMPLATE override alone when set, else the known list. */
@@ -212,6 +220,47 @@ function sendWhatsAppDeliveryMessage({ to, shipment, trackingUrl, feedbackUrl })
   });
 }
 
+const shortDate = (d) =>
+  new Intl.DateTimeFormat('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', year: 'numeric' }).format(d ? new Date(d) : new Date());
+
+/** To the customer when a shipment is booked: date, shipment ID, AWB, courier, live link. */
+function sendWhatsAppBookedMessage({ to, shipment, trackingUrl }) {
+  const name = shipment.customerInfo?.name || 'there';
+  const values = {
+    name,
+    date: shortDate(shipment.shippingDate || shipment.createdAt),
+    shipmentId: shipment.zohoInvoice?.number || shipment.productDetails?.name || shipment.trackingNumber,
+    awb: shipment.trackingNumber,
+    courier: shipment.carrierName || '-',
+    link: trackingUrl,
+  };
+  return sendWhatsApp({
+    to,
+    text: [
+      '*ThinkHealth Logistics*',
+      `Hello ${name}, your shipment has been created.`,
+      '',
+      `• Shipment date: ${values.date}`,
+      `• Tracking number: ${values.awb}`,
+      `• Courier partner: ${values.courier}`,
+      `• Tracking link: ${trackingUrl}`,
+    ].join('\n'),
+    template: { kind: 'booked', values, contactName: shipment.customerInfo?.name },
+    context: 'sendWhatsAppBookedMessage',
+  });
+}
+
+/** To the customer on a status worth telling them about (out for delivery). */
+function sendWhatsAppCustomerStatus({ to, shipment, status, trackingUrl }) {
+  const label = STATUS_LABELS[status] || status;
+  return sendWhatsApp({
+    to,
+    text: ['*ThinkHealth Logistics*', `Your shipment is ${label.toLowerCase()}.`, `Tracking ID: ${shipment.trackingNumber}`, `Tracking link: ${trackingUrl}`].join('\n'),
+    template: { kind: 'customerStatus', values: { status: label, awb: shipment.trackingNumber, link: trackingUrl }, contactName: shipment.customerInfo?.name },
+    context: 'sendWhatsAppCustomerStatus',
+  });
+}
+
 /** Free-form text, e.g. the stock update. `template` is optional. */
 function sendWhatsAppText({ to, text, template, context = 'sendWhatsAppText' }) {
   return sendWhatsApp({ to, text, template, context });
@@ -250,4 +299,8 @@ async function whatsAppStatus() {
   return out;
 }
 
-module.exports = { sendWhatsAppStatusMessage, sendWhatsAppDeliveryMessage, sendWhatsAppText, isWhatsAppConfigured, whatsAppStatus, templateReady };
+module.exports = {
+  sendWhatsAppBookedMessage,
+  sendWhatsAppCustomerStatus,
+  sendWhatsAppStatusMessage,
+  sendWhatsAppDeliveryMessage, sendWhatsAppText, isWhatsAppConfigured, whatsAppStatus, templateReady };

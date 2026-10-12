@@ -83,6 +83,8 @@ const stockItemSchema = new mongoose.Schema(
       matchedAt: { type: Date, default: null },
       // Last time the web photo finder looked for this line (found or not), so it isn't re-searched daily.
       webSearchedAt: { type: Date, default: null },
+      // Same, for the web search for product videos and brochures.
+      extrasSearchedAt: { type: Date, default: null },
     },
 
     sortOrder: { type: Number, default: 0 },

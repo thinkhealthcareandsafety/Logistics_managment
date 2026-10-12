@@ -48,7 +48,11 @@ async function matchInvoices() {
     invoices = await zoho.listInvoices(conn, { from: day(new Date(since.getTime() - 3 * DAY)), to: day(new Date()) });
     conn.invoiceError = '';
   } catch (err) {
-    conn.invoiceError = /scope|authori[sz]/i.test(err.message) ? 'Zoho needs permission to read invoices - Disconnect and Connect Zoho Books again' : err.message;
+    conn.invoiceError = /scope|authori[sz]/i.test(err.message)
+      ? 'Zoho needs permission to read invoices - Disconnect and Connect Zoho Books again'
+      : /permission/i.test(err.message)
+        ? 'The Zoho user who connected can’t view invoices. In Zoho Books → Settings → Users & Roles, give their role “Invoices: View” (or connect as an admin), then press Sync now.'
+        : err.message;
     conn.invoiceMatchAt = new Date();
     await conn.save();
     return { error: conn.invoiceError };

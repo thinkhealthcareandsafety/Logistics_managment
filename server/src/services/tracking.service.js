@@ -2,7 +2,7 @@ const Shipment = require('../models/Shipment');
 const { getAdapterForCarrier } = require('../adapters');
 const { emitShipmentUpdate } = require('../sockets');
 const { notifyStatusChange } = require('./notification.service');
-const { notifyCustomerDelivered } = require('./customerNotification.service');
+const { notifyCustomerDelivered, notifyCustomerBooked, notifyCustomerOutForDelivery } = require('./customerNotification.service');
 const logger = require('../config/logger');
 const { deductForShipment } = require('./stock.service');
 const { syncDeliveredAt } = require('../utils/deliveredAt');
@@ -30,6 +30,13 @@ async function registerShipment(payload, userId) {
     await refreshShipment(shipment);
   } catch (err) {
     logger.warn(`Initial refresh failed for ${shipment.trackingNumber}: ${err.message}`);
+  }
+
+  // The customer hears it's booked, with the AWB, courier and live tracking link.
+  try {
+    if (await notifyCustomerBooked(shipment)) await shipment.save();
+  } catch (err) {
+    logger.error(`notifyCustomerBooked failed for ${shipment.trackingNumber}: ${err.message}`);
   }
 
   return shipment;
@@ -85,6 +92,12 @@ async function refreshShipment(shipment) {
 
   // The customer's thank-you + feedback request goes out the first time a shipment
   // lands on `delivered`. Done before the save so the sent-stamp persists with it.
+  // Out for delivery: tell the customer once, and only on a new scan (not on old history).
+  if (shipment.status === 'out_for_delivery' && newCheckpoints.length > 0) {
+    await notifyCustomerOutForDelivery(shipment).catch((err) =>
+      logger.error(`notifyCustomerOutForDelivery failed for ${shipment.trackingNumber}: ${err.message}`)
+    );
+  }
   if (shipment.status === 'delivered') {
     await notifyCustomerDelivered(shipment).catch((err) =>
       logger.error(`notifyCustomerDelivered failed for ${shipment.trackingNumber}: ${err.message}`)

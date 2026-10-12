@@ -64,7 +64,7 @@ const FORM_TO_LABEL: Partial<Record<keyof FormState, LabelField>> = {
 
 const DEFAULT_COURIER = 'shreemaruticourier';
 /** How long a confidently-read label waits before adding itself. */
-const AUTO_ADD_SECONDS = 5;
+const AUTO_ADD_SECONDS = 3;
 const LAST_COURIER_KEY = 'th.lastCourier';
 
 /** Most bookings repeat the courier of the last one - start there. */

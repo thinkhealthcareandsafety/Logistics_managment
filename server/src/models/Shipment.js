@@ -141,6 +141,9 @@ const shipmentSchema = new mongoose.Schema(
     // Set once and checked before sending, so a carrier re-issuing the delivered
     // checkpoint (or a manual re-sync) can't mail the same customer twice.
     deliveryNoticeSentAt: { type: Date },
+    // Same once-only guard for the customer's WhatsApp "booked" and "out for delivery" messages.
+    bookedNoticeSentAt: { type: Date },
+    outForDeliveryNoticeSentAt: { type: Date },
 
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
   },

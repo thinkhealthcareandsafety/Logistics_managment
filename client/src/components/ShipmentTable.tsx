@@ -100,6 +100,16 @@ export function ShipmentTable({
                   {shipment.productDetails?.name || 'Unnamed product'}
                   {qty ? <span className="text-slate-400"> · {qty} unit{qty === 1 ? '' : 's'}</span> : null}
                 </p>
+                <p className="mt-0.5 text-[12px]">
+                  {shipment.ewayBill?.number ? (
+                    <span className="font-mono tabular-nums text-slate-600">
+                      <span className="font-sans text-slate-400">E-way bill </span>
+                      {shipment.ewayBill.number.replace(/(\d{4})(?=\d)/g, '$1 ')}
+                    </span>
+                  ) : (
+                    <span className="text-slate-400">No e-way bill</span>
+                  )}
+                </p>
               </td>
 
               <td className="hidden min-w-0 py-3 pr-4 lg:table-cell">

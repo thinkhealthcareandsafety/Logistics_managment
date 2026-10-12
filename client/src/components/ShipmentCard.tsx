@@ -59,6 +59,15 @@ export function ShipmentCard({
           {shipment.customerInfo?.name || 'No customer set'}
           {qty ? ` · ${qty} unit${qty === 1 ? '' : 's'}` : ''}
         </p>
+        <p className="mt-0.5 text-[12px] text-slate-400">
+          {shipment.ewayBill?.number ? (
+            <>
+              E-way bill <span className="font-mono tabular-nums text-slate-600">{shipment.ewayBill.number.replace(/(\d{4})(?=\d)/g, '$1 ')}</span>
+            </>
+          ) : (
+            'No e-way bill'
+          )}
+        </p>
 
         <ProgressRail status={shipment.status} className="mt-4" />
 

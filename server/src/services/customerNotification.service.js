@@ -3,7 +3,7 @@ const env = require('../config/env');
 const logger = require('../config/logger');
 const { resolveDeliveredAt } = require('../utils/deliveredAt');
 const { sendDeliveryFeedbackEmail, isEmailConfigured } = require('./email.service');
-const { sendWhatsAppDeliveryMessage, isWhatsAppConfigured } = require('./whatsapp.service');
+const { sendWhatsAppDeliveryMessage, sendWhatsAppBookedMessage, sendWhatsAppCustomerStatus, isWhatsAppConfigured } = require('./whatsapp.service');
 
 /** How long after delivery we keep trying to get the thank-you out. */
 const RETRY_WINDOW_DAYS = 7;
@@ -63,6 +63,30 @@ async function notifyCustomerDelivered(shipment) {
   return delivered;
 }
 
+/**
+ * WhatsApp to the customer when their shipment is booked, and when it goes out for
+ * delivery - once each (the caller saves). Off with WHATSAPP_CUSTOMER_UPDATES=false.
+ */
+async function notifyCustomerBooked(shipment) {
+  const phone = shipment.customerInfo?.phone;
+  if (!env.anantya.customerUpdates || shipment.bookedNoticeSentAt || !phone || !isWhatsAppConfigured()) return false;
+  if (shipment.status === 'delivered') return false;
+  const { trackingUrl } = customerLinks(shipment);
+  const ok = await sendWhatsAppBookedMessage({ to: phone, shipment, trackingUrl });
+  if (ok) shipment.bookedNoticeSentAt = new Date();
+  return ok;
+}
+
+async function notifyCustomerOutForDelivery(shipment) {
+  const phone = shipment.customerInfo?.phone;
+  if (!env.anantya.customerUpdates || shipment.outForDeliveryNoticeSentAt || !phone || !isWhatsAppConfigured()) return false;
+  if (shipment.status !== 'out_for_delivery') return false;
+  const { trackingUrl } = customerLinks(shipment);
+  const ok = await sendWhatsAppCustomerStatus({ to: phone, shipment, status: 'out_for_delivery', trackingUrl });
+  if (ok) shipment.outForDeliveryNoticeSentAt = new Date();
+  return ok;
+}
+
 function deliveredAt(shipment) {
   return resolveDeliveredAt(shipment) || shipment.updatedAt;
 }
@@ -100,6 +124,8 @@ async function retryPendingDeliveryNotices() {
 }
 
 module.exports = {
+  notifyCustomerBooked,
+  notifyCustomerOutForDelivery,
   notifyCustomerDelivered,
   retryPendingDeliveryNotices,
   deliveryChannels,

@@ -54,12 +54,16 @@ const env = {
   // "name" or "name|field,field,..." (fields: awb, status, link, name, feedbackUrl, date, summary).
   anantya: {
     apiKey: process.env.ANANTYA_API_KEY || '',
+    // Customer WhatsApp on booking and out-for-delivery (the delivery thank-you is separate). Off with "false".
+    customerUpdates: process.env.WHATSAPP_CUSTOMER_UPDATES !== 'false',
     senderNumber: process.env.ANANTYA_SENDER_NUMBER || '',
     baseUrl: (process.env.ANANTYA_BASE_URL || 'https://apiv1.anantya.ai').replace(/\/$/, ''),
     templates: {
       status: process.env.ANANTYA_STATUS_TEMPLATE || '',
       delivery: process.env.ANANTYA_DELIVERY_TEMPLATE || '',
       stock: process.env.ANANTYA_STOCK_TEMPLATE || '',
+      booked: process.env.ANANTYA_BOOKED_TEMPLATE || '',
+      customerStatus: process.env.ANANTYA_CUSTOMER_STATUS_TEMPLATE || '',
     },
   },
 
