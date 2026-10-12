@@ -317,15 +317,26 @@ const getPublicStock = asyncHandler(async (req, res) => {
 // ─────────────────────────── Product media ───────────────────────────
 
 const { syncProductMedia, mediaStatus } = require('../services/productMedia.service');
+const { findWebImages, webImagesStatus } = require('../services/webImages.service');
 
 /** Re-reads buyaedindia.com and re-matches photos, videos and brochures (runs in the background). */
+/** buyaedindia.com first, then web photos for whatever is still without one. */
 const refreshMedia = asyncHandler(async (req, res) => {
-  syncProductMedia().catch(() => {});
+  syncProductMedia()
+    .catch(() => {})
+    .then(() => findWebImages())
+    .catch(() => {});
   res.status(202).json({ media: mediaStatus() });
 });
 
 const getMediaStatus = asyncHandler(async (req, res) => {
-  res.json({ media: mediaStatus() });
+  res.json({ media: mediaStatus(), web: await webImagesStatus() });
+});
+
+const searchWebImages = asyncHandler(async (req, res) => {
+  const limit = Math.min(Math.max(Number(req.body?.limit) || 150, 1), 500);
+  findWebImages({ limit }).catch(() => {});
+  res.status(202).json({ web: await webImagesStatus() });
 });
 
 /**
@@ -406,6 +417,7 @@ module.exports = {
   importMedia,
   refreshMedia,
   getMediaStatus,
+  searchWebImages,
   zohoImage,
   getStock,
   getMessage,

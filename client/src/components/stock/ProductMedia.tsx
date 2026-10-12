@@ -93,7 +93,7 @@ export function ProductMediaDialog({ item, onClose }: { item: StockItem; onClose
         {images.length > 0 && (
           <div>
             <div className="flex aspect-[4/3] items-center justify-center overflow-hidden rounded-lg bg-slate-50 ring-1 ring-slate-200">
-              <img src={images[active]} alt={displayName(item)} className="max-h-full max-w-full object-contain" />
+              <img src={images[active]} referrerPolicy="no-referrer" alt={displayName(item)} className="max-h-full max-w-full object-contain" />
             </div>
             {images.length > 1 && (
               <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
@@ -107,7 +107,7 @@ export function ProductMediaDialog({ item, onClose }: { item: StockItem; onClose
                       i === active ? 'ring-brand-500' : 'ring-transparent hover:ring-slate-300'
                     )}
                   >
-                    <img src={src} alt="" loading="lazy" className="h-full w-full bg-white object-contain" />
+                    <img src={src} referrerPolicy="no-referrer" alt="" loading="lazy" className="h-full w-full bg-white object-contain" />
                   </button>
                 ))}
               </div>

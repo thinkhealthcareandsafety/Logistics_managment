@@ -81,6 +81,8 @@ const stockItemSchema = new mongoose.Schema(
       sourceUrl: { type: String, default: '' },
       sourceTitle: { type: String, default: '' },
       matchedAt: { type: Date, default: null },
+      // Last time the web photo finder looked for this line (found or not), so it isn't re-searched daily.
+      webSearchedAt: { type: Date, default: null },
     },
 
     sortOrder: { type: Number, default: 0 },

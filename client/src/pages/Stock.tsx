@@ -129,8 +129,9 @@ export function Stock() {
   const refreshMedia = useMutation({
     mutationFn: stockApi.refreshMedia,
     onSuccess: () => {
-      toast.success('Reading photos, videos and brochures from buyaedindia.com - they appear in a minute or two');
+      toast.success('Reading photos, videos and brochures from buyaedindia.com, then finding checked web photos for the rest - they appear over the next few minutes');
       setTimeout(() => queryClient.invalidateQueries({ queryKey: ['stock'] }), 90_000);
+      setTimeout(() => queryClient.invalidateQueries({ queryKey: ['stock'] }), 300_000);
     },
     onError: () => toast.error('Could not start the photo refresh'),
   });

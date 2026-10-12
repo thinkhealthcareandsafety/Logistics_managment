@@ -20,6 +20,7 @@ const {
   importMedia,
   refreshMedia,
   getMediaStatus,
+  searchWebImages,
   zohoImage,
 } = require('../controllers/stock.controller');
 const { requireAuth } = require('../middleware/auth.middleware');
@@ -50,6 +51,7 @@ router.post('/items/:id/merge', mergeItems);
 router.post('/items/:id/unmerge', unmergeItem);
 router.post('/media/import', express.json({ limit: '5mb' }), importMedia);
 router.get('/media/status', getMediaStatus);
+router.post('/media/web-search', searchWebImages);
 router.get('/items/:id/zoho-image', zohoImage);
 
 router.patch('/settings', updateSettings);
