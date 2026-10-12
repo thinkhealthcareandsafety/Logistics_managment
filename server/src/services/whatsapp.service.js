@@ -208,7 +208,7 @@ async function whatsAppStatus() {
         return [kind, { name, found: Boolean(t), status: t?.templateStatus || null, approved: Boolean(t && isAccepted(t)), id: t?.id ?? null }];
       })
     );
-    out.allTemplates = list.map((t) => ({ id: t.id, name: t.templateName, status: t.templateStatus, active: t.isActive }));
+    out.allTemplates = list.map((t) => ({ id: t.id, name: t.templateName, status: t.templateStatus, active: t.isActive, text: t.msgText || '' }));
   } catch (err) {
     out.keyWorks = false;
     out.error = err.response?.status === 401 || err.response?.status === 403 ? 'Anantya rejected the API key' : err.response?.data?.message || err.message;
