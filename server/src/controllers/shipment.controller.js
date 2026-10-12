@@ -99,6 +99,12 @@ const deleteShipment = asyncHandler(async (req, res) => {
     createdBy: req.userId,
   });
   if (!shipment) throw new ApiError(404, 'Shipment not found');
+  // Its customer review and notifications go with it - a review of a shipment that
+  // no longer exists must not stay on the public site.
+  await Promise.all([
+    require('../models/Feedback').deleteMany({ shipmentId: shipment._id }),
+    require('../models/Notification').deleteMany({ shipmentId: shipment._id }),
+  ]);
   res.status(204).send();
 });
 
