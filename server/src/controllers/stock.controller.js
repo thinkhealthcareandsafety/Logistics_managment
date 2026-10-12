@@ -323,6 +323,30 @@ const getMediaStatus = asyncHandler(async (req, res) => {
   res.json({ media: mediaStatus() });
 });
 
+/**
+ * Media matched somewhere that can reach buyaedindia.com (the store blocks this
+ * server's address). Accepts only http(s) links and existing stock lines.
+ */
+const importMedia = asyncHandler(async (req, res) => {
+  const matches = Array.isArray(req.body.matches) ? req.body.matches.slice(0, 2000) : [];
+  const url = (u) => typeof u === 'string' && /^https?:\/\//i.test(u) && u.length < 2000;
+  let applied = 0;
+  for (const m of matches) {
+    if (!mongoose.isValidObjectId(m.itemId) || !m.media) continue;
+    const media = {
+      images: (m.media.images || []).filter(url).slice(0, 8),
+      videos: (m.media.videos || []).filter(url).slice(0, 5),
+      brochures: (m.media.brochures || []).filter((b) => b && url(b.url)).slice(0, 5).map((b) => ({ url: b.url, title: String(b.title || 'Brochure').slice(0, 80) })),
+      sourceUrl: url(m.media.sourceUrl) ? m.media.sourceUrl : '',
+      sourceTitle: String(m.media.sourceTitle || '').slice(0, 200),
+      matchedAt: new Date(),
+    };
+    const r = await StockItem.updateOne({ _id: m.itemId, isArchived: false }, { $set: { media } });
+    applied += r.modifiedCount;
+  }
+  res.json({ applied, received: matches.length });
+});
+
 /** Zoho Books' own photo for a line, fetched with the stored Zoho login and cached. */
 const zohoImageCache = new Map();
 const zohoImage = asyncHandler(async (req, res) => {
@@ -344,6 +368,7 @@ const zohoImage = asyncHandler(async (req, res) => {
 });
 
 module.exports = {
+  importMedia,
   refreshMedia,
   getMediaStatus,
   zohoImage,

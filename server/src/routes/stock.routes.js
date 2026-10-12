@@ -14,6 +14,7 @@ const {
   updateSettings,
   sendNow,
   rotateShareToken,
+  importMedia,
   refreshMedia,
   getMediaStatus,
   zohoImage,
@@ -41,6 +42,7 @@ router.post('/items/:id/stock-out', stockOut);
 router.post('/count', saveCount);
 
 router.post('/media/refresh', refreshMedia);
+router.post('/media/import', express.json({ limit: '5mb' }), importMedia);
 router.get('/media/status', getMediaStatus);
 router.get('/items/:id/zoho-image', zohoImage);
 

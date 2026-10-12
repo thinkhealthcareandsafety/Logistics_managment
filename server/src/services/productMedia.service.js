@@ -225,4 +225,33 @@ async function syncProductMedia({ dryRun = false } = {}) {
 
 const mediaStatus = () => ({ ...lastRun, running: Boolean(running) });
 
-module.exports = { syncProductMedia, mediaStatus, similarity, isSameProduct };
+/**
+ * Best store product for each line (only confident matches). Pure - no database - so it
+ * can run wherever the store is reachable and the result be imported.
+ */
+function matchProducts(items, products) {
+  const out = [];
+  for (const item of items) {
+    const name = item.size ? `${item.name} ${item.size}` : item.name;
+    let best = null;
+    let bestScore = 0;
+    for (const p of products) {
+      const score = Math.max(similarity(name, p.title), similarity(item.zohoItemName || '', p.title));
+      if (score > bestScore) {
+        best = p;
+        bestScore = score;
+      }
+    }
+    if (!best || bestScore < MIN_SCORE) continue;
+    if (![name, item.zohoItemName].some((n) => n && isSameProduct(n, best.title))) continue;
+    out.push({
+      itemId: String(item._id),
+      item: name,
+      score: Number(bestScore.toFixed(2)),
+      media: { images: best.images.slice(0, 8), videos: best.videos, brochures: best.brochures, sourceUrl: best.url, sourceTitle: best.title },
+    });
+  }
+  return out;
+}
+
+module.exports = { syncProductMedia, mediaStatus, similarity, isSameProduct, matchProducts, listProducts, readAll };
