@@ -339,6 +339,14 @@ const getMediaStatus = asyncHandler(async (req, res) => {
 
 const searchWebImages = asyncHandler(async (req, res) => {
   const limit = Math.min(Math.max(Number(req.body?.limit) || 150, 1), 500);
+  // redoExtrasSince: search videos/brochures again for lines done since then (e.g. after a
+  // prompt fix). Only web-found media is cleared - lines matched to buyaedindia keep theirs.
+  const since = req.body?.redoExtrasSince ? new Date(req.body.redoExtrasSince) : null;
+  if (since && !Number.isNaN(since.getTime())) {
+    const filter = { 'media.extrasSearchedAt': { $gte: since } };
+    await StockItem.updateMany({ ...filter, 'media.sourceUrl': { $not: /buyaedindia/i } }, { $set: { 'media.videos': [], 'media.brochures': [] } });
+    await StockItem.updateMany(filter, { $set: { 'media.extrasSearchedAt': null } });
+  }
   findWebImages({ limit }).catch(() => {});
   res.status(202).json({ web: await webImagesStatus() });
 });

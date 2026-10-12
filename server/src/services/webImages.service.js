@@ -47,6 +47,14 @@ const jsonOf = (text) => {
     return null;
   }
 };
+/** "Whistle (category: First Aid Kit Contents)" - short names are ambiguous without it. */
+const describe = (item) => {
+  const name = item.size ? `${item.name} ${item.size}` : item.name;
+  const category = item.categoryId?.name;
+  return category ? `${name} (category: ${category})` : name;
+};
+const NOT_SAME = 'A different kind of product that merely shares the name (e.g. a brand called "Whistle" that sells dental aligners) does NOT count.';
+
 const isHttp = (u) => typeof u === 'string' && /^https?:\/\//i.test(u) && u.length < 2000;
 
 /** Image links and product pages for a product, from a Google-grounded search. */
@@ -108,7 +116,8 @@ async function verify(name, url) {
       parts: [
         { inlineData: { mimeType: type, data: Buffer.from(res.data).toString('base64') } },
         {
-          text: `Is this an accurate product photo of "${name}" - the same kind of product, and the same brand/model if one is named?
+          text: `This is for the stock list of an Indian first-aid, medical and safety equipment supplier.
+Is this an accurate product photo of "${name}" - the same kind of product, and the same brand/model if one is named? ${NOT_SAME}
 Also: is the background white or very plain and light, with no people, and is the photo sharp and high resolution (not a tiny thumbnail, not a collage, no big watermark)?
 Reply ONLY JSON {"sameProduct": true|false, "whiteBackground": true|false, "sharp": true|false, "reason": "short"}`,
         },
@@ -121,7 +130,7 @@ Reply ONLY JSON {"sameProduct": true|false, "whiteBackground": true|false, "shar
 }
 
 async function findFor(item) {
-  const name = item.size ? `${item.name} ${item.size}` : item.name;
+  const name = describe(item);
   const { images, pages } = await searchCandidates(name);
   const candidates = images.map((u) => ({ url: u, page: '' }));
   for (const p of pages) {
@@ -222,7 +231,7 @@ Reply with ONLY JSON: {"videos": ["YouTube URL", ...up to 4], "brochures": ["PDF
 
 /** Finds and checks videos/brochures for one line; returns what passed Gemini's check. */
 async function findExtrasFor(item) {
-  const name = item.size ? `${item.name} ${item.size}` : item.name;
+  const name = describe(item);
   const wantVideos = !item.media?.videos?.length;
   const wantBrochures = !item.media?.brochures?.length;
   const { videoIds, pdfUrls } = await searchExtras(name, { wantVideos, wantBrochures });
@@ -255,7 +264,8 @@ async function findExtrasFor(item) {
 ${pdfs.length ? `The ${pdfs.length} attached PDF(s) are numbered 0..${pdfs.length - 1} in order.` : 'No PDFs attached.'}
 YouTube videos (by title):
 ${videos.map((v, i) => `${i}: ${v.title}`).join('\n') || 'none'}
-Which are about THIS product (same kind of product, and the same brand/model if one is named) - a video showing or explaining it, or a PDF that is its brochure, datasheet, catalogue page or manual? Reject unrelated products, generic news, and price lists.
+This is for the stock list of an Indian first-aid, medical and safety equipment supplier.
+Which are about THIS product (same kind of product, and the same brand/model if one is named) - a video showing or explaining it, or a PDF that is its brochure, datasheet, catalogue page or manual? ${NOT_SAME} Reject unrelated products, generic news, and price lists.
 Reply ONLY JSON {"videos": [matching video numbers], "brochures": [{"index": n, "title": "short title like 'Philips FRx brochure'"}]}`,
         },
       ],
@@ -280,7 +290,9 @@ async function findExtras(retryBefore, limit) {
       { $or: [{ 'media.videos.0': { $exists: false } }, { 'media.brochures.0': { $exists: false } }] },
       { $or: [{ 'media.extrasSearchedAt': null }, { 'media.extrasSearchedAt': { $lt: retryBefore } }] },
     ],
-  }).limit(limit);
+  })
+    .populate('categoryId', 'name')
+    .limit(limit);
   lastRun.extras = { total: items.length, tried: 0, videos: 0, brochures: 0 };
   let stop = false;
   const queue = [...items];
@@ -324,7 +336,9 @@ function findWebImages({ limit = 150 } = {}) {
         zohoHasImage: { $ne: true },
         'media.images.0': { $exists: false },
         $or: [{ 'media.webSearchedAt': null }, { 'media.webSearchedAt': { $lt: retryBefore } }],
-      }).limit(limit);
+      })
+        .populate('categoryId', 'name')
+        .limit(limit);
       for (const item of items) {
         let hit = null;
         try {
