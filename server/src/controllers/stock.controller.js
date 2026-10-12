@@ -8,6 +8,7 @@ const { newShareToken } = require('../models/StockSettings');
 const User = require('../models/User');
 const ApiError = require('../utils/ApiError');
 const asyncHandler = require('../utils/asyncHandler');
+const env = require('../config/env');
 const { isWhatsAppConfigured, whatsAppStatus } = require('../services/whatsapp.service');
 const { LIST_STYLES } = require('../models/StockCategory');
 const {
@@ -334,7 +335,9 @@ const refreshMedia = asyncHandler(async (req, res) => {
 });
 
 const getMediaStatus = asyncHandler(async (req, res) => {
-  res.json({ media: mediaStatus(), web: await webImagesStatus() });
+  // Which variable the Gemini key came from (names only, never the value) - for setup checks.
+  const gemini = { keyFrom: env.gemini.keyName || null, variables: Object.keys(process.env).filter((k) => /gemini|genai/i.test(k)) };
+  res.json({ media: mediaStatus(), web: await webImagesStatus(), gemini });
 });
 
 const searchWebImages = asyncHandler(async (req, res) => {

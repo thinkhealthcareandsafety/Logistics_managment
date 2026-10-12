@@ -96,7 +96,8 @@ const env = {
 
   // Google Gemini reads shipping-label photos into a draft shipment (Scan label).
   gemini: {
-    apiKey: process.env.GEMINI_API_KEY || '',
+    apiKey: geminiKey().value,
+    keyName: geminiKey().name,
     model: process.env.GEMINI_MODEL || 'gemini-3.5-flash',
   },
 
@@ -109,3 +110,18 @@ const env = {
 };
 
 module.exports = env;
+
+/**
+ * The Gemini key, under its usual name or any variable that is clearly one
+ * (GEMINI_PAID_API_KEY, GEMINI_KEY, GOOGLE_API_KEY...) - so a renamed key on the host
+ * keeps label scans and photo search working. Values are trimmed of stray spaces.
+ */
+function geminiKey() {
+  const names = ['GEMINI_API_KEY', ...Object.keys(process.env).filter((k) => /gemini/i.test(k) && /key/i.test(k)), 'GOOGLE_API_KEY', 'GOOGLE_GENAI_API_KEY'];
+  for (const name of names) {
+    const value = String(process.env[name] || '').trim();
+    if (value) return { name, value };
+  }
+  return { name: '', value: '' };
+}
+
