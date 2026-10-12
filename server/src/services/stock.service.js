@@ -358,7 +358,7 @@ async function stockTemplate(settings, at = new Date()) {
   const low = items.filter((i) => i.quantity > 0 && i.lowStockAt != null && i.quantity <= i.lowStockAt).length;
   const date = new Intl.DateTimeFormat('en-IN', { timeZone: TIME_ZONE, day: 'numeric', month: 'short', year: 'numeric' }).format(at);
   const summary = `${items.length} items - ${low} low, ${out} out of stock, ${stockIn.length} stock in today`;
-  return { kind: 'stock', attributes: [date, summary, `${env.clientUrl}/stock/live/${settings.shareToken}`] };
+  return { kind: 'stock', values: { date, summary, link: `${env.clientUrl}/stock/live/${settings.shareToken}` } };
 }
 
 /** Sends the current stock message to every configured recipient, split to fit WhatsApp. */

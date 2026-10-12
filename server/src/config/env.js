@@ -49,16 +49,17 @@ const env = {
     from: process.env.EMAIL_FROM || 'notifications@example.com',
   },
 
-  // Anantya.ai WhatsApp (preferred). Templates are looked up by name in the Anantya
-  // account; the *_TEMPLATE vars override the default names (a numeric id also works).
+  // Anantya.ai WhatsApp (preferred). Each message kind uses the first approved template
+  // from a known list (see whatsapp.service.js); a *_TEMPLATE var picks one instead -
+  // "name" or "name|field,field,..." (fields: awb, status, link, name, feedbackUrl, date, summary).
   anantya: {
     apiKey: process.env.ANANTYA_API_KEY || '',
     senderNumber: process.env.ANANTYA_SENDER_NUMBER || '',
     baseUrl: (process.env.ANANTYA_BASE_URL || 'https://apiv1.anantya.ai').replace(/\/$/, ''),
     templates: {
-      status: process.env.ANANTYA_STATUS_TEMPLATE || 'shipment_status',
-      delivery: process.env.ANANTYA_DELIVERY_TEMPLATE || 'delivery_feedback',
-      stock: process.env.ANANTYA_STOCK_TEMPLATE || 'stock_update',
+      status: process.env.ANANTYA_STATUS_TEMPLATE || '',
+      delivery: process.env.ANANTYA_DELIVERY_TEMPLATE || '',
+      stock: process.env.ANANTYA_STOCK_TEMPLATE || '',
     },
   },
 

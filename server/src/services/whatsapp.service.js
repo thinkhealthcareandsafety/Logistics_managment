@@ -77,13 +77,46 @@ async function anantyaTemplates({ fresh = false } = {}) {
   return list;
 }
 
-/** The approved template for a message kind ('status' | 'delivery' | 'stock'), or null. */
+/**
+ * Templates each message kind can use, best first, with which value fills {{1}}, {{2}}...
+ * The first one approved in the Anantya account wins. new_order_3 / neworderupdate0001
+ * are ThinkHealth's existing approved templates; the first entries are the ideal ones
+ * (with the feedback / live stock link) to create in Anantya.
+ */
+const KNOWN_TEMPLATES = {
+  status: [
+    { name: 'shipment_status', fields: ['awb', 'status', 'link'] },
+    { name: 'new_order_3', fields: ['status', 'awb', 'link'] },
+    { name: 'new_order2', fields: ['status', 'awb', 'link'] },
+  ],
+  delivery: [
+    { name: 'delivery_feedback', fields: ['name', 'awb', 'feedbackUrl'] },
+    { name: 'neworderupdate0001', fields: ['name', 'awb'] },
+    { name: 'orderupdate1', fields: ['name', 'awb'] },
+  ],
+  stock: [{ name: 'stock_update', fields: ['date', 'summary', 'link'] }],
+};
+
+/** The kind's choices: the *_TEMPLATE override alone when set, else the known list. */
+function templateChoices(kind) {
+  const override = String(env.anantya.templates[kind] || '').trim();
+  if (!override) return KNOWN_TEMPLATES[kind] || [];
+  const [name, fieldList] = override.split('|');
+  const known = (KNOWN_TEMPLATES[kind] || []).find((t) => t.name.toLowerCase() === name.trim().toLowerCase());
+  const fields = fieldList ? fieldList.split(',').map((x) => x.trim()).filter(Boolean) : known?.fields || KNOWN_TEMPLATES[kind]?.[0]?.fields || [];
+  return [{ name: name.trim(), fields }];
+}
+
+const sameTemplate = (t, name) => String(t.id) === String(name) || String(t.templateName || '').toLowerCase() === String(name).toLowerCase();
+
+/** The approved template for a message kind ('status' | 'delivery' | 'stock') and its field order, or null. */
 async function anantyaTemplate(kind) {
-  const wanted = String(env.anantya.templates[kind] || '').trim().toLowerCase();
-  if (!wanted) return null;
   const list = await anantyaTemplates();
-  const t = list.find((x) => String(x.id) === wanted || String(x.templateName || '').toLowerCase() === wanted);
-  return t && isAccepted(t) ? t : null;
+  for (const choice of templateChoices(kind)) {
+    const t = list.find((x) => sameTemplate(x, choice.name) && isAccepted(x));
+    if (t) return { ...t, fields: choice.fields };
+  }
+  return null;
 }
 
 async function anantyaSend({ to, text, template, context }) {
@@ -103,7 +136,7 @@ async function anantyaSend({ to, text, template, context }) {
       form.append('ContactName', attr(template.contactName || to));
       form.append('MediaFile', '');
       form.append('MediaFileName', '');
-      for (let i = 0; i < 8; i++) form.append(`Attribute${i + 1}`, template.attributes[i] != null ? attr(template.attributes[i]) : '');
+      for (let i = 0; i < 8; i++) form.append(`Attribute${i + 1}`, i < tpl.fields.length ? attr(template.values[tpl.fields[i]]) : '');
       ({ data } = await anantyaApi().post('/api/Campaign/SendSingleTemplateMessage', form, { params: { templateId: tpl.id } }));
     } else {
       ({ data } = await anantyaApi().post('/api/Messages/sendtext', { msgText: text, contactNo: to }));
@@ -143,7 +176,7 @@ async function gupshupSend({ to, text, context }) {
 
 const provider = () => (env.anantya.apiKey ? 'anantya' : env.gupshup.apiKey && env.gupshup.sourceNumber ? 'gupshup' : null);
 
-/** Sends one message. `template` ({ kind, attributes, contactName }) is used by Anantya. */
+/** Sends one message. `template` ({ kind, values, contactName }) is used by Anantya. */
 async function sendWhatsApp({ to, text, template, context }) {
   const via = provider();
   if (!via) {
@@ -158,23 +191,23 @@ async function sendWhatsApp({ to, text, template, context }) {
   return via === 'anantya' ? anantyaSend({ to: destination, text, template, context }) : gupshupSend({ to: destination, text, context });
 }
 
-/** Template shipment_status: {{1}} AWB, {{2}} status, {{3}} live tracking link. */
+/** Status update: AWB, status and live tracking link. */
 function sendWhatsAppStatusMessage({ to, shipment, checkpoint, trackingUrl }) {
   return sendWhatsApp({
     to,
     text: buildStatusText({ shipment, checkpoint, trackingUrl }),
-    template: { kind: 'status', attributes: [shipment.trackingNumber, STATUS_LABELS[checkpoint.status] || checkpoint.status, trackingUrl] },
+    template: { kind: 'status', values: { awb: shipment.trackingNumber, status: STATUS_LABELS[checkpoint.status] || checkpoint.status, link: trackingUrl } },
     context: 'sendWhatsAppStatusMessage',
   });
 }
 
-/** Template delivery_feedback: {{1}} customer name, {{2}} AWB, {{3}} feedback link. */
+/** Delivery thank-you: customer name, AWB and feedback link. */
 function sendWhatsAppDeliveryMessage({ to, shipment, trackingUrl, feedbackUrl }) {
   const name = shipment.customerInfo?.name || 'there';
   return sendWhatsApp({
     to,
     text: buildDeliveryText({ shipment, trackingUrl, feedbackUrl }),
-    template: { kind: 'delivery', attributes: [name, shipment.trackingNumber, feedbackUrl], contactName: shipment.customerInfo?.name },
+    template: { kind: 'delivery', values: { name, awb: shipment.trackingNumber, feedbackUrl, link: trackingUrl }, contactName: shipment.customerInfo?.name },
     context: 'sendWhatsAppDeliveryMessage',
   });
 }
@@ -203,9 +236,10 @@ async function whatsAppStatus() {
     const list = await anantyaTemplates({ fresh: true });
     out.keyWorks = true;
     out.templates = Object.fromEntries(
-      Object.entries(env.anantya.templates).map(([kind, name]) => {
-        const t = list.find((x) => String(x.id) === String(name) || String(x.templateName || '').toLowerCase() === String(name).toLowerCase());
-        return [kind, { name, found: Boolean(t), status: t?.templateStatus || null, approved: Boolean(t && isAccepted(t)), id: t?.id ?? null }];
+      Object.keys(KNOWN_TEMPLATES).map((kind) => {
+        const choices = templateChoices(kind);
+        const use = choices.map((c) => ({ c, t: list.find((x) => sameTemplate(x, c.name) && isAccepted(x)) })).find((x) => x.t);
+        return [kind, use ? { using: use.t.templateName, id: use.t.id, fields: use.c.fields } : { using: null, wanted: choices.map((c) => c.name), fallback: 'plain text (delivered only within 24h of the person messaging you)' }];
       })
     );
     out.allTemplates = list.map((t) => ({ id: t.id, name: t.templateName, status: t.templateStatus, active: t.isActive, text: t.msgText || '' }));
