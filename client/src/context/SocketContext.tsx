@@ -35,7 +35,9 @@ export function SocketProvider({ children }: { children: ReactNode }) {
 
     socket.on('notification:new', (notification: AppNotification) => {
       queryClient.invalidateQueries({ queryKey: ['notifications'] });
-      toast(notification.message, { icon: '📦' });
+      // Stock arrived: refresh the sheet so the new count shows straight away.
+      if (notification.type === 'stock_in') queryClient.invalidateQueries({ queryKey: ['stock'] });
+      toast(notification.message, { icon: notification.type === 'stock_in' ? '📥' : '📦' });
     });
 
     return () => {

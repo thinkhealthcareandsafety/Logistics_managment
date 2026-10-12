@@ -28,6 +28,8 @@ const stockSettingsSchema = new mongoose.Schema(
 
     lastCountAt: { type: Date, default: null },
     lastCountBy: { type: String, default: '' },
+    /** Set once every existing line has been switched to old + new tracking. */
+    oldNewDefaultAt: { type: Date, default: null },
   },
   { timestamps: true }
 );

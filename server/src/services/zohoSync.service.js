@@ -264,6 +264,53 @@ function applyZohoDetails(item, z) {
   item.zohoHasImage = Boolean(z.image_document_id || z.image_name);
 }
 
+/**
+ * Tells everyone when stock arrives (a purchase/bill in Zoho Books raised the count):
+ * an in-app notification plus a live pop-up. One-time corrections aren't arrivals.
+ */
+async function notifyStockIn(movements) {
+  const arrivals = movements.filter((m) => m.change > 0 && !/^(Corrected|Linked)/.test(m.note || ''));
+  if (!arrivals.length) return;
+  const User = require('../models/User');
+  const Notification = require('../models/Notification');
+  const { emitNotification } = require('../sockets');
+  const units = arrivals.reduce((n, m) => n + m.change, 0);
+  const from = [...new Set(arrivals.map((m) => m.customer).filter(Boolean))];
+  const message =
+    arrivals.length === 1
+      ? `Stock in: +${arrivals[0].change} ${arrivals[0].itemName}${from[0] ? ` from ${from[0]}` : ''} (now ${arrivals[0].quantityAfter})`
+      : `Stock in: ${arrivals.length} items, +${units} units${from.length ? ` from ${from.slice(0, 2).join(', ')}${from.length > 2 ? '…' : ''}` : ''} - ${arrivals.slice(0, 3).map((m) => m.itemName).join(', ')}${arrivals.length > 3 ? '…' : ''}`;
+  const users = await User.find().select('_id');
+  for (const u of users) {
+    const n = await Notification.create({ userId: u._id, type: 'stock_in', message: message.slice(0, 500) });
+    emitNotification(String(u._id), n);
+  }
+}
+
+let inventoryReorder = new Map();
+/**
+ * Zoho Inventory keeps reorder points for Inventory users; Books' items may not carry
+ * them. Fetched at most hourly; any failure (no Inventory, no permission) is recorded
+ * and the Books figure stands.
+ */
+async function fillReorderFromInventory(conn, items) {
+  const stale = !conn.inventoryReorderAt || Date.now() - conn.inventoryReorderAt.getTime() > 60 * 60 * 1000;
+  if (stale) {
+    try {
+      const inv = await zoho.listInventoryItems(conn);
+      inventoryReorder = new Map(inv.filter((i) => Number(i.reorder_level) > 0).map((i) => [String(i.item_id), Number(i.reorder_level)]));
+      conn.inventoryReorderCount = inventoryReorder.size;
+      conn.inventoryError = '';
+    } catch (err) {
+      conn.inventoryError = err.response?.data?.message || err.message;
+    }
+    conn.inventoryReorderAt = new Date();
+  }
+  for (const z of items) {
+    if (!(Number(z.reorder_level) > 0) && inventoryReorder.has(String(z.item_id))) z.reorder_level = inventoryReorder.get(String(z.item_id));
+  }
+}
+
 async function syncOnce(conn, { reason = 'manual' } = {}) {
   const zohoItems = (await zoho.listItems(conn)).filter(isTracked);
   conn.lastSyncSample = sampleOf(zohoItems);
@@ -298,8 +345,16 @@ async function syncOnce(conn, { reason = 'manual' } = {}) {
     );
   }
 
+  // Reorder points: Zoho Books' own when set, else Zoho Inventory's (hourly).
+  await fillReorderFromInventory(conn, withFigure);
+
   const local = await StockItem.find({ isArchived: false });
   const byZohoId = new Map(local.filter((i) => i.zohoItemId).map((i) => [i.zohoItemId, i]));
+  // Merged duplicates: alias id -> the line that owns it; figures by id for roll-up.
+  const aliasOf = new Map();
+  for (const line of local) for (const a of line.zohoAliases || []) aliasOf.set(String(a.zohoItemId), line);
+  const figureById = new Map(withFigure.map((z) => [String(z.item_id), shelfCount(stockFigure(z))]));
+  const activeIds = new Set(zohoItems.map((z) => String(z.item_id)));
   const unlinked = local.filter((i) => !i.zohoItemId);
   // Lines someone removed here stay removed - don't recreate them from Zoho.
   const removed = new Set(await StockItem.distinct('zohoItemId', { isArchived: true, zohoItemId: { $ne: '' } }));
@@ -318,8 +373,18 @@ async function syncOnce(conn, { reason = 'manual' } = {}) {
 
   for (const z of withFigure) {
     const zid = String(z.item_id);
-    const target = shelfCount(stockFigure(z));
+    if (aliasOf.has(zid)) continue; // counted on the line it was merged into
+    let target = shelfCount(stockFigure(z));
     let item = byZohoId.get(zid);
+    // A merged line's stock is its own Zoho item plus every alias.
+    if (item?.zohoAliases?.length) {
+      item.zohoOwnQuantity = target;
+      for (const a of item.zohoAliases) {
+        a.quantity = figureById.get(String(a.zohoItemId)) || 0;
+        target += a.quantity;
+      }
+      item.markModified('zohoAliases');
+    }
     let firstLink = false;
 
     if (!item) {
@@ -349,7 +414,17 @@ async function syncOnce(conn, { reason = 'manual' } = {}) {
 
     if (!item) {
       // Every Zoho stock item gets a line - at 0 if Zoho has none - so the sheet mirrors Zoho.
-      if (!conn.autoCreate || removed.has(zid)) continue;
+      if (removed.has(zid)) {
+        // Hidden because Zoho had it inactive - it's active again, so bring the line back.
+        const back = await StockItem.findOne({ zohoItemId: zid, isArchived: true, archivedReason: 'zoho-inactive' });
+        if (back) {
+          back.isArchived = false;
+          back.archivedReason = '';
+          await back.save();
+        }
+        continue;
+      }
+      if (!conn.autoCreate) continue;
       // Into the section it belongs in (AED Pads, Fire Safety…) when that section exists;
       // otherwise the catch-all "From Zoho Books" for someone to file.
       const fitting = categoryFor(z.name);
@@ -362,6 +437,7 @@ async function syncOnce(conn, { reason = 'manual' } = {}) {
         categoryId: home._id,
         name: String(z.name).slice(0, 120),
         quantity: target,
+        oldQuantity: 0, // arrived from Zoho - new stock
         productCode: skuTaken ? '' : sku,
         zohoItemId: zid,
         zohoItemName: z.name,
@@ -420,7 +496,21 @@ async function syncOnce(conn, { reason = 'manual' } = {}) {
     if (item.isModified()) await item.save();
   }
 
+  // Zoho item made inactive (or deleted): hide its line. Safety: never hide more than
+  // a quarter of the linked lines in one go - that smells like a bad Zoho response.
+  if (zohoItems.length > 0) {
+    const gone = local.filter((i) => i.zohoItemId && !activeIds.has(i.zohoItemId) && !aliasOf.has(i.zohoItemId));
+    const linkedCount = local.filter((i) => i.zohoItemId).length;
+    if (gone.length && gone.length <= Math.max(5, linkedCount / 4)) {
+      await StockItem.updateMany({ _id: { $in: gone.map((i) => i._id) } }, { $set: { isArchived: true, archivedReason: 'zoho-inactive' } });
+      summary.hiddenInactive = gone.length;
+    } else if (gone.length) {
+      logger.warn(`Zoho sync: ${gone.length} linked items missing from the active list - not hiding them (too many at once)`);
+    }
+  }
+
   if (movements.length) await StockMovement.insertMany(movements);
+  await notifyStockIn(movements).catch((err) => logger.warn(`Stock-in notification failed: ${err.message}`));
   conn.zohoStockField = STOCK_FIELD;
   return summary;
 }

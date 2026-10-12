@@ -12,6 +12,7 @@ import { ExceptionPanel } from '../components/ExceptionPanel';
 import { CustomerFeedbackPanel } from '../components/CustomerFeedbackPanel';
 import { Menu, MenuDivider, MenuItem } from '../components/Menu';
 import { EditDeliveryDialog } from '../components/EditDeliveryDialog';
+import { ManualStatusDialog } from '../components/ManualStatusDialog';
 import { CourierLogo } from '../components/CourierPicker';
 import { useCarriers } from '../hooks/useCarriers';
 import { Spinner } from '../components/ui/Loading';
@@ -37,6 +38,7 @@ export function ShipmentDetail() {
   const update = useUpdateShipment();
   const del = useDeleteShipment();
   const [editingDelivery, setEditingDelivery] = useState(false);
+  const [statusDialog, setStatusDialog] = useState(false);
 
   if (isLoading) return <DetailSkeleton />;
   if (!shipment) {
@@ -148,6 +150,12 @@ export function ShipmentDetail() {
               )}
               <MenuItem onSelect={() => window.open(`/track/${encodeURIComponent(s.trackingNumber)}`, '_blank')} icon={<ExternalIcon />}>
                 Open customer tracking page
+              </MenuItem>
+              <MenuItem onSelect={() => setEditingDelivery(true)} icon={<EditIcon />}>
+                Edit shipment details
+              </MenuItem>
+              <MenuItem onSelect={() => setStatusDialog(true)} icon={<CheckIcon />}>
+                Update status by hand
               </MenuItem>
               <MenuItem onSelect={toggleArchive} icon={<ArchiveIcon />}>
                 {s.isArchived ? 'Move back to active' : 'Archive'}
@@ -288,6 +296,7 @@ export function ShipmentDetail() {
       </div>
 
       {editingDelivery && <EditDeliveryDialog shipment={s} onClose={() => setEditingDelivery(false)} />}
+      {statusDialog && <ManualStatusDialog shipment={s} onClose={() => setStatusDialog(false)} />}
     </div>
   );
 }
@@ -456,6 +465,12 @@ function DeliveryCard({ shipment: s, onEdit }: { shipment: Shipment; onEdit: () 
       )}
 
       <div className="mt-4 border-t border-slate-100 pt-3 text-[13px]">
+        {s.zohoInvoice?.number && (
+          <p className="mb-2 text-[12px] text-slate-500">
+            Zoho invoice <span className="font-medium text-slate-800">{s.zohoInvoice.number}</span>
+            {s.zohoInvoice.matchedBy === 'customer+date' && ' (matched by customer and date)'}
+          </p>
+        )}
         <p className="text-[12px] text-slate-500">E-way bill</p>
         {s.ewayBill?.number ? (
           <div className="mt-1">
@@ -558,6 +573,22 @@ function RefreshIcon({ spinning }: { spinning?: boolean }) {
   return (
     <svg {...iconProps} className={clsx(spinning && 'animate-spin motion-reduce:animate-[spin_1.6s_linear_infinite]')}>
       <path d="M21 12a9 9 0 1 1-2.64-6.36M21 3v6h-6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function EditIcon() {
+  return (
+    <svg {...iconProps}>
+      <path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function CheckIcon() {
+  return (
+    <svg {...iconProps}>
+      <path d="m5 12 5 5 9-10" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }

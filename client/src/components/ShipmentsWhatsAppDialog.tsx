@@ -20,7 +20,7 @@ export function ShipmentsWhatsAppDialog({
   scope?: string;
   onClose: () => void;
 }) {
-  const [includeLinks, setIncludeLinks] = useState(false);
+  const [includeLinks, setIncludeLinks] = useState(true);
   const text = useMemo(
     () => buildShipmentsMessage(shipments, { scope, includeLinks, origin: window.location.origin }),
     [shipments, scope, includeLinks]

@@ -146,6 +146,41 @@ const bulkUpdateShipments = asyncHandler(async (req, res) => {
   res.json({ matched: result.matchedCount, modified: result.modifiedCount });
 });
 
+/**
+ * Status set by hand - when the courier's own site is ahead of TrackingMore's feed.
+ * Added as a "manual" checkpoint; the next real scan from the courier that is newer
+ * replaces it, so a manual status never hides real data.
+ */
+const setManualStatus = asyncHandler(async (req, res) => {
+  const { STATUSES } = require('../utils/statusMap');
+  const status = String(req.body.status || '');
+  if (!STATUSES.includes(status)) throw new ApiError(400, `Status must be one of: ${STATUSES.join(', ')}`);
+  const shipment = await Shipment.findOne({ _id: req.params.id, createdBy: req.userId });
+  if (!shipment) throw new ApiError(404, 'Shipment not found');
+  const at = req.body.at && !Number.isNaN(new Date(req.body.at).getTime()) ? new Date(req.body.at) : new Date();
+  const note = String(req.body.note || '').trim().slice(0, 300);
+  const location = String(req.body.location || '').trim().slice(0, 120);
+  shipment.checkpoints.push({
+    status,
+    statusRaw: 'manual',
+    location,
+    description: note || 'Status updated by hand (seen on the courier’s site)',
+    checkpointTime: at,
+    source: 'manual',
+  });
+  shipment.checkpoints.sort((a, b) => new Date(a.checkpointTime) - new Date(b.checkpointTime));
+  const latest = shipment.checkpoints[shipment.checkpoints.length - 1];
+  shipment.status = latest.status;
+  if (location) shipment.currentLocation = location;
+  require('../utils/deliveredAt').syncDeliveredAt(shipment);
+  if (shipment.status === 'delivered') {
+    await notifyCustomerDelivered(shipment).catch(() => {});
+  }
+  await shipment.save();
+  require('../sockets').emitShipmentUpdate(String(req.userId), shipment);
+  res.json({ shipment });
+});
+
 const addExceptionNote = asyncHandler(async (req, res) => {
   const { text } = req.body;
   if (!text || !text.trim()) {
@@ -322,6 +357,7 @@ const extractFromLabel = asyncHandler(async (req, res) => {
 });
 
 module.exports = {
+  setManualStatus,
   extractFromLabel,
   createShipment,
   listShipments,

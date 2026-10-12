@@ -31,7 +31,8 @@ export function StockItemDialog({
   );
   const [newCategory, setNewCategory] = useState('');
   const [listStyle, setListStyle] = useState<ListStyle>('numbers');
-  const [split, setSplit] = useState(item ? item.oldQuantity != null : false);
+  // Old + new is the default for a new line; switch it off here for lines that don't need it.
+  const [split, setSplit] = useState(item ? item.oldQuantity != null : true);
   const [quantity, setQuantity] = useState('0');
   const [oldQty, setOldQty] = useState('0');
   const [newQty, setNewQty] = useState('0');
@@ -71,7 +72,7 @@ export function StockItemDialog({
     } else if (split) {
       await createItem.mutateAsync({ ...body, quantity: toInt(oldQty) + toInt(newQty), oldQuantity: toInt(oldQty) });
     } else {
-      await createItem.mutateAsync({ ...body, quantity: toInt(quantity) });
+      await createItem.mutateAsync({ ...body, quantity: toInt(quantity), splitOldNew: false });
     }
     onClose();
   }

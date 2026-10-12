@@ -15,6 +15,8 @@ function startZohoSyncJob() {
   cron.schedule(env.zoho.syncCron, async () => {
     if (!(await isZohoActive().catch(() => false))) return;
     syncNow({ reason: 'scheduled' }).catch(() => {});
+    // Freight and e-way bills from invoices for recent shipments.
+    require('../services/invoiceMatch.service').matchInvoices().catch((err) => logger.warn(`Invoice match failed: ${err.message}`));
   });
   logger.info(`Zoho Books stock sync scheduled (${env.zoho.syncCron})`);
 

@@ -38,6 +38,8 @@ async function statusView(conn) {
     lastSyncSummary: conn.lastSyncSummary,
     lastSyncSample: conn.lastSyncSample || [],
     syncing: isSyncing(),
+    inventory: { at: conn.inventoryReorderAt, count: conn.inventoryReorderCount, error: conn.inventoryError },
+    invoices: { at: conn.invoiceMatchAt, summary: conn.invoiceMatchSummary, error: conn.invoiceError },
     stockSource: conn.zohoStockSource || '',
     linkedItems,
   };

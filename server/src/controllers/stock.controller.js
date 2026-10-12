@@ -93,7 +93,11 @@ const getMessage = asyncHandler(async (req, res) => {
 
 const listMovements = asyncHandler(async (req, res) => {
   const limit = Math.min(Number(req.query.limit) || 30, 200);
-  const movements = await StockMovement.find().sort({ createdAt: -1 }).limit(limit);
+  const filter =
+    req.query.direction === 'in'
+      ? { change: { $gt: 0 }, reason: { $in: ['zoho', 'count', 'created'] }, note: { $not: /^(Corrected|Linked)/ } }
+      : {};
+  const movements = await StockMovement.find(filter).sort({ createdAt: -1 }).limit(limit);
   res.json({ movements });
 });
 
@@ -144,7 +148,8 @@ const createItem = asyncHandler(async (req, res) => {
 
   const quantity = Number(req.body.quantity ?? 0);
   if (!Number.isInteger(quantity) || quantity < 0) throw new ApiError(400, 'Quantity must be a whole number, 0 or more');
-  const oldQuantity = req.body.oldQuantity == null ? null : Number(req.body.oldQuantity);
+  // Split into old + new by default; a new line's stock is all new. splitOldNew:false opts out.
+  const oldQuantity = req.body.splitOldNew === false ? null : req.body.oldQuantity == null ? 0 : Number(req.body.oldQuantity);
   if (oldQuantity !== null && (!Number.isInteger(oldQuantity) || oldQuantity < 0 || oldQuantity > quantity)) {
     throw new ApiError(400, 'Old stock must be a whole number no more than the total');
   }
@@ -182,7 +187,7 @@ const updateItem = asyncHandler(async (req, res) => {
   const item = await StockItem.findOne({ _id: req.params.id, isArchived: false });
   if (!item) throw new ApiError(404, 'Stock item not found');
   Object.assign(item, fields);
-  if (req.body.splitOldNew === true && item.oldQuantity == null) item.oldQuantity = 0;
+  if (req.body.splitOldNew === true && item.oldQuantity == null) item.oldQuantity = item.quantity;
   if (req.body.splitOldNew === false) item.oldQuantity = null;
   await item.save();
   res.json({ item });
@@ -367,7 +372,37 @@ const zohoImage = asyncHandler(async (req, res) => {
   res.send(hit.data);
 });
 
+// ─────────────────────────── Duplicates ───────────────────────────
+
+const dup = require('../services/duplicateFinder.service');
+const { syncNow, isZohoActive } = require('../services/zohoSync.service');
+const resync = async () => {
+  if (await isZohoActive().catch(() => false)) await syncNow({ reason: 'merge' }).catch(() => {});
+};
+
+const suggestDuplicates = asyncHandler(async (req, res) => {
+  res.json({ groups: await dup.findDuplicates() });
+});
+
+const mergeItems = asyncHandler(async (req, res) => {
+  assertId(req.params.id);
+  const otherIds = (req.body.otherIds || []).filter((id) => mongoose.isValidObjectId(id));
+  const item = await dup.mergeLines(req.params.id, otherIds);
+  await resync();
+  res.json({ item: await StockItem.findById(item._id) });
+});
+
+const unmergeItem = asyncHandler(async (req, res) => {
+  assertId(req.params.id);
+  await dup.unmergeAlias(req.params.id, String(req.body.zohoItemId || ''));
+  await resync();
+  res.json({ item: await StockItem.findById(req.params.id) });
+});
+
 module.exports = {
+  suggestDuplicates,
+  mergeItems,
+  unmergeItem,
   importMedia,
   refreshMedia,
   getMediaStatus,

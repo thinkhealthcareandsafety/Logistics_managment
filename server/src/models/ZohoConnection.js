@@ -55,6 +55,14 @@ const zohoConnectionSchema = new mongoose.Schema(
     /** Which Zoho figure lines follow ('stock-on-hand'); a change triggers one re-read. */
     zohoStockField: { type: String, default: '' },
     zohoDetailHasOnHand: { type: Boolean, default: false },
+    /** Zoho Inventory reorder levels: last fetch, how many, or why not. */
+    inventoryReorderAt: { type: Date, default: null },
+    inventoryReorderCount: { type: Number, default: 0 },
+    inventoryError: { type: String, default: '' },
+    /** Invoice matching (freight, e-way bill): last run and result. */
+    invoiceMatchAt: { type: Date, default: null },
+    invoiceMatchSummary: { type: String, default: '' },
+    invoiceError: { type: String, default: '' },
     /** Last full one-by-one read, and the figures it found (item id -> stock). */
     zohoDetailAt: { type: Date, default: null },
     zohoStockCache: { type: mongoose.Schema.Types.Mixed, default: {} },

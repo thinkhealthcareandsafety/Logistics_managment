@@ -13,6 +13,7 @@ const {
   bulkImportShipments,
   resendDeliveryNotice,
   extractFromLabel,
+  setManualStatus,
 } = require('../controllers/shipment.controller');
 const { getShipmentFeedback, setFeedbackPublished } = require('../controllers/feedback.controller');
 const { requireAuth } = require('../middleware/auth.middleware');
@@ -38,6 +39,7 @@ router.patch('/:id', updateShipment);
 router.delete('/:id', deleteShipment);
 router.post('/:id/refresh', refreshShipmentNow);
 router.post('/:id/notes', addExceptionNote);
+router.post('/:id/status', setManualStatus);
 router.get('/:id/feedback', getShipmentFeedback);
 router.patch('/:id/feedback', setFeedbackPublished);
 router.post('/:id/delivery-notice', resendDeliveryNotice);

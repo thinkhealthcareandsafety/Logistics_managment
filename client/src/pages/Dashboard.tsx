@@ -43,7 +43,8 @@ export function Dashboard() {
   const [status, setStatus] = useState<StatusFilter>('all');
   const [attentionOnly, setAttentionOnly] = useState(false);
   const [courier, setCourier] = useState('all');
-  const [sort, setSort] = useState<Sort>('eta');
+  // Newest first by default - the shipment just booked is the one being checked on.
+  const [sort, setSort] = useState<Sort>('added');
   const [search, setSearch] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showAddDialog, setShowAddDialog] = useState(false);

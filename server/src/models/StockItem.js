@@ -52,6 +52,15 @@ const stockItemSchema = new mongoose.Schema(
      */
     zohoItemId: { type: String, default: '', index: true },
     zohoItemName: { type: String, default: '' },
+    /**
+     * Other Zoho items that are the same product entered under another name. The line
+     * shows one name and its stock is the total of all of them.
+     */
+    zohoAliases: { type: [{ zohoItemId: String, name: String, quantity: { type: Number, default: 0 }, _id: false }], default: [] },
+    /** Stock under the line's own Zoho item (the rest is under its aliases). */
+    zohoOwnQuantity: { type: Number, default: null },
+    /** Why an archived line was archived: 'merged' into another, or 'zoho-inactive'. */
+    archivedReason: { type: String, default: '' },
 
     /** From Zoho Books on every sync: selling price and cost per unit (₹). */
     salePrice: { type: Number, default: null, min: 0 },

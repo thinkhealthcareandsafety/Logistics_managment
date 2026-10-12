@@ -14,6 +14,9 @@ const {
   updateSettings,
   sendNow,
   rotateShareToken,
+  suggestDuplicates,
+  mergeItems,
+  unmergeItem,
   importMedia,
   refreshMedia,
   getMediaStatus,
@@ -42,6 +45,9 @@ router.post('/items/:id/stock-out', stockOut);
 router.post('/count', saveCount);
 
 router.post('/media/refresh', refreshMedia);
+router.post('/duplicates/suggest', suggestDuplicates);
+router.post('/items/:id/merge', mergeItems);
+router.post('/items/:id/unmerge', unmergeItem);
 router.post('/media/import', express.json({ limit: '5mb' }), importMedia);
 router.get('/media/status', getMediaStatus);
 router.get('/items/:id/zoho-image', zohoImage);

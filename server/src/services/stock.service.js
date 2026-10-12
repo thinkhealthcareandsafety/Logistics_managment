@@ -389,7 +389,22 @@ async function runScheduledBroadcast(now = new Date()) {
   logger.info(`Scheduled stock update: sent to ${result.sent}/${result.total} recipient(s)`);
 }
 
+/**
+ * Once: every line not yet split into old + new is split, with what's on the shelf
+ * now counted as old (new arrivals add to "new"; stock out takes old first).
+ */
+async function applyOldNewDefault() {
+  const settings = await StockSettings.get();
+  if (settings.oldNewDefaultAt) return 0;
+  const r = await StockItem.updateMany({ oldQuantity: null }, [{ $set: { oldQuantity: '$quantity' } }]);
+  settings.oldNewDefaultAt = new Date();
+  await settings.save();
+  logger.info(`Old/new stock switched on for ${r.modifiedCount} line(s)`);
+  return r.modifiedCount;
+}
+
 module.exports = {
+  applyOldNewDefault,
   loadStock,
   buildStockMessage,
   stockOutToday,

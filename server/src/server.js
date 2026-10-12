@@ -15,6 +15,7 @@ async function main() {
   if (process.env.SEED_IF_EMPTY === 'true') {
     await require('./scripts/seed').seedIfEmpty().catch((err) => logger.error(`Demo seed failed: ${err.message}`));
   }
+  await require('./services/stock.service').applyOldNewDefault().catch((err) => logger.error(`Old/new switch-over failed: ${err.message}`));
   await backfillDeliveredAt().catch((err) => logger.error(`Delivered-date backfill failed: ${err.message}`));
 
   const httpServer = http.createServer(app);

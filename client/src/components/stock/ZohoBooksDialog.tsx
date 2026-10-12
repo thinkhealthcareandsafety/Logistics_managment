@@ -260,6 +260,40 @@ function Connected({ zoho }: { zoho: ZohoStatus }) {
         )}
       </div>
 
+      {/* Reorder points and invoices (freight, e-way bill) - need the newer permissions */}
+      {(() => {
+        const needsReconnect = [zoho.inventory?.error, zoho.invoices?.error].some((e) => e && /scope|permission|authori[sz]|invalid_oauth|not authorized/i.test(e));
+        return (
+          <div className="space-y-2 rounded-lg border border-slate-200 p-4 text-[13px]">
+            {needsReconnect && (
+              <p className="rounded-md bg-amber-50 px-3 py-2 text-[12px] leading-relaxed text-amber-900 ring-1 ring-inset ring-amber-200">
+                To read reorder points from Zoho Inventory and freight / e-way bills from invoices, Zoho needs two more read-only
+                permissions: click <strong>Disconnect</strong> below, then <strong>Connect Zoho Books</strong> again and accept.
+              </p>
+            )}
+            <p>
+              <span className="font-medium text-slate-900">Reorder points: </span>
+              {zoho.inventory?.error
+                ? <span className="text-slate-500">from Zoho Books only ({zoho.inventory.error})</span>
+                : zoho.inventory?.at
+                  ? <span className="text-slate-600">{zoho.inventory.count} from Zoho Inventory, the rest from Zoho Books</span>
+                  : <span className="text-slate-500">checked on the next sync</span>}
+            </p>
+            <p>
+              <span className="font-medium text-slate-900">Invoices (freight, e-way bill): </span>
+              {zoho.invoices?.error
+                ? <span className="text-slate-500">{zoho.invoices.error}</span>
+                : zoho.invoices?.at
+                  ? <span className="text-slate-600">{zoho.invoices.summary || 'nothing to match yet'}</span>
+                  : <span className="text-slate-500">matched on the next sync</span>}
+            </p>
+            <p className="text-[12px] text-slate-500">
+              Tip: put the AWB in the invoice’s <strong>Reference#</strong> for a guaranteed match; otherwise the invoice for the same customer within 3 days of shipping is used.
+            </p>
+          </div>
+        );
+      })()}
+
       {/* Options */}
       <div className="space-y-3">
         <label className="flex cursor-pointer items-start gap-3">

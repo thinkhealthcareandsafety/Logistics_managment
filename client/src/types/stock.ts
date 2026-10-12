@@ -27,6 +27,9 @@ export interface StockItem {
   /** Linked Zoho Books item; '' = not linked. */
   zohoItemId: string;
   zohoItemName: string;
+  /** Same product entered under other names in Zoho - stock is their total. */
+  zohoAliases?: { zohoItemId: string; name: string; quantity: number }[];
+  zohoOwnQuantity?: number | null;
   /** From Zoho Books: selling price and cost per unit (₹). */
   salePrice?: number | null;
   purchasePrice?: number | null;
@@ -111,6 +114,8 @@ export interface ZohoStatus {
     heldNames?: string[];
   };
   lastSyncSample?: Record<string, unknown>[];
+  inventory?: { at: string | null; count: number; error: string };
+  invoices?: { at: string | null; summary: string; error: string };
   /** A sync is running right now (reading items one by one can take minutes). */
   syncing?: boolean;
   stockSource?: '' | 'list' | 'location-list' | 'detail';

@@ -26,8 +26,8 @@ export const stockApi = {
   message: () =>
     apiClient.get<{ text: string; parts: number; generatedAt: string }>('/stock/message').then((r) => r.data),
 
-  movements: (limit = 30) =>
-    apiClient.get<{ movements: StockMovement[] }>('/stock/movements', { params: { limit } }).then((r) => r.data.movements),
+  movements: (limit = 30, direction?: 'in') =>
+    apiClient.get<{ movements: StockMovement[] }>('/stock/movements', { params: { limit, direction } }).then((r) => r.data.movements),
 
   saveCount: (changes: StockCountChange[]) =>
     apiClient.post<StockSnapshot & { updated: number }>('/stock/count', { changes }).then((r) => r.data),
@@ -76,6 +76,11 @@ export const stockApi = {
       apiClient.post<{ zoho: ZohoStatus }>('/integrations/zoho/webhook-token/rotate').then((r) => r.data.zoho),
     disconnect: () => apiClient.delete<{ zoho: ZohoStatus }>('/integrations/zoho').then((r) => r.data.zoho),
   },
+
+  suggestDuplicates: () =>
+    apiClient.post<{ groups: { ids: string[]; names: string[]; keepName: string; reason: string; confidence: 'high' | 'medium' }[] }>('/stock/duplicates/suggest', {}, { timeout: 150_000 }).then((r) => r.data.groups),
+  merge: (keepId: string, otherIds: string[]) => apiClient.post<{ item: StockItem }>(`/stock/items/${keepId}/merge`, { otherIds }).then((r) => r.data.item),
+  unmerge: (id: string, zohoItemId: string) => apiClient.post<{ item: StockItem }>(`/stock/items/${id}/unmerge`, { zohoItemId }).then((r) => r.data.item),
 
   refreshMedia: () => apiClient.post<{ media: MediaStatus }>('/stock/media/refresh').then((r) => r.data.media),
   mediaStatus: () => apiClient.get<{ media: MediaStatus }>('/stock/media/status').then((r) => r.data.media),

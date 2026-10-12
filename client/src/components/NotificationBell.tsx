@@ -84,7 +84,7 @@ export function NotificationBell() {
             {data?.notifications.map((n) => (
               <Link
                 key={n._id}
-                to={`/shipments/${n.shipmentId}`}
+                to={n.type === 'stock_in' || !n.shipmentId ? '/stock' : `/shipments/${n.shipmentId}`}
                 onClick={() => {
                   if (!n.read) markRead.mutate(n._id);
                   setOpen(false);

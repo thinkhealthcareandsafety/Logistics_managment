@@ -17,6 +17,9 @@ import {
 } from '../hooks/useStock';
 import { ZohoBooksDialog } from '../components/stock/ZohoBooksDialog';
 import { ItemThumb, ProductMediaDialog } from '../components/stock/ProductMedia';
+import { StockInPanel } from '../components/stock/StockInPanel';
+import { DuplicatesDialog } from '../components/stock/DuplicatesDialog';
+import { AliasLine } from '../components/stock/AliasLine';
 import { SegmentedControl } from '../components/SegmentedControl';
 import { Menu, MenuDivider, MenuItem } from '../components/Menu';
 import { FormField, Modal } from '../components/Modal';
@@ -117,6 +120,7 @@ export function Stock() {
     | { kind: 'category'; category: StockCategory }
     | { kind: 'zoho' }
     | { kind: 'media'; item: StockItem }
+    | { kind: 'duplicates' }
     | null
   >(null);
 
@@ -276,6 +280,10 @@ export function Stock() {
             >
               {refreshMedia.isPending && <Spinner className="h-3 w-3" />}
               Refresh photos & brochures
+            </button>
+            <span aria-hidden className="text-slate-300">/</span>
+            <button onClick={() => setDialog({ kind: 'duplicates' })} className="rounded font-medium text-brand-700 hover:text-brand-900">
+              Find duplicates
             </button>
           </p>
         </div>
@@ -456,6 +464,8 @@ export function Stock() {
         </div>
       )}
 
+      <StockInPanel />
+
       <RecentChanges />
 
       {/* ───────── Save bar ───────── */}
@@ -509,6 +519,7 @@ export function Stock() {
       {dialog?.kind === 'stockOut' && <StockOutDialog item={dialog.item} onClose={() => setDialog(null)} />}
       {dialog?.kind === 'zoho' && <ZohoBooksDialog onClose={() => setDialog(null)} />}
       {dialog?.kind === 'media' && <ProductMediaDialog item={dialog.item} onClose={() => setDialog(null)} />}
+      {dialog?.kind === 'duplicates' && <DuplicatesDialog onClose={() => setDialog(null)} />}
       {dialog?.kind === 'category' && (
         <CategoryDialog
           category={dialog.category}
@@ -647,7 +658,6 @@ function CategorySection({
                         </Badge>
                       );
                     })()}
-                    {health === 'low' && <Badge tone="amber">Low - reorder at {item.lowStockAt}</Badge>}
                   </p>
                   {(item.expiryDates.length > 0 || item.productCode || locked) && (
                     <p className={clsx('mt-1 flex flex-wrap items-center gap-1.5', indent)}>
@@ -690,8 +700,15 @@ function CategorySection({
                   {(item.lowStockAt != null || item.salePrice != null) && (
                     <span className="flex items-center gap-2 text-[12px] tabular-nums text-slate-500">
                       {item.lowStockAt != null && (
-                        <span title={item.lowStockFromZoho ? 'Reorder point from Zoho Books' : 'Low-stock alert level'}>
-                          Reorder at <span className="font-semibold text-slate-700">{item.lowStockAt}</span>
+                        <span
+                          title={item.lowStockFromZoho ? 'Reorder point from Zoho Books' : 'Low-stock alert level'}
+                          className={clsx(
+                            'inline-flex h-8 items-center rounded-lg px-2.5 ring-1 ring-inset',
+                            health === 'low' ? 'bg-amber-50 font-medium text-amber-800 ring-amber-200' : 'bg-slate-50 ring-slate-200'
+                          )}
+                        >
+                          {health === 'low' ? 'Low · reorder at' : 'Reorder at'}
+                          <span className={clsx('ml-1 font-semibold', health === 'low' ? 'text-amber-900' : 'text-slate-700')}>{item.lowStockAt}</span>
                         </span>
                       )}
                       {item.salePrice != null && (
@@ -773,6 +790,11 @@ function CategorySection({
                 </div>
               </div>
 
+              {!!item.zohoAliases?.length && (
+                <div className={clsx(indent, 'sm:pl-[52px]')}>
+                  <AliasLine item={item} />
+                </div>
+              )}
               <div className={indent}>
                 <InternalNote item={item} />
               </div>

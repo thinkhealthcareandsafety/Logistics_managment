@@ -21,6 +21,19 @@ export function EditDeliveryDialog({ shipment, onClose }: { shipment: Shipment; 
     line: shipment.deliveryAddress?.line || shipment.customerInfo?.address || '',
   });
 
+  // Customer and product - often skipped when a shipment is added in a hurry.
+  const [customer, setCustomer] = useState({
+    name: shipment.customerInfo?.name ?? '',
+    phone: shipment.customerInfo?.phone ?? '',
+    email: shipment.customerInfo?.email ?? '',
+  });
+  const [product, setProduct] = useState({
+    name: shipment.productDetails?.name ?? '',
+    sku: shipment.productDetails?.sku ?? '',
+    quantity: String(shipment.productDetails?.quantity ?? 1),
+    category: shipment.productDetails?.category ?? '',
+  });
+
   const toDay = (v?: string | null) => (v ? new Date(v).toISOString().slice(0, 10) : '');
   const [ewb, setEwb] = useState({
     number: shipment.ewayBill?.number ?? '',
@@ -34,6 +47,14 @@ export function EditDeliveryDialog({ shipment, onClose }: { shipment: Shipment; 
       await update.mutateAsync({
         id: shipment._id,
         data: {
+          customerInfo: { ...shipment.customerInfo, name: customer.name.trim(), phone: customer.phone.trim(), email: customer.email.trim() },
+          productDetails: {
+            ...shipment.productDetails,
+            name: product.name.trim(),
+            sku: product.sku.trim(),
+            quantity: Math.max(1, Number.parseInt(product.quantity, 10) || 1),
+            category: product.category.trim(),
+          },
           weightKg: toNumberOrNull(weight),
           freightAmount: toNumberOrNull(freight),
           deliveryAddress: address,
@@ -50,7 +71,7 @@ export function EditDeliveryDialog({ shipment, onClose }: { shipment: Shipment; 
   return (
     <Modal
       size="lg"
-      title="Delivery and charges"
+      title="Edit shipment"
       description={`${shipment.trackingNumber}${shipment.customerInfo?.name ? ` · ${shipment.customerInfo.name}` : ''}`}
       onClose={onClose}
       footer={
@@ -66,6 +87,40 @@ export function EditDeliveryDialog({ shipment, onClose }: { shipment: Shipment; 
       }
     >
       <form id="edit-delivery-form" onSubmit={submit} className="space-y-5">
+        <fieldset className="space-y-3">
+          <legend className="text-[13px] font-semibold text-slate-900">Customer</legend>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <FormField label="Name" htmlFor="edit-cust-name" optional>
+              <input id="edit-cust-name" value={customer.name} onChange={(e) => setCustomer((c) => ({ ...c, name: e.target.value }))} className="input" />
+            </FormField>
+            <FormField label="Phone" htmlFor="edit-cust-phone" optional>
+              <input id="edit-cust-phone" type="tel" value={customer.phone} onChange={(e) => setCustomer((c) => ({ ...c, phone: e.target.value }))} className="input" />
+            </FormField>
+            <FormField label="Email" htmlFor="edit-cust-email" optional>
+              <input id="edit-cust-email" type="email" value={customer.email} onChange={(e) => setCustomer((c) => ({ ...c, email: e.target.value }))} className="input" />
+            </FormField>
+          </div>
+        </fieldset>
+        <fieldset className="space-y-3 border-t border-slate-100 pt-5">
+          <legend className="text-[13px] font-semibold text-slate-900">Product</legend>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <FormField label="Product name" htmlFor="edit-prod-name" optional>
+              <input id="edit-prod-name" value={product.name} onChange={(e) => setProduct((p) => ({ ...p, name: e.target.value }))} className="input" />
+            </FormField>
+            <FormField label="Product code" htmlFor="edit-prod-sku" optional hint="Links to a stock line">
+              <input id="edit-prod-sku" value={product.sku} onChange={(e) => setProduct((p) => ({ ...p, sku: e.target.value }))} className="input" />
+            </FormField>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <FormField label="Quantity" htmlFor="edit-prod-qty">
+              <input id="edit-prod-qty" type="number" min={1} value={product.quantity} onChange={(e) => setProduct((p) => ({ ...p, quantity: e.target.value }))} className="input" />
+            </FormField>
+            <FormField label="Category" htmlFor="edit-prod-cat" optional>
+              <input id="edit-prod-cat" value={product.category} onChange={(e) => setProduct((p) => ({ ...p, category: e.target.value }))} className="input" />
+            </FormField>
+          </div>
+        </fieldset>
+        <div className="border-t border-slate-100 pt-5" />
         <div className="grid grid-cols-2 gap-3 sm:max-w-sm">
           <FormField label="Weight" htmlFor="edit-weight" optional>
             <Affixed suffix="kg">

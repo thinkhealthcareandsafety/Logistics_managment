@@ -103,6 +103,13 @@ const shipmentSchema = new mongoose.Schema(
      * a destination postcode in any country's format, a tracking key, or an account
      * number. Sent when the tracking is registered. Empty for everyone else.
      */
+    /** The Zoho Books invoice this shipment was matched to (freight / e-way bill come from it). */
+    zohoInvoice: {
+      invoiceId: { type: String, default: '' },
+      number: { type: String, default: '' },
+      matchedBy: { type: String, default: '' },
+    },
+
     /** GST e-way bill for the consignment (read from the scanned label / e-way bill, or typed). */
     ewayBill: {
       number: { type: String, default: '', trim: true, maxlength: 20 },

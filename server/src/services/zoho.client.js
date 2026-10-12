@@ -8,7 +8,8 @@ const { seal, open } = require('../utils/secretBox');
  * endpoints the stock sync needs. Read-only scope - this app never writes to the books.
  */
 
-const SCOPES = ['ZohoBooks.settings.READ'];
+// Read-only: items/stock, invoices (freight, e-way bill) and Zoho Inventory items (reorder points).
+const SCOPES = ['ZohoBooks.settings.READ', 'ZohoBooks.invoices.READ', 'ZohoInventory.items.READ'];
 
 /** Zoho runs separate data centres; accounts and API hosts differ per region. */
 const DC_DOMAINS = {
@@ -149,11 +150,45 @@ async function listOrganizations(conn) {
 async function listItems(conn, extraParams = {}) {
   const items = [];
   for (let page = 1; page <= 50; page += 1) {
-    const body = await booksGet(conn, '/items', { organization_id: conn.organizationId, page, per_page: 200, ...extraParams });
+    // Active items only - inactive ones are discontinued and don't belong on the sheet.
+    const body = await booksGet(conn, '/items', { organization_id: conn.organizationId, page, per_page: 200, filter_by: 'Status.Active', ...extraParams });
     items.push(...(body.items || []));
     if (!body.page_context?.has_more_page) break;
   }
   return items;
+}
+
+/** Zoho Inventory items (reorder levels live here for Inventory users). */
+async function listInventoryItems(conn) {
+  const items = [];
+  for (let page = 1; page <= 20; page += 1) {
+    const token = await accessToken(conn);
+    const { data } = await axios.get(`${conn.apiDomain || defaultApiDomain()}/inventory/v1/items`, {
+      params: { organization_id: conn.organizationId, page, per_page: 200, filter_by: 'Status.Active' },
+      headers: { Authorization: `Zoho-oauthtoken ${token}` },
+      timeout: 20000,
+    });
+    if (data.code !== undefined && data.code !== 0) throw new Error(data.message || 'Zoho Inventory error');
+    items.push(...(data.items || []));
+    if (!data.page_context?.has_more_page) break;
+  }
+  return items;
+}
+
+/** Invoices in a date range (YYYY-MM-DD), newest first. */
+async function listInvoices(conn, { from, to }) {
+  const out = [];
+  for (let page = 1; page <= 10; page += 1) {
+    const body = await booksGet(conn, '/invoices', { organization_id: conn.organizationId, date_start: from, date_end: to, page, per_page: 200, sort_column: 'date', sort_order: 'D' });
+    out.push(...(body.invoices || []));
+    if (!body.page_context?.has_more_page) break;
+  }
+  return out;
+}
+
+async function getInvoice(conn, invoiceId) {
+  const body = await booksGet(conn, `/invoices/${encodeURIComponent(invoiceId)}`, { organization_id: conn.organizationId });
+  return body.invoice || {};
 }
 
 /** One item in full (includes stock and per-warehouse figures where the list may not). */
@@ -199,5 +234,8 @@ module.exports = {
   listItems,
   getItem,
   getItemImage,
+  listInventoryItems,
+  listInvoices,
+  getInvoice,
   revoke,
 };

@@ -28,6 +28,10 @@ export const shipmentsApi = {
   refresh: (id: string) =>
     apiClient.post<{ shipment: Shipment }>(`/shipments/${id}/refresh`).then((r) => r.data.shipment),
 
+  /** Status set by hand (courier's site ahead of the tracking feed). */
+  setStatus: (id: string, body: { status: string; location?: string; note?: string; at?: string }) =>
+    apiClient.post<{ shipment: Shipment }>(`/shipments/${id}/status`, body).then((r) => r.data.shipment),
+
   addNote: (id: string, text: string) =>
     apiClient.post<{ shipment: Shipment }>(`/shipments/${id}/notes`, { text }).then((r) => r.data.shipment),
 
