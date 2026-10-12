@@ -455,6 +455,31 @@ function DeliveryCard({ shipment: s, onEdit }: { shipment: Shipment; onEdit: () 
         </div>
       )}
 
+      <div className="mt-4 border-t border-slate-100 pt-3 text-[13px]">
+        <p className="text-[12px] text-slate-500">E-way bill</p>
+        {s.ewayBill?.number ? (
+          <div className="mt-1">
+            <p className="font-mono font-medium tracking-wide text-slate-900">{s.ewayBill.number.replace(/(\d{4})(?=\d)/g, '$1 ')}</p>
+            <p className="mt-0.5 text-[12px] text-slate-500">
+              {s.ewayBill.generatedAt && <>Generated {format(new Date(s.ewayBill.generatedAt), 'd MMM yyyy')}</>}
+              {s.ewayBill.generatedAt && s.ewayBill.validUntil && ' · '}
+              {s.ewayBill.validUntil && (
+                <span className={clsx(new Date(s.ewayBill.validUntil) < new Date() && s.status !== 'delivered' && 'font-medium text-red-600')}>
+                  Valid until {format(new Date(s.ewayBill.validUntil), 'd MMM yyyy')}
+                </span>
+              )}
+            </p>
+          </div>
+        ) : (
+          <p className="mt-1 text-slate-500">
+            None yet.{' '}
+            <button onClick={onEdit} className="font-medium text-brand-700 hover:text-brand-900">
+              Add e-way bill
+            </button>
+          </p>
+        )}
+      </div>
+
       <dl className="mt-4 grid grid-cols-2 gap-3 border-t border-slate-100 pt-3 text-[13px]">
         <div>
           <dt className="text-[12px] text-slate-500">Weight</dt>

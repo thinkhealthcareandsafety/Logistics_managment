@@ -60,7 +60,7 @@ export function StockItemDialog({
       note: note.trim(),
       internalNote: internalNote.trim(),
       expiryDates: expiryDates.filter(Boolean),
-      lowStockAt: lowStockAt === '' ? null : Number(lowStockAt),
+      ...(item?.lowStockFromZoho ? {} : { lowStockAt: lowStockAt === '' ? null : Number(lowStockAt) }),
       productCode: productCode.trim(),
     };
     if (editing) {
@@ -266,9 +266,15 @@ export function StockItemDialog({
         </FormField>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <FormField label="Low-stock alert at" htmlFor="stock-low" optional hint="Flag the line when it drops to this.">
+          <FormField
+            label="Low-stock alert at"
+            htmlFor="stock-low"
+            optional
+            hint={item?.lowStockFromZoho ? 'Set by the reorder point in Zoho Books - change it there.' : 'Flag the line when it drops to this.'}
+          >
             <input
               id="stock-low"
+              disabled={!!item?.lowStockFromZoho}
               type="number"
               min={0}
               step={1}
@@ -276,7 +282,7 @@ export function StockItemDialog({
               value={lowStockAt}
               onChange={(e) => setLowStockAt(e.target.value)}
               placeholder="e.g. 10"
-              className="input"
+              className="input disabled:bg-slate-50 disabled:text-slate-500"
             />
           </FormField>
           <FormField

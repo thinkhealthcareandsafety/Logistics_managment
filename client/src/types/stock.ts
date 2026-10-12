@@ -27,6 +27,21 @@ export interface StockItem {
   /** Linked Zoho Books item; '' = not linked. */
   zohoItemId: string;
   zohoItemName: string;
+  /** From Zoho Books: selling price and cost per unit (₹). */
+  salePrice?: number | null;
+  purchasePrice?: number | null;
+  /** lowStockAt comes from Zoho's reorder point. */
+  lowStockFromZoho?: boolean;
+  zohoHasImage?: boolean;
+  /** Photos, YouTube videos and brochures matched from buyaedindia.com. */
+  media?: {
+    images: string[];
+    videos: string[];
+    brochures: { url: string; title: string }[];
+    sourceUrl: string;
+    sourceTitle: string;
+    matchedAt: string | null;
+  };
   sortOrder: number;
   updatedAt: string;
 }

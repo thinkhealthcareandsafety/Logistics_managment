@@ -14,6 +14,7 @@ const {
   loadStock,
   buildStockMessage,
   stockOutToday,
+  stockInToday,
   currentMessage,
   splitForWhatsApp,
   applyCount,
@@ -284,7 +285,7 @@ const getPublicStock = asyncHandler(async (req, res) => {
   if (!settings || token.length !== expected.length || !crypto.timingSafeEqual(token, expected)) {
     throw new ApiError(404, 'This stock link is invalid or has been replaced');
   }
-  const [{ categories, items }, out] = await Promise.all([loadStock(), stockOutToday()]);
+  const [{ categories, items }, out, inToday] = await Promise.all([loadStock(), stockOutToday(), stockInToday()]);
   // Internal notes, product codes and who-did-what stay inside the app.
   res.json({
     updatedAt: settings.lastCountAt || settings.updatedAt,
@@ -304,11 +305,48 @@ const getPublicStock = asyncHandler(async (req, res) => {
           expiryDates: i.expiryDates,
         })),
     })),
-    message: buildStockMessage({ categories, items, stockOut: out, hideZero: settings.hideZeroInMessage }),
+    message: buildStockMessage({ categories, items, stockOut: out, stockIn: inToday, hideZero: settings.hideZeroInMessage }),
   });
 });
 
+// ─────────────────────────── Product media ───────────────────────────
+
+const { syncProductMedia, mediaStatus } = require('../services/productMedia.service');
+
+/** Re-reads buyaedindia.com and re-matches photos, videos and brochures (runs in the background). */
+const refreshMedia = asyncHandler(async (req, res) => {
+  syncProductMedia().catch(() => {});
+  res.status(202).json({ media: mediaStatus() });
+});
+
+const getMediaStatus = asyncHandler(async (req, res) => {
+  res.json({ media: mediaStatus() });
+});
+
+/** Zoho Books' own photo for a line, fetched with the stored Zoho login and cached. */
+const zohoImageCache = new Map();
+const zohoImage = asyncHandler(async (req, res) => {
+  assertId(req.params.id);
+  const item = await StockItem.findById(req.params.id).select('zohoItemId zohoHasImage');
+  if (!item?.zohoItemId || !item.zohoHasImage) throw new ApiError(404, 'No Zoho photo for this item');
+  let hit = zohoImageCache.get(item.zohoItemId);
+  if (!hit || Date.now() - hit.at > 24 * 60 * 60 * 1000) {
+    const ZohoConnection = require('../models/ZohoConnection');
+    const conn = await ZohoConnection.get();
+    if (!conn.isConnected) throw new ApiError(404, 'Zoho Books is not connected');
+    const img = await require('../services/zoho.client').getItemImage(conn, item.zohoItemId);
+    hit = { ...img, at: Date.now() };
+    zohoImageCache.set(item.zohoItemId, hit);
+  }
+  res.set('Content-Type', hit.type);
+  res.set('Cache-Control', 'private, max-age=86400');
+  res.send(hit.data);
+});
+
 module.exports = {
+  refreshMedia,
+  getMediaStatus,
+  zohoImage,
   getStock,
   getMessage,
   listMovements,

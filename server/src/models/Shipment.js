@@ -103,6 +103,13 @@ const shipmentSchema = new mongoose.Schema(
      * a destination postcode in any country's format, a tracking key, or an account
      * number. Sent when the tracking is registered. Empty for everyone else.
      */
+    /** GST e-way bill for the consignment (read from the scanned label / e-way bill, or typed). */
+    ewayBill: {
+      number: { type: String, default: '', trim: true, maxlength: 20 },
+      generatedAt: { type: Date, default: null },
+      validUntil: { type: Date, default: null },
+    },
+
     trackingExtras: {
       postalCode: { type: String, default: '', trim: true, maxlength: 20 },
       trackingKey: { type: String, default: '', trim: true, maxlength: 100 },

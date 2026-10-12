@@ -53,6 +53,27 @@ const stockItemSchema = new mongoose.Schema(
     zohoItemId: { type: String, default: '', index: true },
     zohoItemName: { type: String, default: '' },
 
+    /** From Zoho Books on every sync: selling price and cost per unit (₹). */
+    salePrice: { type: Number, default: null, min: 0 },
+    purchasePrice: { type: Number, default: null, min: 0 },
+    /** Zoho's reorder point drives lowStockAt while true (set by the sync). */
+    lowStockFromZoho: { type: Boolean, default: false },
+    /** Zoho has a product photo for this item (served via /api/stock/items/:id/zoho-image). */
+    zohoHasImage: { type: Boolean, default: false },
+
+    /**
+     * Product media matched from buyaedindia.com (photos, YouTube videos, brochure PDFs)
+     * by the media sync. sourceUrl is the product page it came from.
+     */
+    media: {
+      images: { type: [String], default: [] },
+      videos: { type: [String], default: [] },
+      brochures: { type: [{ url: String, title: String, _id: false }], default: [] },
+      sourceUrl: { type: String, default: '' },
+      sourceTitle: { type: String, default: '' },
+      matchedAt: { type: Date, default: null },
+    },
+
     sortOrder: { type: Number, default: 0 },
     isArchived: { type: Boolean, default: false, index: true },
   },

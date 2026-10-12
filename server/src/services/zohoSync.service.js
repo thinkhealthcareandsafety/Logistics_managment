@@ -147,7 +147,7 @@ function sampleOf(items) {
   return items.slice(0, 3).map((z) => {
     const out = {};
     for (const [k, v] of Object.entries(z)) {
-      if (['item_id', 'name', 'sku', 'item_type', 'product_type', 'status', 'track_inventory', 'unit'].includes(k) || /stock/i.test(k)) {
+      if (['item_id', 'name', 'sku', 'item_type', 'product_type', 'status', 'track_inventory', 'unit', 'rate', 'purchase_rate', 'reorder_level', 'image_name', 'image_document_id'].includes(k) || /stock/i.test(k)) {
         out[k] = v;
       }
     }
@@ -203,7 +203,7 @@ function rememberWebhook(body = {}) {
     const text = [`${label} ${doc[numberField] || ''}`.trim(), party].filter(Boolean).join(' · ');
     for (const line of doc.line_items || []) {
       if (line.item_id) {
-        pendingRefs.set(String(line.item_id), { note: text, customer: label === 'Invoice' || label === 'Sales order' ? party : '', at: Date.now() });
+        pendingRefs.set(String(line.item_id), { note: text, customer: party, at: Date.now() });
         pendingDetailIds.add(String(line.item_id));
       }
     }
@@ -242,6 +242,26 @@ async function autoCategory() {
 function applyDelta(item, delta) {
   if (delta > 0) item.quantity += delta;
   else if (delta < 0) item.takeOut(-delta);
+}
+
+
+/** Item details Zoho owns (prices, reorder point, photo) - copied on every sync. */
+function applyZohoDetails(item, z) {
+  const money = (v) => (v !== '' && v != null && Number.isFinite(Number(v)) && Number(v) >= 0 ? Number(v) : null);
+  const sale = money(z.rate ?? z.sales_rate);
+  const cost = money(z.purchase_rate);
+  if (sale !== null) item.salePrice = sale;
+  if (cost !== null) item.purchasePrice = cost;
+  const reorder = money(z.reorder_level);
+  if (reorder !== null && reorder > 0) {
+    item.lowStockAt = Math.floor(reorder);
+    item.lowStockFromZoho = true;
+  } else if (item.lowStockFromZoho) {
+    // Zoho's reorder point was removed - so is the alert it set.
+    item.lowStockAt = null;
+    item.lowStockFromZoho = false;
+  }
+  item.zohoHasImage = Boolean(z.image_document_id || z.image_name);
 }
 
 async function syncOnce(conn, { reason = 'manual' } = {}) {
@@ -345,6 +365,7 @@ async function syncOnce(conn, { reason = 'manual' } = {}) {
         productCode: skuTaken ? '' : sku,
         zohoItemId: zid,
         zohoItemName: z.name,
+        ...(() => { const tmp = {}; applyZohoDetails(tmp, z); return tmp; })(),
         sortOrder: (last?.sortOrder ?? -1) + 1,
       });
       const ref = takeRef(zid);
@@ -363,6 +384,7 @@ async function syncOnce(conn, { reason = 'manual' } = {}) {
     }
 
     item.zohoItemName = z.name;
+    applyZohoDetails(item, z);
     const delta = target - item.quantity;
     if (delta !== 0) {
       const ref = takeRef(zid);
@@ -378,7 +400,8 @@ async function syncOnce(conn, { reason = 'manual' } = {}) {
           : fieldChanged
             ? 'Corrected to Zoho’s Stock on Hand'
             : ref?.note || (delta > 0 ? 'Stock in recorded in Zoho Books' : 'Stock out recorded in Zoho Books'),
-        customer: delta < 0 ? ref?.customer || '' : '',
+        // Who it went to (invoice) or came from (bill / vendor).
+        customer: ref?.customer || '',
         userName: 'Zoho Books',
       });
       if (delta > 0) summary.stockIn += delta;

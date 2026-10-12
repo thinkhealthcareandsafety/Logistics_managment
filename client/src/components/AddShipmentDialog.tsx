@@ -1,4 +1,4 @@
-import { useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import clsx from 'clsx';
 import { useCreateShipment } from '../hooks/useShipments';
 import { FormField, Modal } from './Modal';
@@ -63,6 +63,8 @@ const FORM_TO_LABEL: Partial<Record<keyof FormState, LabelField>> = {
 };
 
 const DEFAULT_COURIER = 'shreemaruticourier';
+/** How long a confidently-read label waits before adding itself. */
+const AUTO_ADD_SECONDS = 5;
 const LAST_COURIER_KEY = 'th.lastCourier';
 
 /** Most bookings repeat the courier of the last one - start there. */
@@ -93,6 +95,11 @@ export function AddShipmentDialog({ onClose, initialLabel }: { onClose: () => vo
   });
   const [address, setAddress] = useState<DeliveryAddress>(EMPTY_ADDRESS);
   const [carrierCode, setCarrierCode] = useState(readLastCourier);
+  // GST e-way bill, filled from the label when printed on it.
+  const [ewb, setEwb] = useState({ number: '', generatedAt: '', validUntil: '' });
+  // Seconds until a confidently-read label adds itself; null = not counting down.
+  const [autoAddIn, setAutoAddIn] = useState<number | null>(null);
+  const formRef = useRef<HTMLFormElement>(null);
   // The courier name a scanned label printed, when it matched nothing in the catalogue.
   const [printedCourier, setPrintedCourier] = useState('');
   // The few extra details some couriers need besides the AWB (TrackingMore's required fields).
@@ -106,6 +113,8 @@ export function AddShipmentDialog({ onClose, initialLabel }: { onClose: () => vo
   const [unsure, setUnsure] = useState<Set<LabelField>>(new Set());
 
   function update<K extends keyof FormState>(key: K, value: FormState[K]) {
+    // Someone is editing - they're reviewing, so don't add it out from under them.
+    setAutoAddIn(null);
     setForm((prev) => ({ ...prev, [key]: value }));
     const field = FORM_TO_LABEL[key];
     if (field && unsure.has(field)) setUnsure((prev) => new Set([...prev].filter((f) => f !== field)));
@@ -125,7 +134,26 @@ export function AddShipmentDialog({ onClose, initialLabel }: { onClose: () => vo
       }));
     }
     setUnsure(new Set(d.uncertainFields));
+    if (d.ewayBill?.number) setEwb({ number: d.ewayBill.number, generatedAt: d.ewayBill.generatedAt, validUntil: d.ewayBill.validUntil });
+    // Everything needed is on the label and nothing important was a guess: add it by
+    // itself after a short countdown (cancel to review first).
+    const confident =
+      d.trackingNumber && d.carrierCode && !d.existingShipmentId &&
+      !d.uncertainFields.includes('trackingNumber') && !d.uncertainFields.includes('courier');
+    setAutoAddIn(confident ? AUTO_ADD_SECONDS : null);
   }
+
+  // The auto-add countdown: ticks once a second, submits at zero.
+  useEffect(() => {
+    if (autoAddIn === null) return;
+    if (autoAddIn <= 0) {
+      setAutoAddIn(null);
+      formRef.current?.requestSubmit();
+      return;
+    }
+    const t = setTimeout(() => setAutoAddIn((n) => (n === null ? null : n - 1)), 1000);
+    return () => clearTimeout(t);
+  }, [autoAddIn]);
 
   /** Amber outline on a field the reader flagged. */
   const flag = (field: LabelField) => unsure.has(field) && 'ring-2 ring-amber-400 ring-offset-0 border-amber-400';
@@ -152,6 +180,9 @@ export function AddShipmentDialog({ onClose, initialLabel }: { onClose: () => vo
       weightKg: toNumberOrNull(form.weightKg),
       freightAmount: toNumberOrNull(form.freight),
       deliveryAddress: address,
+      ...(ewb.number.trim()
+        ? { ewayBill: { number: ewb.number.replace(/\s+/g, ''), generatedAt: ewb.generatedAt || null, validUntil: ewb.validUntil || null } }
+        : {}),
       ...(needsPostcode || needsKey || needsAccount
         ? {
             trackingExtras: {
@@ -199,8 +230,24 @@ export function AddShipmentDialog({ onClose, initialLabel }: { onClose: () => vo
         </>
       }
     >
-      <form id="add-shipment-form" onSubmit={handleSubmit} className="space-y-6">
+      <form ref={formRef} id="add-shipment-form" onSubmit={handleSubmit} className="space-y-6">
         <LabelScanner initialFile={initialLabel} onDraft={applyDraft} countFilled={countFilled} />
+
+        {autoAddIn !== null && (
+          <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-emerald-50 px-4 py-3 ring-1 ring-inset ring-emerald-200">
+            <p className="text-[13px] font-medium text-emerald-900">
+              All details read from the label - adding this shipment in {autoAddIn}s…
+            </p>
+            <div className="flex gap-2">
+              <button type="button" onClick={() => setAutoAddIn(null)} className="btn-secondary h-8 px-3 py-0 text-[13px]">
+                Let me check first
+              </button>
+              <button type="button" onClick={() => setAutoAddIn(0)} className="btn-primary h-8 px-3 py-0 text-[13px]">
+                Add now
+              </button>
+            </div>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <FormField label="Tracking number (AWB)" htmlFor="ship-awb">
@@ -370,6 +417,31 @@ export function AddShipmentDialog({ onClose, initialLabel }: { onClose: () => vo
             }}
             idPrefix="ship-addr"
           />
+        </Section>
+
+        <Section title="E-way bill" hint="Filled from the label when an e-way bill is printed on it.">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <FormField label="E-way bill no." htmlFor="ship-ewb" optional>
+              <input
+                id="ship-ewb"
+                inputMode="numeric"
+                maxLength={14}
+                value={ewb.number}
+                onChange={(e) => {
+                  setAutoAddIn(null);
+                  setEwb((x) => ({ ...x, number: e.target.value }));
+                }}
+                placeholder="12 digits"
+                className="input font-mono"
+              />
+            </FormField>
+            <FormField label="Generated on" htmlFor="ship-ewb-date" optional>
+              <input id="ship-ewb-date" type="date" value={ewb.generatedAt} onChange={(e) => setEwb((x) => ({ ...x, generatedAt: e.target.value }))} className="input" />
+            </FormField>
+            <FormField label="Valid until" htmlFor="ship-ewb-valid" optional>
+              <input id="ship-ewb-valid" type="date" value={ewb.validUntil} onChange={(e) => setEwb((x) => ({ ...x, validUntil: e.target.value }))} className="input" />
+            </FormField>
+          </div>
         </Section>
 
         <Section title="Dates">

@@ -12,6 +12,14 @@ import type {
   ZohoStatus,
 } from '../types/stock';
 
+export interface MediaStatus {
+  at: string | null;
+  products: number;
+  matched: number;
+  error: string;
+  running: boolean;
+}
+
 export const stockApi = {
   get: () => apiClient.get<StockSnapshot>('/stock').then((r) => r.data),
 
@@ -68,6 +76,9 @@ export const stockApi = {
       apiClient.post<{ zoho: ZohoStatus }>('/integrations/zoho/webhook-token/rotate').then((r) => r.data.zoho),
     disconnect: () => apiClient.delete<{ zoho: ZohoStatus }>('/integrations/zoho').then((r) => r.data.zoho),
   },
+
+  refreshMedia: () => apiClient.post<{ media: MediaStatus }>('/stock/media/refresh').then((r) => r.data.media),
+  mediaStatus: () => apiClient.get<{ media: MediaStatus }>('/stock/media/status').then((r) => r.data.media),
 
   publicStock: (token: string) => apiClient.get<PublicStock>(`/public/stock/${token}`).then((r) => r.data),
 };

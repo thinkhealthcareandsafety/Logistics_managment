@@ -39,6 +39,13 @@ function commercialFields(body = {}) {
   if (weightKg !== undefined) out.weightKg = weightKg;
   if (freightAmount !== undefined) out.freightAmount = freightAmount;
   if (deliveryAddress !== undefined) out.deliveryAddress = deliveryAddress;
+  const ewb = body.ewayBill;
+  if (ewb && typeof ewb === 'object') {
+    const date = (v) => (v && !Number.isNaN(new Date(v).getTime()) ? new Date(v) : null);
+    const number = String(ewb.number || '').replace(/\s+/g, '');
+    if (number && !/^\d{12}$/.test(number)) throw new ApiError(400, 'An e-way bill number is 12 digits');
+    out.ewayBill = { number, generatedAt: date(ewb.generatedAt), validUntil: date(ewb.validUntil) };
+  }
   const extras = body.trackingExtras;
   if (extras && typeof extras === 'object') {
     out.trackingExtras = {

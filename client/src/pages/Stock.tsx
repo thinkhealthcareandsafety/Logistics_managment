@@ -3,6 +3,8 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { format, formatDistanceToNow } from 'date-fns';
 import clsx from 'clsx';
 import toast from 'react-hot-toast';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { stockApi } from '../api/stock';
 import {
   useDeleteStockCategory,
   useRemoveStockItem,
@@ -14,6 +16,7 @@ import {
   useZohoStatus,
 } from '../hooks/useStock';
 import { ZohoBooksDialog } from '../components/stock/ZohoBooksDialog';
+import { ItemThumb, ProductMediaDialog } from '../components/stock/ProductMedia';
 import { SegmentedControl } from '../components/SegmentedControl';
 import { Menu, MenuDivider, MenuItem } from '../components/Menu';
 import { FormField, Modal } from '../components/Modal';
@@ -34,7 +37,27 @@ import type { ListStyle, StockCategory, StockCountChange, StockItem, StockMoveme
 import { Skeleton, SkeletonRegion, Spinner } from '../components/ui/Loading';
 
 import { StockSkeleton } from '../components/skeletons/PageSkeletons';
-type Filter = 'all' | 'out' | 'low' | 'expiring';
+type Filter = 'all' | 'in' | 'out' | 'low' | 'expiring';
+type StockSort = 'sheet' | 'qty-desc' | 'qty-asc' | 'value-desc' | 'value-asc';
+
+/** Value of what's on the shelf: units × cost price from Zoho (sale price if no cost). */
+export const lineValue = (item: StockItem, qty = item.quantity) => qty * (item.purchasePrice ?? item.salePrice ?? 0);
+const inr = (n: number) => `₹${Math.round(n).toLocaleString('en-IN')}`;
+
+/** The date that matters on a line: the next one to expire, else the latest that already has. */
+function keyExpiry(item: StockItem): string | null {
+  if (!item.expiryDates.length) return null;
+  const today = new Date().toISOString().slice(0, 10);
+  const sorted = [...item.expiryDates].sort();
+  return sorted.find((d) => d.slice(0, 10) >= today) ?? sorted[sorted.length - 1];
+}
+
+function sortItems(items: StockItem[], sort: StockSort): StockItem[] {
+  if (sort === 'sheet') return items;
+  const key = (i: StockItem) => (sort.startsWith('qty') ? i.quantity : lineValue(i));
+  const dir = sort.endsWith('desc') ? -1 : 1;
+  return [...items].sort((a, b) => dir * (key(a) - key(b)) || a.name.localeCompare(b.name));
+}
 
 /**
  * Staged counts, keyed by item id. Split lines (old + new) keep the two halves
@@ -68,6 +91,7 @@ function isChanged(item: StockItem, drafts: Drafts) {
 }
 
 function matches(filter: Filter, item: StockItem) {
+  if (filter === 'in') return item.quantity > 0;
   if (filter === 'out') return item.quantity === 0;
   if (filter === 'low') return stockHealth(item) === 'low';
   if (filter === 'expiring') return itemExpiryState(item) !== 'ok';
@@ -82,6 +106,7 @@ export function Stock() {
   // count actually happens - walk the shelf, then publish once.
   const [drafts, setDrafts] = useState<Drafts>({});
   const [filter, setFilter] = useState<Filter>('all');
+  const [sort, setSort] = useState<StockSort>('sheet');
   const [search, setSearch] = useState('');
 
   const [dialog, setDialog] = useState<
@@ -91,10 +116,20 @@ export function Stock() {
     | { kind: 'stockOut'; item: StockItem }
     | { kind: 'category'; category: StockCategory }
     | { kind: 'zoho' }
+    | { kind: 'media'; item: StockItem }
     | null
   >(null);
 
   const { data: zoho, isLoading: zohoLoading } = useZohoStatus();
+  const queryClient = useQueryClient();
+  const refreshMedia = useMutation({
+    mutationFn: stockApi.refreshMedia,
+    onSuccess: () => {
+      toast.success('Reading photos, videos and brochures from buyaedindia.com - they appear in a minute or two');
+      setTimeout(() => queryClient.invalidateQueries({ queryKey: ['stock'] }), 90_000);
+    },
+    onError: () => toast.error('Could not start the photo refresh'),
+  });
   // While Zoho Books is connected, linked lines take their number from Zoho only.
   const zohoLive = !!zoho?.connected;
   const isLocked = (item: StockItem) => zohoLive && !!item.zohoItemId;
@@ -135,18 +170,20 @@ export function Stock() {
 
   const summary = useMemo(() => {
     let units = 0;
+    let value = 0;
     const out: StockItem[] = [];
     let low = 0;
     let expiring = 0;
     let nextExpiry: string | null = null;
     for (const item of items) {
       units += item.quantity;
+      value += lineValue(item);
       if (item.quantity === 0) out.push(item);
       if (stockHealth(item) === 'low') low += 1;
       if (itemExpiryState(item) !== 'ok') expiring += 1;
       for (const d of item.expiryDates) if (!nextExpiry || d < nextExpiry) nextExpiry = d;
     }
-    return { units, out, low, expiring, nextExpiry, withThreshold: items.filter((i) => i.lowStockAt != null).length };
+    return { units, value, out, low, expiring, nextExpiry, withThreshold: items.filter((i) => i.lowStockAt != null).length };
   }, [items]);
 
   const query = search.trim().toLowerCase();
@@ -230,6 +267,16 @@ export function Stock() {
                     ? `Zoho Books · synced ${formatDistanceToNow(new Date(zoho.lastSyncAt), { addSuffix: true })}`
                     : 'Zoho Books · first sync running'}
             </button>
+            <span aria-hidden className="text-slate-300">/</span>
+            <button
+              onClick={() => refreshMedia.mutate()}
+              disabled={refreshMedia.isPending}
+              title="Re-read photos, videos and brochures from buyaedindia.com"
+              className="inline-flex items-center gap-1.5 rounded font-medium text-brand-700 hover:text-brand-900 disabled:opacity-60"
+            >
+              {refreshMedia.isPending && <Spinner className="h-3 w-3" />}
+              Refresh photos & brochures
+            </button>
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -261,7 +308,7 @@ export function Stock() {
         <Metric
           label="Units in stock"
           value={summary.units}
-          detail={`${items.length} lines across ${categories.length} categories`}
+          detail={`${items.length} lines · ${categories.length} categories${summary.value ? ` · ${inr(summary.value)} value` : ''}`}
         />
         <Metric
           label="Out of stock"
@@ -313,12 +360,30 @@ export function Stock() {
               onChange={setFilter}
               segments={[
                 { value: 'all', label: 'All items', count: items.length },
+                { value: 'in', label: 'In stock', count: items.length - summary.out.length, dot: 'bg-emerald-500' },
                 { value: 'out', label: 'Out of stock', count: summary.out.length, dot: 'bg-red-500' },
                 { value: 'low', label: 'Low', count: summary.low, dot: 'bg-amber-500' },
                 { value: 'expiring', label: 'Expiring', count: summary.expiring, dot: 'bg-amber-500' },
               ]}
             />
           </div>
+          <label className="relative shrink-0">
+            <span className="sr-only">Sort items</span>
+            <select
+              value={sort}
+              onChange={(e) => setSort(e.target.value as StockSort)}
+              className="h-8 cursor-pointer appearance-none rounded-lg border border-slate-200 bg-white pl-2.5 pr-7 text-[13px] font-medium text-slate-700 shadow-[0_1px_2px_rgba(15,23,42,0.04)] outline-none transition hover:border-slate-300 focus:border-brand-500"
+            >
+              <option value="sheet">Sheet order</option>
+              <option value="qty-desc">Quantity: high to low</option>
+              <option value="qty-asc">Quantity: low to high</option>
+              <option value="value-desc">Value: high to low</option>
+              <option value="value-asc">Value: low to high</option>
+            </select>
+            <svg className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-slate-400" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+              <path d="m7 10 5 5 5-5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </label>
         </div>
 
         {/* Jump list - thirteen categories is too long to scroll blind. */}
@@ -383,6 +448,8 @@ export function Stock() {
                 onEditItem={(item) => setDialog({ kind: 'item', item })}
                 onStockOut={(item) => setDialog({ kind: 'stockOut', item })}
                 onEditCategory={() => setDialog({ kind: 'category', category })}
+                onOpenMedia={(item) => setDialog({ kind: 'media', item })}
+                sort={sort}
               />
             );
           })}
@@ -441,6 +508,7 @@ export function Stock() {
       )}
       {dialog?.kind === 'stockOut' && <StockOutDialog item={dialog.item} onClose={() => setDialog(null)} />}
       {dialog?.kind === 'zoho' && <ZohoBooksDialog onClose={() => setDialog(null)} />}
+      {dialog?.kind === 'media' && <ProductMediaDialog item={dialog.item} onClose={() => setDialog(null)} />}
       {dialog?.kind === 'category' && (
         <CategoryDialog
           category={dialog.category}
@@ -466,6 +534,8 @@ function CategorySection({
   onEditItem,
   onStockOut,
   onEditCategory,
+  onOpenMedia,
+  sort,
 }: {
   category: StockCategory;
   allItems: StockItem[];
@@ -478,8 +548,11 @@ function CategorySection({
   onEditItem: (item: StockItem) => void;
   onStockOut: (item: StockItem) => void;
   onEditCategory: () => void;
+  onOpenMedia: (item: StockItem) => void;
+  sort: StockSort;
 }) {
   const total = allItems.reduce((sum, i) => sum + draftTotal(i, drafts), 0);
+  const value = allItems.reduce((sum, i) => sum + lineValue(i, draftTotal(i, drafts)), 0);
   const removeItem = useRemoveStockItem();
   const listed = category.listStyle !== 'plain';
 
@@ -494,6 +567,11 @@ function CategorySection({
           <span className="shrink-0 text-[13px] tabular-nums text-slate-500">
             {total.toLocaleString('en-IN')} unit{total === 1 ? '' : 's'}
           </span>
+          {value > 0 && (
+            <span className="shrink-0 text-[13px] font-medium tabular-nums text-slate-700" title="Stock value at cost price from Zoho Books">
+              · {inr(value)}
+            </span>
+          )}
         </h2>
         <div className="flex items-center gap-1">
           <button
@@ -515,7 +593,7 @@ function CategorySection({
       </div>
 
       <ul className="divide-y divide-slate-100">
-        {items.map((item) => {
+        {sortItems(items, sort).map((item) => {
           // Numbering follows the full category, so filtering doesn't renumber lines.
           const position = allItems.indexOf(item);
           const split = item.oldQuantity != null;
@@ -538,7 +616,9 @@ function CategorySection({
                 </span>
               )}
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="min-w-0 pr-9 sm:pr-0">
+                <div className="flex min-w-0 items-start gap-3 pr-9 sm:pr-0">
+                  <ItemThumb item={item} onOpen={() => onOpenMedia(item)} />
+                  <div className="min-w-0">
                   <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
                     {listed && (
                       <span className="w-5 shrink-0 text-right font-mono text-[12px] text-slate-400">
@@ -557,7 +637,17 @@ function CategorySection({
                     )}
                     {item.note && <span className="text-[13px] text-slate-500">({item.note})</span>}
                     {health === 'out' && <Badge tone="red">Out of stock</Badge>}
-                    {health === 'low' && <Badge tone="amber">Low - alert at {item.lowStockAt}</Badge>}
+                    {(() => {
+                      const d = keyExpiry(item);
+                      if (!d) return null;
+                      const state = expiryState(d);
+                      return (
+                        <Badge tone={state === 'expired' ? 'red' : state === 'soon' ? 'amber' : 'slate'} title={`All expiry dates: ${item.expiryDates.map(formatExpiry).join(', ')}`}>
+                          {state === 'expired' ? 'Expired' : 'Expires'} {formatExpiry(d)}
+                        </Badge>
+                      );
+                    })()}
+                    {health === 'low' && <Badge tone="amber">Low - reorder at {item.lowStockAt}</Badge>}
                   </p>
                   {(item.expiryDates.length > 0 || item.productCode || locked) && (
                     <p className={clsx('mt-1 flex flex-wrap items-center gap-1.5', indent)}>
@@ -592,9 +682,25 @@ function CategorySection({
                         ))}
                     </p>
                   )}
+                  </div>
                 </div>
 
                 <div className="flex shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-2 sm:justify-end">
+                  {/* Reorder point and selling price from Zoho, next to the count. */}
+                  {(item.lowStockAt != null || item.salePrice != null) && (
+                    <span className="flex items-center gap-2 text-[12px] tabular-nums text-slate-500">
+                      {item.lowStockAt != null && (
+                        <span title={item.lowStockFromZoho ? 'Reorder point from Zoho Books' : 'Low-stock alert level'}>
+                          Reorder at <span className="font-semibold text-slate-700">{item.lowStockAt}</span>
+                        </span>
+                      )}
+                      {item.salePrice != null && (
+                        <span title="Selling price per unit from Zoho Books">
+                          Sale <span className="font-semibold text-slate-700">{inr(item.salePrice)}</span>
+                        </span>
+                      )}
+                    </span>
+                  )}
                   {changed && (
                     <span className="text-[12px] tabular-nums text-slate-500">
                       was {item.quantity}

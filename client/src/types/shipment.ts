@@ -67,6 +67,8 @@ export interface Shipment {
   deliveryAddress?: DeliveryAddress;
   carrierRoute?: CarrierRoute;
   status: ShipmentStatus;
+  /** GST e-way bill for the consignment. */
+  ewayBill?: { number: string; generatedAt: string | null; validUntil: string | null };
   /** When it was actually delivered (from the courier's delivered scan). */
   deliveredAt?: string | null;
   currentLocation: string;
@@ -105,6 +107,7 @@ export interface CreateShipmentInput {
   deliveryAddress?: Partial<DeliveryAddress>;
   /** Only for the few couriers that need more than the AWB to track. */
   trackingExtras?: { postalCode?: string; trackingKey?: string; accountNumber?: string };
+  ewayBill?: { number: string; generatedAt?: string | null; validUntil?: string | null };
 }
 
 export type LabelField =
@@ -138,6 +141,7 @@ export interface LabelDraft {
   uncertainFields: LabelField[];
   notes: string;
   stockMatch: { name: string; productCode: string } | null;
+  ewayBill?: { number: string; generatedAt: string; validUntil: string };
   existingShipmentId: string | null;
 }
 

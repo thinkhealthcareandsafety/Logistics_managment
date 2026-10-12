@@ -14,6 +14,9 @@ const {
   updateSettings,
   sendNow,
   rotateShareToken,
+  refreshMedia,
+  getMediaStatus,
+  zohoImage,
 } = require('../controllers/stock.controller');
 const { requireAuth } = require('../middleware/auth.middleware');
 
@@ -36,6 +39,10 @@ router.delete('/items/:id', removeItem);
 router.post('/items/:id/stock-out', stockOut);
 
 router.post('/count', saveCount);
+
+router.post('/media/refresh', refreshMedia);
+router.get('/media/status', getMediaStatus);
+router.get('/items/:id/zoho-image', zohoImage);
 
 router.patch('/settings', updateSettings);
 router.post('/broadcast', sendNow);

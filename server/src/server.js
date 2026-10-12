@@ -7,6 +7,7 @@ const { initSocket } = require('./sockets');
 const { startRefreshJob } = require('./jobs/refreshShipments.job');
 const { startStockBroadcastJob } = require('./jobs/stockBroadcast.job');
 const { startZohoSyncJob } = require('./jobs/zohoSync.job');
+const { startProductMediaJob } = require('./jobs/productMedia.job');
 const { backfillDeliveredAt } = require('./services/tracking.service');
 
 async function main() {
@@ -21,6 +22,7 @@ async function main() {
   startRefreshJob();
   startStockBroadcastJob();
   startZohoSyncJob();
+  startProductMediaJob();
   require('./services/courierCatalog.service').getCatalog().catch(() => {});
 
   httpServer.listen(env.port, () => {

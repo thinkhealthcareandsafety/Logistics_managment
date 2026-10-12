@@ -96,7 +96,7 @@ function quantityText(item) {
  * WhatsApp renders *text* as bold. Category totals are computed, never typed. The
  * manager's internal notes are never included.
  */
-function buildStockMessage({ categories, items, stockOut = [], hideZero = false, at = new Date() }) {
+function buildStockMessage({ categories, items, stockOut = [], stockIn = [], hideZero = false, at = new Date() }) {
   const { day, time } = istParts(at);
   const lines = [`*STOCK AVAILABLE  ${day}  ${time}*`];
 
@@ -114,6 +114,13 @@ function buildStockMessage({ categories, items, stockOut = [], hideZero = false,
       lines.push(
         `${listPrefix(category.listStyle, idx)}${displayName(item)} - ${quantityText(item)}${extras.map((e) => ` (${e})`).join('')}`
       );
+    });
+  }
+
+  if (stockIn.length > 0) {
+    lines.push('', '*Stock In*');
+    stockIn.forEach((m, idx) => {
+      lines.push(`${idx + 1}. ${m.itemName} - ${m.change}${m.customer ? ` from ${m.customer}` : ''}`);
     });
   }
 
@@ -148,9 +155,22 @@ async function assertNotZohoManaged(items) {
   }
 }
 
+/**
+ * Today's incoming stock: purchases from vendors recorded in Zoho Books (bills) and
+ * new products that arrived with stock. One-time corrections/links are not deliveries.
+ */
+async function stockInToday(at = new Date()) {
+  return StockMovement.find({
+    reason: 'zoho',
+    change: { $gt: 0 },
+    note: { $not: /^(Corrected|Linked)/ },
+    createdAt: { $gte: startOfIstDay(at) },
+  }).sort({ createdAt: 1 });
+}
+
 async function currentMessage(at = new Date()) {
-  const [{ categories, items, settings }, stockOut] = await Promise.all([loadStock(), stockOutToday(at)]);
-  return buildStockMessage({ categories, items, stockOut, hideZero: settings.hideZeroInMessage, at });
+  const [{ categories, items, settings }, stockOut, stockIn] = await Promise.all([loadStock(), stockOutToday(at), stockInToday(at)]);
+  return buildStockMessage({ categories, items, stockOut, stockIn, hideZero: settings.hideZeroInMessage, at });
 }
 
 /**
@@ -373,6 +393,7 @@ module.exports = {
   loadStock,
   buildStockMessage,
   stockOutToday,
+  stockInToday,
   currentMessage,
   splitForWhatsApp,
   applyCount,

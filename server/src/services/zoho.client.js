@@ -162,6 +162,25 @@ async function getItem(conn, itemId) {
   return body.item || {};
 }
 
+/** An item's product photo from Zoho Books, as { data: Buffer, type }. */
+async function getItemImage(conn, itemId) {
+  const run = async (token) =>
+    axios.get(`${conn.apiDomain || defaultApiDomain()}/books/v3/items/${encodeURIComponent(itemId)}/image`, {
+      params: { organization_id: conn.organizationId },
+      headers: { Authorization: `Zoho-oauthtoken ${token}` },
+      responseType: 'arraybuffer',
+      timeout: 20000,
+    });
+  let res;
+  try {
+    res = await run(await accessToken(conn));
+  } catch (err) {
+    if (err.response?.status !== 401) throw err;
+    res = await run(await accessToken(conn, { force: true }));
+  }
+  return { data: Buffer.from(res.data), type: res.headers['content-type'] || 'image/jpeg' };
+}
+
 /** Best effort: tell Zoho to drop the refresh token on disconnect. */
 async function revoke(conn) {
   if (!conn.refreshToken) return;
@@ -179,5 +198,6 @@ module.exports = {
   listOrganizations,
   listItems,
   getItem,
+  getItemImage,
   revoke,
 };

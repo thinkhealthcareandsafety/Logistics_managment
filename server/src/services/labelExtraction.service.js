@@ -46,6 +46,7 @@ const SCHEMA = object({
       enum: ['trackingNumber', 'courier', 'customerName', 'customerPhone', 'customerEmail', 'address', 'pincode', 'productName', 'quantity', 'weightKg', 'freightAmount', 'shippingDate', 'estimatedDelivery'],
     },
   },
+  ewayBill: object({ number: S, generatedAt: S, validUntil: S }),
   notes: S,
 });
 
@@ -73,6 +74,7 @@ Field rules:
 - Use null for anything not on the document. Never guess or invent a value.
 - uncertainFields: list every field you filled but could not read with confidence (blurred, handwritten, cut off, ambiguous digit).
 - isShippingDocument: false if the image is not a shipping document at all; then leave the other fields null.
+- ewayBill: if a GST e-way bill (EWB) appears - often printed on or stapled to the label - its 12-digit number, generation date and "valid upto" date (ISO YYYY-MM-DD, day-first on Indian documents). Otherwise null fields.
 - notes: one short sentence for the person checking the result, only if something needs their attention (e.g. "AWB partly covered by tape - check the last two digits"). Otherwise null.
 
 Courier list (code: name):
@@ -137,7 +139,7 @@ const positive = (v) => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? 
 const stripName = (s) =>
   String(s || '')
     .toLowerCase()
-    .replace(/(courier|couriers|services?|express|logistics|pvt|private|ltd|limited|india|co|inc|llc|gmbh|the)/g, '')
+    .replace(/\b(courier|couriers|services?|express|logistics|pvt|private|ltd|limited|india|co|inc|llc|gmbh|the)\b/g, '')
     .replace(/[^a-z0-9]/g, '');
 
 /**
@@ -230,7 +232,7 @@ async function extractShipmentFromDocument(file) {
   // Trust the code only if it is really in the catalog; otherwise match the printed name.
   let courier = raw.courierCode ? await findCourier(raw.courierCode) : null;
   if (!courier && raw.courierName) courier = await matchCourierByName(raw.courierName);
-  if (!courier && raw.courierName) courier = await matchCourierByAwb(clean(raw.trackingNumber).replace(/s+/g, ''), raw.courierName);
+  if (!courier && raw.courierName) courier = await matchCourierByAwb(clean(raw.trackingNumber).replace(/\s+/g, ''), raw.courierName);
 
   const uncertain = new Set(raw.uncertainFields || []);
   if (!courier && clean(raw.courierName)) uncertain.add('courier');
@@ -259,6 +261,11 @@ async function extractShipmentFromDocument(file) {
     freightAmount: positive(raw.freightAmount),
     shippingDate: isoDate(raw.shippingDate),
     estimatedDelivery: isoDate(raw.estimatedDelivery),
+    ewayBill: {
+      number: (clean(raw.ewayBill?.number).replace(/\s+/g, '').match(/^\d{12}$/) || [''])[0],
+      generatedAt: isoDate(raw.ewayBill?.generatedAt),
+      validUntil: isoDate(raw.ewayBill?.validUntil),
+    },
     uncertainFields: [...uncertain],
     notes: clean(raw.notes),
   };
