@@ -167,6 +167,11 @@ const shipmentSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// Any write empties the ready-made shipment list (utils/shipmentListCache).
+const { bump } = require('../utils/shipmentListCache');
+shipmentSchema.post(['save', 'updateOne', 'updateMany', 'findOneAndUpdate', 'findOneAndDelete', 'deleteOne', 'deleteMany', 'replaceOne'], bump);
+shipmentSchema.post('insertMany', bump);
+
 shipmentSchema.index({ createdBy: 1, isArchived: 1, status: 1 });
 shipmentSchema.index({ trackingNumber: 1, carrierCode: 1 });
 

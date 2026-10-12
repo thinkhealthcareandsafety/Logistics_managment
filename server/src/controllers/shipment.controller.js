@@ -63,6 +63,12 @@ const listShipments = asyncHandler(async (req, res) => {
   // The list only needs each shipment's first, delivered and latest scans (progress,
   // delivery date, attention); the full history loads on the shipment's own page.
   // lean() skips building documents - several times faster for hundreds of rows.
+  const listCache = require('../utils/shipmentListCache');
+  const cacheKey = JSON.stringify(query);
+  const cached = listCache.get(cacheKey);
+  if (cached) return res.type('json').send(cached);
+  const atVersion = listCache.currentVersion();
+
   const shipments = await Shipment.find(query, { trackingExtras: 0, trackingMoreId: 0, __v: 0 }).sort({ createdAt: -1 }).lean();
   for (const s of shipments) {
     const cps = s.checkpoints || [];
@@ -73,7 +79,9 @@ const listShipments = asyncHandler(async (req, res) => {
     }
     if (s.exceptionFollowUp?.notes?.length > 3) s.exceptionFollowUp.notes = s.exceptionFollowUp.notes.slice(-3);
   }
-  res.json({ shipments });
+  const body = JSON.stringify({ shipments });
+  listCache.set(cacheKey, body, atVersion);
+  res.type('json').send(body);
 });
 
 const getShipment = asyncHandler(async (req, res) => {
