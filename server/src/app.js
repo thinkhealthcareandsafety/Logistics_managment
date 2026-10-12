@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const express = require('express');
+const compression = require('compression');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
 const env = require('./config/env');
@@ -23,6 +24,8 @@ const app = express();
 // rate limits see real client IPs and secure cookies work over HTTPS.
 app.set('trust proxy', 1);
 
+// gzip every response - the courier catalogue alone is ~350 KB of JSON, ~40 KB zipped.
+app.use(compression());
 app.use(cors({ origin: env.clientUrl, credentials: true }));
 app.use(express.json({ limit: '1mb' }));
 app.use(cookieParser());

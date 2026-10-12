@@ -103,6 +103,8 @@ export interface CreateShipmentInput {
   weightKg?: number | null;
   freightAmount?: number | null;
   deliveryAddress?: Partial<DeliveryAddress>;
+  /** Only for the few couriers that need more than the AWB to track. */
+  trackingExtras?: { postalCode?: string; trackingKey?: string; accountNumber?: string };
 }
 
 export type LabelField =

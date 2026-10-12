@@ -211,6 +211,9 @@ export function LabelScanner({
             ) : (
               <p className="mt-0.5 text-[12px] leading-snug text-slate-500">Give it a quick look, then add the shipment.</p>
             )}
+            {state.draft.carrierCode && (
+              <p className="mt-0.5 text-[12px] leading-snug text-emerald-700">Courier filled in from the label: {state.draft.carrierName}</p>
+            )}
             {state.draft.printedCourierName && !state.draft.carrierCode && (
               <p className="mt-0.5 text-[12px] leading-snug text-amber-800">
                 The label says “{state.draft.printedCourierName}” - pick the matching courier below.

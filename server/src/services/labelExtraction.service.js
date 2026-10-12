@@ -2,7 +2,7 @@ const axios = require('axios');
 const env = require('../config/env');
 const logger = require('../config/logger');
 const ApiError = require('../utils/ApiError');
-const { getCatalog, findCourier } = require('./courierCatalog.service');
+const { getCatalog, findCourier, detectCouriers } = require('./courierCatalog.service');
 
 /**
  * Reads a photo of a shipping label, courier booking slip or consignment note with
@@ -64,7 +64,7 @@ The sender is usually ThinkHealth itself. The customer is the consignee / receiv
 
 Field rules:
 - trackingNumber: the courier's AWB / consignment / docket / tracking number, exactly as printed, without spaces. It is usually the number under or beside the barcode. Do not use an invoice number, order number, reference number or pincode. If several candidates exist, pick the one labelled AWB / CN / Docket / Tracking.
-- courierCode: pick the matching code from the courier list below, judging by the logo, company name or website on the document. Use null if the courier is not in the list or you cannot tell. courierName: the courier's name as printed, or null.
+- courierCode: pick the matching code from the Indian courier list below, judging by the logo, company name or website on the document. Use null if it is not in the list or you cannot tell. courierName: ALWAYS give the courier's company name as printed (any courier worldwide, e.g. "FedEx", "DHL Express", "Aramex"), or null if none is visible - it is matched against ~1,700 couriers afterwards.
 - customer.phone: digits only, keep a leading country code if printed (e.g. 919876543210 or 9876543210).
 - address.line: street, building and area of the consignee, without city, state and pincode. address.pincode: the 6-digit Indian PIN code.
 - product: the item or contents description and the number of pieces/boxes if stated.
@@ -134,22 +134,52 @@ const clean = (v) => {
 const isoDate = (v) => (/^\d{4}-\d{2}-\d{2}$/.test(clean(v)) ? clean(v) : '');
 const positive = (v) => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : null);
 
-/** The model's free-text courier name -> a catalog courier, when its code was missing or wrong. */
+const stripName = (s) =>
+  String(s || '')
+    .toLowerCase()
+    .replace(/(courier|couriers|services?|express|logistics|pvt|private|ltd|limited|india|co|inc|llc|gmbh|the)/g, '')
+    .replace(/[^a-z0-9]/g, '');
+
+/**
+ * The printed courier name -> a courier from TrackingMore's whole catalogue (~1,700,
+ * any country). Exact name first, then containment; Indian couriers win ties because
+ * that's who this business mostly ships with.
+ */
 async function matchCourierByName(name) {
-  const strip = (s) =>
-    String(s || '')
-      .toLowerCase()
-      .replace(/\b(courier|couriers|services?|express|logistics|pvt|private|ltd|limited|india|co)\b/g, '')
-      .replace(/[^a-z0-9]/g, '');
-  const wanted = strip(name);
+  const wanted = stripName(name);
   if (wanted.length < 3) return null;
   const list = await getCatalog();
-  const indian = list.filter((c) => c.country === 'IN');
-  return (
-    indian.find((c) => strip(c.name) === wanted) ||
-    indian.find((c) => strip(c.name).includes(wanted) || wanted.includes(strip(c.name))) ||
-    null
-  );
+  const rank = (c) => (c.country === 'IN' ? 0 : 1);
+  const exact = list.filter((c) => stripName(c.name) === wanted).sort((x, y) => rank(x) - rank(y));
+  if (exact.length) return exact[0];
+  const partial = list
+    .filter((c) => {
+      const n = stripName(c.name);
+      return n.length >= 3 && (n.includes(wanted) || wanted.includes(n));
+    })
+    .sort((x, y) => rank(x) - rank(y) || Math.abs(stripName(x.name).length - wanted.length) - Math.abs(stripName(y.name).length - wanted.length));
+  return partial[0] || null;
+}
+
+/**
+ * Last resort when the label's courier name didn't match: ask TrackingMore which
+ * couriers use this AWB's format, and take one only if its name agrees with what's
+ * printed (the format guess alone is unreliable - it once picked Delhivery for a
+ * Shree Maruti AWB).
+ */
+async function matchCourierByAwb(awb, printedName) {
+  if (!awb || awb.length < 6) return null;
+  try {
+    const guesses = await detectCouriers(awb);
+    const printed = stripName(printedName);
+    if (!printed) return null;
+    return guesses.find((c) => {
+      const n = stripName(c.name);
+      return n && (n.includes(printed) || printed.includes(n));
+    }) || null;
+  } catch {
+    return null;
+  }
 }
 
 async function extractShipmentFromDocument(file) {
@@ -200,6 +230,7 @@ async function extractShipmentFromDocument(file) {
   // Trust the code only if it is really in the catalog; otherwise match the printed name.
   let courier = raw.courierCode ? await findCourier(raw.courierCode) : null;
   if (!courier && raw.courierName) courier = await matchCourierByName(raw.courierName);
+  if (!courier && raw.courierName) courier = await matchCourierByAwb(clean(raw.trackingNumber).replace(/s+/g, ''), raw.courierName);
 
   const uncertain = new Set(raw.uncertainFields || []);
   if (!courier && clean(raw.courierName)) uncertain.add('courier');

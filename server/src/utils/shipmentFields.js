@@ -39,6 +39,14 @@ function commercialFields(body = {}) {
   if (weightKg !== undefined) out.weightKg = weightKg;
   if (freightAmount !== undefined) out.freightAmount = freightAmount;
   if (deliveryAddress !== undefined) out.deliveryAddress = deliveryAddress;
+  const extras = body.trackingExtras;
+  if (extras && typeof extras === 'object') {
+    out.trackingExtras = {
+      postalCode: String(extras.postalCode || '').trim().slice(0, 20),
+      trackingKey: String(extras.trackingKey || '').trim().slice(0, 100),
+      accountNumber: String(extras.accountNumber || '').trim().slice(0, 100),
+    };
+  }
   return out;
 }
 

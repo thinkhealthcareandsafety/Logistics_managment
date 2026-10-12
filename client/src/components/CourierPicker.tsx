@@ -68,10 +68,13 @@ export function CourierPicker({
   value,
   onChange,
   trackingNumber,
+  searchHint,
 }: {
   id?: string;
   value: string;
   onChange: (code: string) => void;
+  /** A courier name read from a label that didn't match the catalogue - offered as a one-click search. */
+  searchHint?: string;
   /** Enables "Suggest from AWB". */
   trackingNumber?: string;
 }) {
@@ -180,8 +183,6 @@ export function CourierPicker({
     }
   }
 
-  const needs = selected?.requiredFields ?? [];
-  const unsupported = needs.filter((f) => f === 'tracking_key' || f === 'tracking_account_number');
 
   return (
     <div ref={rootRef} className="relative">
@@ -326,12 +327,19 @@ export function CourierPicker({
         </div>
       )}
 
-      {needs.includes('tracking_postal_code') && (
-        <p className="mt-1.5 text-[12px] text-amber-700">This courier needs the delivery pincode to track - fill it in below.</p>
-      )}
-      {unsupported.length > 0 && (
-        <p className="mt-1.5 text-[12px] text-red-600">
-          This courier also needs an account number or tracking key, which can’t be sent yet - tracking may not start.
+      {searchHint && !open && (
+        <p className="mt-1.5 text-[12px] text-amber-800">
+          The label says “{searchHint}”.{' '}
+          <button
+            type="button"
+            onClick={() => {
+              setQuery(searchHint);
+              setOpen(true);
+            }}
+            className="font-medium text-brand-700 underline underline-offset-2 hover:text-brand-900"
+          >
+            Search couriers for it
+          </button>
         </p>
       )}
     </div>

@@ -4,6 +4,7 @@ import { useCreateShipment } from '../hooks/useShipments';
 import { FormField, Modal } from './Modal';
 import { AddressFields, EMPTY_ADDRESS } from './AddressFields';
 import { CourierPicker } from './CourierPicker';
+import { useCarriers } from '../hooks/useCarriers';
 import { LabelScanner } from './LabelScanner';
 import type { DeliveryAddress, LabelDraft, LabelField } from '../types/shipment';
 import { Spinner } from './ui/Loading';
@@ -92,6 +93,15 @@ export function AddShipmentDialog({ onClose, initialLabel }: { onClose: () => vo
   });
   const [address, setAddress] = useState<DeliveryAddress>(EMPTY_ADDRESS);
   const [carrierCode, setCarrierCode] = useState(readLastCourier);
+  // The courier name a scanned label printed, when it matched nothing in the catalogue.
+  const [printedCourier, setPrintedCourier] = useState('');
+  // The few extra details some couriers need besides the AWB (TrackingMore's required fields).
+  const [extras, setExtras] = useState({ postalCode: '', trackingKey: '', accountNumber: '' });
+  const { byCode } = useCarriers();
+  const needs = byCode.get(carrierCode)?.requiredFields ?? [];
+  const needsPostcode = needs.includes('tracking_postal_code');
+  const needsKey = needs.includes('tracking_key');
+  const needsAccount = needs.includes('tracking_account_number');
   // Fields the label reader filled but wasn't sure of; cleared as each one is edited.
   const [unsure, setUnsure] = useState<Set<LabelField>>(new Set());
 
@@ -104,6 +114,7 @@ export function AddShipmentDialog({ onClose, initialLabel }: { onClose: () => vo
   function applyDraft(d: LabelDraft) {
     setForm((prev) => ({ ...prev, ...draftToForm(d) }));
     if (d.carrierCode) setCarrierCode(d.carrierCode);
+    setPrintedCourier(d.carrierCode ? '' : d.printedCourierName);
     const a = d.deliveryAddress;
     if (a.line || a.city || a.state || a.pincode) {
       setAddress((prev) => ({
@@ -141,6 +152,15 @@ export function AddShipmentDialog({ onClose, initialLabel }: { onClose: () => vo
       weightKg: toNumberOrNull(form.weightKg),
       freightAmount: toNumberOrNull(form.freight),
       deliveryAddress: address,
+      ...(needsPostcode || needsKey || needsAccount
+        ? {
+            trackingExtras: {
+              postalCode: needsPostcode ? extras.postalCode.trim() || address.pincode : '',
+              trackingKey: needsKey ? extras.trackingKey.trim() : '',
+              accountNumber: needsAccount ? extras.accountNumber.trim() : '',
+            },
+          }
+        : {}),
       shippingDate: form.shippingDate || undefined,
       estimatedDelivery: form.estimatedDelivery || undefined,
     }).then(
@@ -200,13 +220,59 @@ export function AddShipmentDialog({ onClose, initialLabel }: { onClose: () => vo
                 value={carrierCode}
                 onChange={(code) => {
                   setCarrierCode(code);
+                  setPrintedCourier('');
                   setUnsure((prev) => new Set([...prev].filter((f) => f !== 'courier')));
                 }}
                 trackingNumber={form.trackingNumber}
+                searchHint={printedCourier || undefined}
               />
             </div>
           </FormField>
         </div>
+
+        {/* Only for the ~5% of couriers that need more than the AWB to track. */}
+        {(needsPostcode || needsKey || needsAccount) && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50/60 p-4">
+            <p className="text-[13px] font-semibold text-amber-900">
+              {byCode.get(carrierCode)?.name ?? 'This courier'} needs a little more to track this shipment
+            </p>
+            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+              {needsPostcode && (
+                <FormField label="Destination postcode" htmlFor="ship-extra-postcode" hint="Any country's format. Defaults to the delivery pincode below.">
+                  <input
+                    id="ship-extra-postcode"
+                    value={extras.postalCode}
+                    onChange={(e) => setExtras((x) => ({ ...x, postalCode: e.target.value }))}
+                    placeholder={address.pincode || 'e.g. SW1A 1AA'}
+                    className="input"
+                  />
+                </FormField>
+              )}
+              {needsKey && (
+                <FormField label="Tracking key" htmlFor="ship-extra-key" hint="From the courier's booking receipt.">
+                  <input
+                    id="ship-extra-key"
+                    required
+                    value={extras.trackingKey}
+                    onChange={(e) => setExtras((x) => ({ ...x, trackingKey: e.target.value }))}
+                    className="input"
+                  />
+                </FormField>
+              )}
+              {needsAccount && (
+                <FormField label="Account number" htmlFor="ship-extra-account" hint="Your account number with this courier.">
+                  <input
+                    id="ship-extra-account"
+                    required
+                    value={extras.accountNumber}
+                    onChange={(e) => setExtras((x) => ({ ...x, accountNumber: e.target.value }))}
+                    className="input"
+                  />
+                </FormField>
+              )}
+            </div>
+          </div>
+        )}
 
         <Section title="Product and charges">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">

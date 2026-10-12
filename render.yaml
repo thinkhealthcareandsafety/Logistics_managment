@@ -5,7 +5,6 @@ services:
   - type: web
     name: thinkhealth-logistics
     runtime: node
-    plan: free
     region: singapore
     buildCommand: npm run build
     startCommand: npm start

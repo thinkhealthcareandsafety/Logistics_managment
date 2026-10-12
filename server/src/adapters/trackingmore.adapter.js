@@ -45,11 +45,17 @@ function extractRoute(tracking) {
 async function requiredExtras(shipment) {
   const courier = await findCourier(shipment.carrierCode);
   const need = new Set(courier?.requiredFields || []);
+  const extras = shipment.trackingExtras || {};
   const extra = {};
-  if (need.has('tracking_postal_code')) extra.tracking_postal_code = shipment.deliveryAddress?.pincode || '';
+  if (need.has('tracking_postal_code')) {
+    // Any country's postcode (typed for the courier), else the Indian delivery pincode.
+    extra.tracking_postal_code = extras.postalCode || shipment.deliveryAddress?.pincode || '';
+  }
   if (need.has('tracking_ship_date') && shipment.shippingDate) {
     extra.tracking_ship_date = new Date(shipment.shippingDate).toISOString().slice(0, 10).replace(/-/g, '');
   }
+  if (need.has('tracking_key') && extras.trackingKey) extra.tracking_key = extras.trackingKey;
+  if (need.has('tracking_account_number') && extras.accountNumber) extra.tracking_account_number = extras.accountNumber;
   return extra;
 }
 

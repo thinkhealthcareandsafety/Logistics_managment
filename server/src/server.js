@@ -21,6 +21,7 @@ async function main() {
   startRefreshJob();
   startStockBroadcastJob();
   startZohoSyncJob();
+  require('./services/courierCatalog.service').getCatalog().catch(() => {});
 
   httpServer.listen(env.port, () => {
     logger.info(`Server listening on port ${env.port} [${env.nodeEnv}]`);

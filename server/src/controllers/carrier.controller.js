@@ -29,6 +29,8 @@ const FEATURED_IN = [
 /** Staff: the whole catalog for the courier picker (~1,700 rows; the client caches it). */
 const listCarriers = asyncHandler(async (req, res) => {
   const catalog = await getCatalog();
+  // Changes rarely; let the browser reuse it for an hour.
+  res.set('Cache-Control', 'private, max-age=3600');
   res.json({ carriers: catalog, featured: FEATURED_IN, defaultCode: DEFAULT_CARRIER_CODE });
 });
 

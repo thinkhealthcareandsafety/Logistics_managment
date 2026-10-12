@@ -1,4 +1,6 @@
-import { Suspense, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { carriersQuery } from '../hooks/useCarriers';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { PageLoader } from './ui/Loading';
 import clsx from 'clsx';
@@ -25,6 +27,13 @@ export function Layout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const { pathname } = useLocation();
+
+  // Load the courier catalogue in the background right after sign-in, so the
+  // courier picker in "Add shipment" is ready the moment it's opened.
+  const queryClient = useQueryClient();
+  useEffect(() => {
+    if (!queryClient.getQueryData(carriersQuery.queryKey)) queryClient.prefetchQuery(carriersQuery);
+  }, [queryClient]);
 
   const [signingOut, setSigningOut] = useState(false);
   async function signOut() {

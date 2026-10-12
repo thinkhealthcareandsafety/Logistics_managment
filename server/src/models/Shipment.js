@@ -97,6 +97,17 @@ const shipmentSchema = new mongoose.Schema(
     freightAmount: { type: Number, min: 0, default: null },
 
     deliveryAddress: { type: deliveryAddressSchema, default: () => ({}) },
+
+    /**
+     * Extra details a few couriers on TrackingMore need besides the AWB (88 of ~1,700):
+     * a destination postcode in any country's format, a tracking key, or an account
+     * number. Sent when the tracking is registered. Empty for everyone else.
+     */
+    trackingExtras: {
+      postalCode: { type: String, default: '', trim: true, maxlength: 20 },
+      trackingKey: { type: String, default: '', trim: true, maxlength: 100 },
+      accountNumber: { type: String, default: '', trim: true, maxlength: 100 },
+    },
     carrierRoute: { type: carrierRouteSchema, default: () => ({}) },
 
     status: { type: String, enum: STATUSES, default: 'pending' },
