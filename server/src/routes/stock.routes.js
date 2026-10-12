@@ -13,6 +13,7 @@ const {
   saveCount,
   updateSettings,
   sendNow,
+  getWhatsAppStatus,
   rotateShareToken,
   suggestDuplicates,
   mergeItems,
@@ -56,6 +57,7 @@ router.get('/items/:id/zoho-image', zohoImage);
 
 router.patch('/settings', updateSettings);
 router.post('/broadcast', sendNow);
+router.get('/whatsapp/status', getWhatsAppStatus);
 router.post('/share-token/rotate', rotateShareToken);
 
 module.exports = router;

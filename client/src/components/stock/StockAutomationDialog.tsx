@@ -100,8 +100,8 @@ export function StockAutomationDialog({ settings, onClose }: { settings: StockSe
           )}
           {!settings.whatsappConfigured && (
             <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-[12px] leading-relaxed text-amber-900 ring-1 ring-inset ring-amber-200">
-              WhatsApp sending needs the Gupshup keys set on the server (GUPSHUP_API_KEY, GUPSHUP_SOURCE_NUMBER,
-              GUPSHUP_APP_NAME). You can save the schedule now - it starts sending once they’re added.
+              WhatsApp sending needs the Anantya key set on the server (ANANTYA_API_KEY). You can save the schedule
+              now - it starts sending once it’s added.
             </p>
           )}
           <p className="mt-3 text-[12px] leading-relaxed text-slate-500">

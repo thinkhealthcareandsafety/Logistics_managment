@@ -8,7 +8,7 @@ const { newShareToken } = require('../models/StockSettings');
 const User = require('../models/User');
 const ApiError = require('../utils/ApiError');
 const asyncHandler = require('../utils/asyncHandler');
-const { isWhatsAppConfigured } = require('../services/whatsapp.service');
+const { isWhatsAppConfigured, whatsAppStatus } = require('../services/whatsapp.service');
 const { LIST_STYLES } = require('../models/StockCategory');
 const {
   loadStock,
@@ -262,10 +262,14 @@ const sendNow = asyncHandler(async (req, res) => {
   if (!isWhatsAppConfigured()) {
     throw new ApiError(
       503,
-      'WhatsApp sending isn’t connected yet - add the Gupshup keys on the server, or use "Open in WhatsApp"'
+      'WhatsApp sending isn’t connected yet - add ANANTYA_API_KEY on the server, or use "Open in WhatsApp"'
     );
   }
   res.json(await broadcastStock());
+});
+
+const getWhatsAppStatus = asyncHandler(async (req, res) => {
+  res.json({ whatsapp: await whatsAppStatus() });
 });
 
 const rotateShareToken = asyncHandler(async (req, res) => {
@@ -432,6 +436,7 @@ module.exports = {
   saveCount,
   updateSettings,
   sendNow,
+  getWhatsAppStatus,
   rotateShareToken,
   getPublicStock,
 };

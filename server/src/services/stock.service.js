@@ -5,7 +5,8 @@ const StockSettings = require('../models/StockSettings');
 const User = require('../models/User');
 const ApiError = require('../utils/ApiError');
 const logger = require('../config/logger');
-const { sendWhatsAppText } = require('./whatsapp.service');
+const env = require('../config/env');
+const { sendWhatsAppText, templateReady } = require('./whatsapp.service');
 const { isZohoActive } = require('./zohoSync.service');
 
 const TIME_ZONE = 'Asia/Kolkata';
@@ -350,11 +351,35 @@ async function deductForShipment(shipment, userId) {
 
 // ─────────────────────────── Broadcasting ───────────────────────────
 
+/** stock_update template values: date, a one-line summary, and the live stock link. */
+async function stockTemplate(settings, at = new Date()) {
+  const [{ items }, stockIn] = await Promise.all([loadStock(), stockInToday(at)]);
+  const out = items.filter((i) => (i.quantity || 0) <= 0).length;
+  const low = items.filter((i) => i.quantity > 0 && i.lowStockAt != null && i.quantity <= i.lowStockAt).length;
+  const date = new Intl.DateTimeFormat('en-IN', { timeZone: TIME_ZONE, day: 'numeric', month: 'short', year: 'numeric' }).format(at);
+  const summary = `${items.length} items - ${low} low, ${out} out of stock, ${stockIn.length} stock in today`;
+  return { kind: 'stock', attributes: [date, summary, `${env.clientUrl}/stock/live/${settings.shareToken}`] };
+}
+
 /** Sends the current stock message to every configured recipient, split to fit WhatsApp. */
 async function broadcastStock({ recipients } = {}) {
   const settings = await StockSettings.get();
   const to = (recipients || settings.broadcast.recipients).filter(Boolean);
   if (to.length === 0) throw new ApiError(400, 'Add at least one WhatsApp number to send to');
+
+  // With an approved stock_update template (Anantya), each person gets one short template
+  // message - {{1}} date, {{2}} summary, {{3}} live stock link - which WhatsApp delivers
+  // any time. Otherwise the full list goes as text, split to fit.
+  if (await templateReady('stock')) {
+    const template = await stockTemplate(settings);
+    const results = await Promise.all(to.map((number) => sendWhatsAppText({ to: number, text: '', template, context: 'stockBroadcast' })));
+    const sent = results.filter(Boolean).length;
+    if (sent > 0) {
+      settings.broadcast.lastSentAt = new Date();
+      await settings.save();
+    }
+    return { sent, failed: to.length - sent, total: to.length, messagesPerRecipient: 1 };
+  }
 
   const parts = splitForWhatsApp(await currentMessage());
   const results = await Promise.all(

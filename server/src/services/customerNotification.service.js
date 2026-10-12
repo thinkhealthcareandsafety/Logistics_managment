@@ -52,7 +52,7 @@ async function notifyCustomerDelivered(shipment) {
     phone ? sendWhatsAppDeliveryMessage({ to: phone, shipment, trackingUrl, feedbackUrl }) : null,
   ]);
 
-  // Only stamp the shipment if something actually went out. If SMTP and Gupshup are
+  // Only stamp the shipment if something actually went out. If email and WhatsApp are
   // both unconfigured the customer got nothing, and the retry below tries again
   // rather than silently marking them as notified.
   const delivered = results.some((r) => r.status === 'fulfilled' && r.value === true);
