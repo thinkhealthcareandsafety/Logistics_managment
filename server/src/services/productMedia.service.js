@@ -128,12 +128,41 @@ async function readProductPage(product) {
   };
 }
 
-async function inBatches(list, size, fn) {
-  const out = [];
-  for (let i = 0; i < list.length; i += size) {
-    out.push(...(await Promise.all(list.slice(i, i + size).map((x) => fn(x).catch(() => null)))));
+const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/** Wix throttles bursts from servers - retry a page a few times, backing off. */
+async function readWithRetry(product, tries = 3) {
+  for (let attempt = 1; attempt <= tries; attempt += 1) {
+    try {
+      return await readProductPage(product);
+    } catch (err) {
+      if (attempt === tries) throw err;
+      await pause(1500 * attempt);
+    }
   }
-  return out.filter(Boolean);
+  return null;
+}
+
+/** A readable name from the page address: ".../product/philips-aed-wall-bracket-m3857a". */
+const titleFromUrl = (url) => decodeURIComponent(url.split('/product/')[1] || '').replace(/[-_]+/g, ' ');
+
+/**
+ * Reads every product page, gently. A page that still won't load keeps its sitemap
+ * photos and a name from its address, so it can still match on photos.
+ */
+async function readAll(products, size = 2) {
+  const out = [];
+  for (let i = 0; i < products.length; i += size) {
+    const batch = products.slice(i, i + size);
+    const read = await Promise.all(
+      batch.map((p) =>
+        readWithRetry(p).catch(() => ({ ...p, title: p.title || titleFromUrl(p.url), brochures: [], videos: [], partial: true }))
+      )
+    );
+    out.push(...read.filter(Boolean));
+    await pause(400);
+  }
+  return out;
 }
 
 let running = null;
@@ -148,7 +177,7 @@ async function syncProductMedia({ dryRun = false } = {}) {
   running = (async () => {
     try {
       if (dryRun) lastRun.preview = [];
-      const products = await inBatches(await listProducts(), 4, readProductPage);
+      const products = await readAll(await listProducts());
       const items = await StockItem.find({ isArchived: false });
       let matched = 0;
       for (const item of items) {
@@ -180,7 +209,7 @@ async function syncProductMedia({ dryRun = false } = {}) {
         await item.save();
         matched += 1;
       }
-      lastRun = { at: new Date(), products: products.length, matched, error: '', preview: dryRun ? lastRun.preview : undefined };
+      lastRun = { at: new Date(), products: products.length, pagesRead: products.filter((p) => !p.partial).length, matched, error: '', preview: dryRun ? lastRun.preview : undefined };
       logger.info(`Product media: ${products.length} store products, ${matched} stock lines matched`);
       return lastRun;
     } catch (err) {
