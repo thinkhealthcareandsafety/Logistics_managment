@@ -132,3 +132,9 @@ export function destinationMismatch(s: Shipment): string | null {
   const where = [s.carrierRoute?.destinationCity, courier].filter(Boolean).join(', ');
   return `The courier shows this going to ${where}, but the delivery address is in ${entered}.`;
 }
+
+/** GST: consignments worth ₹50,000 or more need an e-way bill. */
+export const EWAY_BILL_THRESHOLD = 50000;
+export function ewayBillMissing(s: Shipment): boolean {
+  return !s.ewayBill?.number && (s.booking?.shipmentValue ?? 0) >= EWAY_BILL_THRESHOLD;
+}

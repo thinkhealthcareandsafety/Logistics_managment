@@ -182,4 +182,81 @@ async function trackLive(ids) {
   logger.info(`History import: tracked ${ids.length} live shipment(s)`);
 }
 
-module.exports = { importHistory };
+// Delivered with no delivery date (the sheet left it blank): ask the courier.
+const HAND_DELIVERED = ['porter', 'self'];
+const NOT_TRACKABLE = ['bus', 'transport', 'other', 'skyking-india', ...HAND_DELIVERED];
+const backfill = { running: false, startedAt: null, finishedAt: null, total: 0, done: 0, found: 0, sameDay: 0, notFound: [] };
+
+function backfillStatus() {
+  return { ...backfill, notFound: backfill.notFound.slice(0, 50) };
+}
+
+async function backfillDeliveryDates(userId) {
+  if (backfill.running) return backfillStatus();
+  const { getAdapterForCarrier } = require('../adapters');
+  const { syncDeliveredAt } = require('../utils/deliveredAt');
+  const shipments = await Shipment.find({ createdBy: userId, status: 'delivered', deliveredAt: null });
+  Object.assign(backfill, { running: true, startedAt: new Date(), finishedAt: null, total: shipments.length, done: 0, found: 0, sameDay: 0, notFound: [] });
+
+  const setDelivered = (shipment, at, how) => {
+    shipment.checkpoints.push({ status: 'delivered', statusRaw: how, description: `Delivered (${how})`, checkpointTime: at, source: 'manual' });
+    shipment.checkpoints.sort((a, b) => new Date(a.checkpointTime) - new Date(b.checkpointTime));
+    shipment.status = 'delivered';
+    syncDeliveredAt(shipment);
+  };
+
+  const run = async () => {
+    const limit = pLimit(3);
+    await Promise.allSettled(
+      shipments.map((shipment) =>
+        limit(async () => {
+          try {
+            if (HAND_DELIVERED.includes(shipment.carrierCode) && shipment.shippingDate) {
+              setDelivered(shipment, shipment.shippingDate, 'hand delivery, same day');
+              backfill.sameDay += 1;
+            } else if (!NOT_TRACKABLE.includes(shipment.carrierCode) && /\d{6,}/.test(shipment.trackingNumber)) {
+              const { checkpoints, route } = await getAdapterForCarrier(shipment.carrierCode).refreshTracking(shipment);
+              const scan = [...checkpoints].reverse().find((c) => c.status === 'delivered');
+              const at = scan?.checkpointTime || route?.deliveredAt;
+              if (route && Object.entries(route).some(([k, v]) => k !== 'weightKg' && v)) {
+                const { weightKg, ...rest } = route;
+                shipment.carrierRoute = { ...rest, fetchedAt: new Date() };
+              }
+              if (at && checkpoints.length && checkpoints[checkpoints.length - 1].status === 'delivered') {
+                // The courier's own history, start to finish, replaces the sheet's two lines.
+                shipment.checkpoints = checkpoints;
+                shipment.currentLocation = checkpoints[checkpoints.length - 1].location || shipment.currentLocation;
+                syncDeliveredAt(shipment);
+                backfill.found += 1;
+              } else if (at) {
+                setDelivered(shipment, at, 'courier delivery date');
+                backfill.found += 1;
+              } else {
+                backfill.notFound.push(shipment.trackingNumber);
+              }
+              shipment.lastCheckedAt = new Date();
+            } else {
+              backfill.notFound.push(shipment.trackingNumber);
+            }
+            await shipment.save();
+          } catch (err) {
+            backfill.notFound.push(shipment.trackingNumber);
+            logger.warn(`Delivery-date backfill ${shipment.trackingNumber}: ${err.message}`);
+          } finally {
+            backfill.done += 1;
+          }
+        })
+      )
+    );
+  };
+  run()
+    .catch((err) => logger.error(`Delivery-date backfill failed: ${err.message}`))
+    .finally(() => {
+      backfill.running = false;
+      backfill.finishedAt = new Date();
+      logger.info(`Delivery-date backfill: ${backfill.found} from courier, ${backfill.sameDay} same-day, ${backfill.notFound.length} not found`);
+    });
+  return backfillStatus();
+}
+
+module.exports = { importHistory, cleanBooking, backfillDeliveryDates, backfillStatus };

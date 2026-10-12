@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { shipmentsApi, type ShipmentFilters } from '../api/shipments';
-import type { CreateShipmentInput, Shipment } from '../types/shipment';
+import type { CreateShipmentInput, Shipment, ShipmentUpdate } from '../types/shipment';
+import { persisted } from '../utils/persistedQuery';
 
 /**
  * Courier updates (status, delivered date) are pushed over the socket the moment the
@@ -13,7 +14,7 @@ const BACKSTOP_POLL_MS = 60_000;
 export function useShipments(filters: ShipmentFilters) {
   return useQuery({
     queryKey: ['shipments', filters],
-    queryFn: () => shipmentsApi.list(filters),
+    ...persisted(`shipments.${JSON.stringify(filters)}`, () => shipmentsApi.list(filters)),
     refetchInterval: BACKSTOP_POLL_MS,
   });
 }
@@ -44,7 +45,7 @@ export function useCreateShipment() {
 export function useUpdateShipment() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, data }: { id: string; data: Partial<Shipment> & { isBeingFollowedUp?: boolean } }) =>
+    mutationFn: ({ id, data }: { id: string; data: ShipmentUpdate }) =>
       shipmentsApi.update(id, data),
     onSuccess: (shipment) => {
       queryClient.invalidateQueries({ queryKey: ['shipments'] });

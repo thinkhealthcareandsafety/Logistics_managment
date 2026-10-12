@@ -33,19 +33,36 @@ function findEwayBill(invoice) {
   return hits[0] || '';
 }
 
+// Zoho Books allows ~100 API calls a minute and a daily cap, so invoice details are
+// fetched a batch at a time; the 15-minute sync works through a backlog in a few runs.
+const DETAILS_PER_RUN = 120;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/** "2026-01-282, 2026-01-315" -> both numbers, normalised. */
+const invoiceNumbers = (s) =>
+  String(s?.booking?.invoiceNumber || '')
+    .split(/[,&/\\]+|\s+and\s+/i)
+    .map(norm)
+    .filter((n) => n.length >= 5);
+
 async function matchInvoices() {
   const conn = await ZohoConnection.get();
   if (!conn.isConnected) return { skipped: 'not connected' };
-  const since = new Date(Date.now() - 60 * DAY);
+  const recent = new Date(Date.now() - 60 * DAY);
+  // Recent shipments, plus any shipment with an invoice number (the master-sheet history).
   const shipments = await Shipment.find({
-    createdAt: { $gte: since },
     'zohoInvoice.invoiceId': { $in: ['', null] },
-    $or: [{ freightAmount: null }, { 'ewayBill.number': { $in: ['', null] } }],
-  });
+    $and: [
+      { $or: [{ freightAmount: null }, { 'ewayBill.number': { $in: ['', null] } }] },
+      { $or: [{ createdAt: { $gte: recent } }, { 'booking.invoiceNumber': { $nin: ['', null] } }] },
+    ],
+    invoiceCheckedAt: { $in: [null] },
+  }).sort({ shippingDate: -1 });
   if (!shipments.length) return { matched: 0 };
+  const oldest = shipments.reduce((min, s) => Math.min(min, new Date(s.shippingDate || s.createdAt).getTime()), Date.now());
   let invoices;
   try {
-    invoices = await zoho.listInvoices(conn, { from: day(new Date(since.getTime() - 3 * DAY)), to: day(new Date()) });
+    invoices = await zoho.listInvoices(conn, { from: day(new Date(oldest - 30 * DAY)), to: day(new Date()) });
     conn.invoiceError = '';
   } catch (err) {
     conn.invoiceError = /scope|authori[sz]/i.test(err.message)
@@ -57,21 +74,27 @@ async function matchInvoices() {
     await conn.save();
     return { error: conn.invoiceError };
   }
+  const byNumber = new Map(invoices.map((i) => [norm(i.invoice_number), i]));
+  const findByNumber = (n) => byNumber.get(n) || invoices.find((i) => norm(i.invoice_number).endsWith(n));
 
   let matched = 0;
   let freightSet = 0;
   let ewbSet = 0;
+  let details = 0;
   for (const s of shipments) {
+    if (details >= DETAILS_PER_RUN) break;
     const awb = norm(s.trackingNumber);
     // The invoice number from the master sheet is the surest link, then the AWB on the invoice.
-    const invNo = norm(s.booking?.invoiceNumber);
-    let inv = invNo ? invoices.find((i) => norm(i.invoice_number) === invNo) : null;
-    let matchedBy = inv ? 'invoice number' : '';
-    if (!inv) {
-      inv = invoices.find((i) => awb && [i.reference_number, i.notes].some((f) => norm(f).includes(awb)));
-      matchedBy = inv ? 'awb' : '';
+    let found = invoiceNumbers(s).map(findByNumber).filter(Boolean);
+    let matchedBy = found.length ? 'invoice number' : '';
+    if (!found.length) {
+      const inv = invoices.find((i) => awb.length >= 6 && [i.reference_number, i.notes].some((f) => norm(f).includes(awb)));
+      if (inv) {
+        found = [inv];
+        matchedBy = 'awb';
+      }
     }
-    if (!inv && s.customerInfo?.name) {
+    if (!found.length && s.customerInfo?.name) {
       const cust = norm(s.customerInfo.name);
       const shipped = new Date(s.shippingDate || s.createdAt).getTime();
       const candidates = invoices.filter((i) => {
@@ -79,24 +102,39 @@ async function matchInvoices() {
         return c && cust && (c.includes(cust) || cust.includes(c)) && Math.abs(new Date(i.date).getTime() - shipped) <= 3 * DAY;
       });
       if (candidates.length === 1) {
-        inv = candidates[0];
+        found = candidates;
         matchedBy = 'customer+date';
       }
     }
-    if (!inv) continue;
-    let full = inv;
-    try {
-      full = await zoho.getInvoice(conn, inv.invoice_id);
-    } catch {
-      // list fields are enough for the number; freight may be missing
+    if (!found.length) {
+      // Nothing in Zoho for it - don't look again every 15 minutes (recent ones keep trying).
+      if (new Date(s.createdAt) < recent) await Shipment.updateOne({ _id: s._id }, { $set: { invoiceCheckedAt: new Date() } });
+      continue;
     }
-    s.zohoInvoice = { invoiceId: String(inv.invoice_id), number: inv.invoice_number || '', matchedBy };
-    const freight = Number(full.shipping_charge);
-    if (s.freightAmount == null && Number.isFinite(freight) && freight > 0) {
-      s.freightAmount = freight;
+    let freight = 0;
+    let ewb = '';
+    for (const inv of found) {
+      let full = inv;
+      try {
+        details += 1;
+        full = await zoho.getInvoice(conn, inv.invoice_id);
+        await sleep(650);
+      } catch {
+        // list fields are enough for the number; freight may be missing
+      }
+      const f = Number(full.shipping_charge);
+      if (Number.isFinite(f) && f > 0) freight += f;
+      ewb = ewb || findEwayBill(full);
+    }
+    s.zohoInvoice = {
+      invoiceId: String(found[0].invoice_id),
+      number: found.map((i) => i.invoice_number).filter(Boolean).join(', '),
+      matchedBy,
+    };
+    if (s.freightAmount == null && freight > 0) {
+      s.freightAmount = Math.round(freight * 100) / 100;
       freightSet += 1;
     }
-    const ewb = findEwayBill(full);
     if (ewb && !s.ewayBill?.number) {
       s.ewayBill = { number: ewb, generatedAt: s.ewayBill?.generatedAt || null, validUntil: s.ewayBill?.validUntil || null };
       ewbSet += 1;

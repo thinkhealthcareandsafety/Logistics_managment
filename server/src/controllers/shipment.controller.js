@@ -60,7 +60,19 @@ const listShipments = asyncHandler(async (req, res) => {
     ];
   }
 
-  const shipments = await Shipment.find(query).sort({ createdAt: -1 });
+  // The list only needs each shipment's first, delivered and latest scans (progress,
+  // delivery date, attention); the full history loads on the shipment's own page.
+  // lean() skips building documents - several times faster for hundreds of rows.
+  const shipments = await Shipment.find(query, { trackingExtras: 0, trackingMoreId: 0, __v: 0 }).sort({ createdAt: -1 }).lean();
+  for (const s of shipments) {
+    const cps = s.checkpoints || [];
+    if (cps.length > 3) {
+      const delivered = [...cps].reverse().find((c) => c.status === 'delivered');
+      s.checkpointCount = cps.length;
+      s.checkpoints = [...new Set([cps[0], delivered, cps[cps.length - 1]].filter(Boolean))];
+    }
+    if (s.exceptionFollowUp?.notes?.length > 3) s.exceptionFollowUp.notes = s.exceptionFollowUp.notes.slice(-3);
+  }
   res.json({ shipments });
 });
 
@@ -74,7 +86,7 @@ const getShipment = asyncHandler(async (req, res) => {
 });
 
 const updateShipment = asyncHandler(async (req, res) => {
-  const allowedFields = ['productDetails', 'customerInfo', 'shippingDate', 'estimatedDelivery', 'isArchived'];
+  const allowedFields = ['productDetails', 'customerInfo', 'shippingDate', 'estimatedDelivery', 'isArchived', 'carrierName'];
   const updates = {};
   for (const field of allowedFields) {
     if (req.body[field] !== undefined) updates[field] = req.body[field];
@@ -83,14 +95,53 @@ const updateShipment = asyncHandler(async (req, res) => {
     updates['exceptionFollowUp.isBeingFollowedUp'] = req.body.isBeingFollowedUp;
   }
   Object.assign(updates, commercialFields(req.body));
+  if (req.body.booking && typeof req.body.booking === 'object') {
+    const { cleanBooking } = require('../services/historyImport.service');
+    const clean = cleanBooking(req.body.booking);
+    for (const key of Object.keys(req.body.booking)) if (key in clean) updates[`booking.${key}`] = clean[key];
+  }
 
-  const shipment = await Shipment.findOneAndUpdate(
-    { _id: req.params.id, createdBy: req.userId },
-    { $set: updates },
-    { new: true, runValidators: true }
-  );
+  const shipment = await Shipment.findOne({ _id: req.params.id, createdBy: req.userId });
   if (!shipment) throw new ApiError(404, 'Shipment not found');
+  shipment.set(updates);
+  // The sheet's "shipped" line follows an edited ship date.
+  if (updates.shippingDate && !Number.isNaN(new Date(updates.shippingDate).getTime())) {
+    for (const c of shipment.checkpoints) {
+      if (c.statusRaw === 'master sheet' && c.status !== 'delivered') c.checkpointTime = new Date(updates.shippingDate);
+    }
+  }
+
+  // Delivered date typed by hand: kept as a manual "delivered" scan, so a later courier
+  // sync (or the delivered-date sweep) agrees with it instead of wiping it.
+  if (req.body.deliveredAt !== undefined && shipment.status === 'delivered') {
+    const at = req.body.deliveredAt ? new Date(req.body.deliveredAt) : null;
+    if (at && Number.isNaN(at.getTime())) throw new ApiError(400, 'Delivered date is not a valid date');
+    shipment.checkpoints = shipment.checkpoints.filter((c) => !(c.status === 'delivered' && c.source === 'manual'));
+    if (at) {
+      shipment.checkpoints.push({
+        status: 'delivered',
+        statusRaw: 'manual',
+        description: 'Delivered (date entered by hand)',
+        checkpointTime: at,
+        source: 'manual',
+      });
+      shipment.checkpoints.sort((a, b) => new Date(a.checkpointTime) - new Date(b.checkpointTime));
+    }
+    shipment.deliveredAt = at;
+    if (!at) require('../utils/deliveredAt').syncDeliveredAt(shipment);
+  }
+  await shipment.save();
   res.json({ shipment });
+});
+
+/** Fills in delivery dates the sheet left blank - from the courier where it can. */
+const backfillDeliveredDates = asyncHandler(async (req, res) => {
+  const { backfillDeliveryDates } = require('../services/historyImport.service');
+  res.json(await backfillDeliveryDates(req.userId));
+});
+
+const backfillDeliveredDatesStatus = asyncHandler(async (req, res) => {
+  res.json(require('../services/historyImport.service').backfillStatus());
 });
 
 const deleteShipment = asyncHandler(async (req, res) => {
@@ -386,5 +437,7 @@ module.exports = {
   addExceptionNote,
   bulkImportShipments,
   importShipmentHistory,
+  backfillDeliveredDates,
+  backfillDeliveredDatesStatus,
   resendDeliveryNotice,
 };

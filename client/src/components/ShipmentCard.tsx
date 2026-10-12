@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { format } from 'date-fns';
 import clsx from 'clsx';
@@ -6,7 +7,8 @@ import { StatusBadge } from './StatusBadge';
 import { UrgencyBadge } from './UrgencyBadge';
 import { ProgressRail } from './ProgressRail';
 import { attentionReason, needsAttention } from '../utils/urgency';
-import { deliverTo, deliveredOn, deliveryVerdict, formatINR, formatWeight } from '../utils/logistics';
+import { deliverTo, deliveredOn, deliveryVerdict, ewayBillMissing, formatINR, formatWeight } from '../utils/logistics';
+import { EditDeliveryDialog } from './EditDeliveryDialog';
 import { useCarriers } from '../hooks/useCarriers';
 import { CourierLogo } from './CourierPicker';
 
@@ -30,6 +32,7 @@ export function ShipmentCard({
   const qty = shipment.productDetails?.quantity;
   const deliveredAt = deliveredOn(shipment);
   const verdict = deliveryVerdict(shipment);
+  const [editing, setEditing] = useState(false);
 
   return (
     <div
@@ -64,6 +67,8 @@ export function ShipmentCard({
             <>
               E-way bill <span className="font-mono tabular-nums text-slate-600">{shipment.ewayBill.number.replace(/(\d{4})(?=\d)/g, '$1 ')}</span>
             </>
+          ) : ewayBillMissing(shipment) ? (
+            <span className="font-medium text-amber-700">E-way bill needed (₹50,000+)</span>
           ) : (
             'No e-way bill'
           )}
@@ -79,7 +84,7 @@ export function ShipmentCard({
           <div className="min-w-0">
             <dt className="text-slate-400">Last seen</dt>
             <dd className="mt-0.5 truncate font-medium text-slate-700">
-              {shipment.currentLocation || 'Awaiting first scan'}
+              {shipment.currentLocation || (shipment.status === 'delivered' ? 'No courier scans' : 'Awaiting first scan')}
             </dd>
           </div>
           <div className="min-w-0 text-right">
@@ -116,6 +121,20 @@ export function ShipmentCard({
           </div>
         </dl>
       </Link>
+
+      <div className="flex justify-end border-t border-slate-100 px-2 py-1.5">
+        <button
+          type="button"
+          onClick={() => setEditing(true)}
+          className="inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-[12px] font-medium text-slate-600 transition hover:bg-slate-50 hover:text-brand-700"
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+            <path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          Edit details
+        </button>
+      </div>
+      {editing && <EditDeliveryDialog shipment={shipment} onClose={() => setEditing(false)} />}
 
       {/* Outside the link so ticking it never navigates. Always visible: a hover-only
           checkbox is undiscoverable on touch, where this view is the default. */}

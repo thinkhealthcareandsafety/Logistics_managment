@@ -110,6 +110,9 @@ const shipmentSchema = new mongoose.Schema(
       matchedBy: { type: String, default: '' },
     },
 
+    /** When an older shipment was looked for in Zoho invoices and none matched (not retried). */
+    invoiceCheckedAt: { type: Date, default: null },
+
     /** GST e-way bill for the consignment (read from the scanned label / e-way bill, or typed). */
     ewayBill: {
       number: { type: String, default: '', trim: true, maxlength: 20 },

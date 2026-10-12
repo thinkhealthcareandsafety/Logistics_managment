@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 import { authApi } from '../api/auth';
 import { setAuthToken } from '../api/client';
 import type { User } from '../types/user';
+import { clearPersisted } from '../utils/persistedQuery';
 
 interface AuthContextValue {
   user: User | null;
@@ -13,6 +14,7 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 const TOKEN_STORAGE_KEY = 'lt_token';
+const USER_STORAGE_KEY = 'lt_user';
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -25,18 +27,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
     setAuthToken(stored);
+    // Open straight away as the last signed-in user; the check below confirms it (or
+    // signs out) in the background instead of holding the whole app on a round trip.
+    try {
+      const cachedUser = JSON.parse(localStorage.getItem(USER_STORAGE_KEY) || 'null');
+      if (cachedUser) {
+        setUser(cachedUser);
+        setIsLoading(false);
+      }
+    } catch {
+      // no saved user - wait for the check
+    }
     authApi
       .me()
-      .then((res) => setUser(res.user))
-      .catch(() => {
+      .then((res) => {
+        setUser(res.user);
+        localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(res.user));
+      })
+      .catch((err) => {
+        // Only a rejected token signs out - a network blip keeps the saved session.
+        if (err?.response?.status !== 401 && err?.response?.status !== 403) return;
         localStorage.removeItem(TOKEN_STORAGE_KEY);
+        localStorage.removeItem(USER_STORAGE_KEY);
+        clearPersisted();
         setAuthToken(null);
+        setUser(null);
       })
       .finally(() => setIsLoading(false));
   }, []);
 
   function persist(token: string, nextUser: User) {
+    clearPersisted();
     localStorage.setItem(TOKEN_STORAGE_KEY, token);
+    localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(nextUser));
     setAuthToken(token);
     setUser(nextUser);
   }
@@ -56,6 +79,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await authApi.logout();
     } finally {
       localStorage.removeItem(TOKEN_STORAGE_KEY);
+      localStorage.removeItem(USER_STORAGE_KEY);
+      clearPersisted();
       setAuthToken(null);
       setUser(null);
     }

@@ -117,6 +117,12 @@ export function ShipmentDetail() {
           </div>
 
           <div className="flex shrink-0 items-center gap-2">
+            <button className={actionButton} onClick={() => setEditingDelivery(true)}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                <path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              <span className="hidden sm:inline">Edit</span>
+            </button>
             <button className={actionButton} onClick={() => copyLink('track')}>
               <LinkIcon />
               Copy tracking link
@@ -260,7 +266,7 @@ export function ShipmentDetail() {
         <div className="min-w-0 space-y-6">
           <DeliveryCard shipment={s} onEdit={() => setEditingDelivery(true)} />
 
-          <Card title="Customer">
+          <Card title="Customer" onEdit={() => setEditingDelivery(true)}>
             {customer.name || customer.email || customer.phone ? (
               <div className="space-y-3 text-[13px]">
                 {customer.name && <p className="text-[14px] font-semibold text-slate-900">{customer.name}</p>}
@@ -284,7 +290,7 @@ export function ShipmentDetail() {
             )}
           </Card>
 
-          <Card title="Product">
+          <Card title="Product" onEdit={() => setEditingDelivery(true)}>
             <dl className="space-y-2.5 text-[13px]">
               <Row label="Name" value={s.productDetails?.name || '—'} />
               <Row label="Product code" value={s.productDetails?.sku || '—'} mono />
@@ -541,12 +547,17 @@ function DeliveryCard({ shipment: s, onEdit }: { shipment: Shipment; onEdit: () 
 const actionButton =
   'inline-flex h-9 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-[13px] font-medium text-slate-700 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600';
 
-function Card({ title, aside, children }: { title: string; aside?: string; children: ReactNode }) {
+function Card({ title, aside, onEdit, children }: { title: string; aside?: string; onEdit?: () => void; children: ReactNode }) {
   return (
     <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
       <div className="mb-4 flex items-baseline justify-between gap-3">
         <h2 className="text-[15px] font-semibold text-slate-950">{title}</h2>
         {aside && <span className="text-[12px] text-slate-400">{aside}</span>}
+        {onEdit && (
+          <button onClick={onEdit} className="rounded-md px-2 py-1 text-[13px] font-medium text-brand-700 transition hover:bg-brand-50">
+            Edit
+          </button>
+        )}
       </div>
       {children}
     </section>

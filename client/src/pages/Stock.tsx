@@ -43,8 +43,8 @@ import { StockSkeleton } from '../components/skeletons/PageSkeletons';
 type Filter = 'all' | 'in' | 'out' | 'low' | 'expiring';
 type StockSort = 'sheet' | 'qty-desc' | 'qty-asc' | 'value-desc' | 'value-asc';
 
-/** Value of what's on the shelf: units × cost price from Zoho (sale price if no cost). */
-export const lineValue = (item: StockItem, qty = item.quantity) => qty * (item.purchasePrice ?? item.salePrice ?? 0);
+/** Value of what's on the shelf: total units × sale price from Zoho (cost price if no sale price). */
+export const lineValue = (item: StockItem, qty = item.quantity) => qty * (item.salePrice ?? item.purchasePrice ?? 0);
 const inr = (n: number) => `₹${Math.round(n).toLocaleString('en-IN')}`;
 
 /** The date that matters on a line: the next one to expire, else the latest that already has. */
@@ -109,7 +109,7 @@ export function Stock() {
   // count actually happens - walk the shelf, then publish once.
   const [drafts, setDrafts] = useState<Drafts>({});
   const [filter, setFilter] = useState<Filter>('all');
-  const [sort, setSort] = useState<StockSort>('sheet');
+  const [sort, setSort] = useState<StockSort>('value-desc');
   const [search, setSearch] = useState('');
 
   const [dialog, setDialog] = useState<
@@ -580,7 +580,7 @@ function CategorySection({
             {total.toLocaleString('en-IN')} unit{total === 1 ? '' : 's'}
           </span>
           {value > 0 && (
-            <span className="shrink-0 text-[13px] font-medium tabular-nums text-slate-700" title="Stock value at cost price from Zoho Books">
+            <span className="shrink-0 text-[13px] font-medium tabular-nums text-slate-700" title="Total units × sale price from Zoho Books">
               · {inr(value)}
             </span>
           )}
@@ -715,6 +715,14 @@ function CategorySection({
                       {item.salePrice != null && (
                         <span title="Selling price per unit from Zoho Books">
                           Sale <span className="font-semibold text-slate-700">{inr(item.salePrice)}</span>
+                        </span>
+                      )}
+                      {item.salePrice != null && (
+                        <span
+                          title={`${qty.toLocaleString('en-IN')} units × ${inr(item.salePrice)}`}
+                          className="inline-flex h-8 items-center rounded-lg bg-slate-50 px-2.5 ring-1 ring-inset ring-slate-200"
+                        >
+                          Total <span className="ml-1 font-semibold text-slate-900">{inr(lineValue(item, qty))}</span>
                         </span>
                       )}
                     </span>

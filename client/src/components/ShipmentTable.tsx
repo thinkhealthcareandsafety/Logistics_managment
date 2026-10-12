@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { format, formatDistanceToNowStrict } from 'date-fns';
 import clsx from 'clsx';
@@ -5,7 +6,8 @@ import type { Shipment } from '../types/shipment';
 import { StatusBadge } from './StatusBadge';
 import { UrgencyBadge } from './UrgencyBadge';
 import { attentionReason, needsAttention } from '../utils/urgency';
-import { deliverTo, deliveredOn, deliveryVerdict, destinationMismatch, formatINR, formatWeight } from '../utils/logistics';
+import { deliverTo, deliveredOn, deliveryVerdict, destinationMismatch, ewayBillMissing, formatINR, formatWeight } from '../utils/logistics';
+import { EditDeliveryDialog } from './EditDeliveryDialog';
 import { useCarriers } from '../hooks/useCarriers';
 import { CourierLogo } from './CourierPicker';
 
@@ -27,10 +29,13 @@ export function ShipmentTable({
 }) {
   const navigate = useNavigate();
   const { byCode } = useCarriers();
+  const [editing, setEditing] = useState<Shipment | null>(null);
   const allSelected = shipments.length > 0 && shipments.every((s) => selectedIds.has(s._id));
   const someSelected = shipments.some((s) => selectedIds.has(s._id)) && !allSelected;
 
   return (
+    <>
+    {editing && <EditDeliveryDialog shipment={editing} onClose={() => setEditing(null)} />}
     <table className="w-full table-fixed border-collapse text-left">
       {/* table-fixed takes column widths from this header row; hidden cells drop out of it. */}
       <thead>
@@ -52,7 +57,7 @@ export function ShipmentTable({
             Weight · Freight
           </th>
           <th scope="col" className="hidden w-[9%] py-2.5 pr-4 text-right font-medium 2xl:table-cell">Updated</th>
-          <th scope="col" className="w-9 py-2.5" aria-label="Open" />
+          <th scope="col" className="w-[4.5rem] py-2.5" aria-label="Edit or open" />
         </tr>
       </thead>
       <tbody className="divide-y divide-slate-100">
@@ -106,6 +111,8 @@ export function ShipmentTable({
                       <span className="font-sans text-slate-400">E-way bill </span>
                       {shipment.ewayBill.number.replace(/(\d{4})(?=\d)/g, '$1 ')}
                     </span>
+                  ) : ewayBillMissing(shipment) ? (
+                    <span className="font-medium text-amber-700" title="Worth ₹50,000 or more - an e-way bill is required">E-way bill needed</span>
                   ) : (
                     <span className="text-slate-400">No e-way bill</span>
                   )}
@@ -115,7 +122,7 @@ export function ShipmentTable({
               <td className="hidden min-w-0 py-3 pr-4 lg:table-cell">
                 <p className="truncate font-medium text-slate-800">{shipment.customerInfo?.name || '—'}</p>
                 <p className="mt-0.5 truncate text-slate-500" title="Last scan">
-                  {shipment.currentLocation || 'Awaiting first scan'}
+                  {shipment.currentLocation || (shipment.status === 'delivered' ? 'No courier scans' : 'Awaiting first scan')}
                 </p>
               </td>
 
@@ -149,16 +156,33 @@ export function ShipmentTable({
                   : '—'}
               </td>
 
-              <td className="py-3.5 pr-3 text-slate-300 transition-colors group-hover:text-slate-500">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-                  <path d="m9 6 6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
+              <td className="py-2.5 pr-3">
+                <div className="flex items-center justify-end gap-1 text-slate-300 transition-colors group-hover:text-slate-500">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEditing(shipment);
+                    }}
+                    aria-label={`Edit ${shipment.trackingNumber}`}
+                    title="Edit customer, product and order details"
+                    className="flex h-8 w-8 items-center justify-center rounded-md text-slate-400 transition hover:bg-white hover:text-brand-700 hover:ring-1 hover:ring-slate-200"
+                  >
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                      <path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </button>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                    <path d="m9 6 6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </div>
               </td>
             </tr>
           );
         })}
       </tbody>
     </table>
+    </>
   );
 }
 

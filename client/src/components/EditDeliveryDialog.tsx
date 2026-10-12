@@ -35,6 +35,18 @@ export function EditDeliveryDialog({ shipment, onClose }: { shipment: Shipment; 
   });
 
   const toDay = (v?: string | null) => (v ? new Date(v).toISOString().slice(0, 10) : '');
+  const delivered = shipment.status === 'delivered';
+  const [dates, setDates] = useState({ shipped: toDay(shipment.shippingDate), delivered: toDay(shipment.deliveredAt) });
+  const b = shipment.booking;
+  const [booking, setBooking] = useState({
+    invoiceNumber: b?.invoiceNumber ?? '',
+    shipmentValue: b?.shipmentValue != null ? String(b.shipmentValue) : '',
+    boxes: b?.boxes != null ? String(b.boxes) : '',
+    paymentType: b?.paymentType ?? '',
+    notes: b?.notes ?? '',
+  });
+  // A date typed as YYYY-MM-DD is that day at noon India time - never the day before in UTC.
+  const atNoon = (d: string) => (d ? `${d}T12:00:00+05:30` : null);
   const [ewb, setEwb] = useState({
     number: shipment.ewayBill?.number ?? '',
     generatedAt: toDay(shipment.ewayBill?.generatedAt),
@@ -59,12 +71,21 @@ export function EditDeliveryDialog({ shipment, onClose }: { shipment: Shipment; 
           freightAmount: toNumberOrNull(freight),
           deliveryAddress: address,
           ewayBill: { number: ewb.number.replace(/\s+/g, ''), generatedAt: ewb.generatedAt || null, validUntil: ewb.validUntil || null },
+          ...(dates.shipped && dates.shipped !== toDay(shipment.shippingDate) ? { shippingDate: atNoon(dates.shipped) ?? undefined } : {}),
+          ...(delivered && dates.delivered !== toDay(shipment.deliveredAt) ? { deliveredAt: atNoon(dates.delivered) } : {}),
+          booking: {
+            invoiceNumber: booking.invoiceNumber.trim(),
+            shipmentValue: toNumberOrNull(booking.shipmentValue),
+            boxes: toNumberOrNull(booking.boxes),
+            paymentType: booking.paymentType.trim(),
+            notes: booking.notes.trim(),
+          },
         },
       });
-      toast.success('Delivery details saved');
+      toast.success('Shipment saved');
       onClose();
     } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Could not save the delivery details');
+      toast.error(err?.response?.data?.message || 'Could not save the shipment');
     }
   }
 
@@ -119,6 +140,47 @@ export function EditDeliveryDialog({ shipment, onClose }: { shipment: Shipment; 
               <input id="edit-prod-cat" value={product.category} onChange={(e) => setProduct((p) => ({ ...p, category: e.target.value }))} className="input" />
             </FormField>
           </div>
+        </fieldset>
+        <fieldset className="space-y-3 border-t border-slate-100 pt-5">
+          <legend className="text-[13px] font-semibold text-slate-900">Order</legend>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <FormField label="Invoice no." htmlFor="edit-inv" optional>
+              <input id="edit-inv" value={booking.invoiceNumber} onChange={(e) => setBooking((x) => ({ ...x, invoiceNumber: e.target.value }))} className="input" />
+            </FormField>
+            <FormField label="Shipment value" htmlFor="edit-value" optional>
+              <Affixed prefix="₹">
+                <input
+                  id="edit-value"
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  inputMode="decimal"
+                  value={booking.shipmentValue}
+                  onChange={(e) => setBooking((x) => ({ ...x, shipmentValue: e.target.value }))}
+                  className="input pl-7"
+                />
+              </Affixed>
+            </FormField>
+            <FormField label="Boxes" htmlFor="edit-boxes" optional>
+              <input id="edit-boxes" type="number" min={0} value={booking.boxes} onChange={(e) => setBooking((x) => ({ ...x, boxes: e.target.value }))} className="input" />
+            </FormField>
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <FormField label="Shipped on" htmlFor="edit-shipped" optional>
+              <input id="edit-shipped" type="date" value={dates.shipped} onChange={(e) => setDates((x) => ({ ...x, shipped: e.target.value }))} className="input" />
+            </FormField>
+            {delivered && (
+              <FormField label="Delivered on" htmlFor="edit-delivered" optional>
+                <input id="edit-delivered" type="date" value={dates.delivered} onChange={(e) => setDates((x) => ({ ...x, delivered: e.target.value }))} className="input" />
+              </FormField>
+            )}
+            <FormField label="Freight paid by" htmlFor="edit-paytype" optional>
+              <input id="edit-paytype" value={booking.paymentType} onChange={(e) => setBooking((x) => ({ ...x, paymentType: e.target.value }))} className="input" />
+            </FormField>
+          </div>
+          <FormField label="Notes" htmlFor="edit-notes" optional>
+            <input id="edit-notes" value={booking.notes} onChange={(e) => setBooking((x) => ({ ...x, notes: e.target.value }))} className="input" />
+          </FormField>
         </fieldset>
         <div className="border-t border-slate-100 pt-5" />
         <div className="grid grid-cols-2 gap-3 sm:max-w-sm">

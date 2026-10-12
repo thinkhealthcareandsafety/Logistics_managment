@@ -98,6 +98,9 @@ export interface Shipment {
   updatedAt: string;
 }
 
+/** What an edit sends: any shipment field, and only the booking fields being changed. */
+export type ShipmentUpdate = Partial<Omit<Shipment, 'booking'>> & { booking?: Partial<ShipmentBooking>; isBeingFollowedUp?: boolean };
+
 /** A courier from TrackingMore's catalog. */
 export interface Carrier {
   code: string;

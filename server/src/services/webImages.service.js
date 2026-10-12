@@ -323,12 +323,206 @@ async function findExtras(retryBefore, limit) {
   logger.info(`Web extras: ${lastRun.extras.videos} lines got videos, ${lastRun.extras.brochures} got brochures (of ${lastRun.extras.tried})`);
 }
 
+// ─────────────────────────── Wider second pass ───────────────────────────
+// For lines the exact search left empty. Videos come straight from YouTube's own search
+// (far more hits than a web search); photos and brochures may be of the same kind of
+// product when no page shows this exact brand/model - still checked by Gemini, still
+// on a white background, and labelled "similar" so nobody mistakes them for the model.
+
+/** YouTube's own search results for a query: [{ id, title }]. */
+async function youtubeSearch(query) {
+  try {
+    const { data } = await axios.get('https://www.youtube.com/results', {
+      params: { search_query: query, hl: 'en', gl: 'IN' },
+      headers: { 'User-Agent': UA, 'Accept-Language': 'en-US,en;q=0.9' },
+      timeout: 15000,
+      responseType: 'text',
+    });
+    const out = [];
+    const re = /"videoRenderer":\{"videoId":"([A-Za-z0-9_-]{11})"[\s\S]*?"title":\{"runs":\[\{"text":"((?:[^"\\]|\\.)*)"/g;
+    let m;
+    while ((m = re.exec(String(data))) && out.length < 8) {
+      try {
+        out.push({ id: m[1], title: JSON.parse(`"${m[2]}"`) });
+      } catch {
+        /* odd escaping - skip */
+      }
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
+/** Gemini's two-level verdict: exact product first, else the same kind of product. */
+async function pickWide(name, videos, pdfs) {
+  const data = await gemini({
+    contents: [{
+      role: 'user',
+      parts: [
+        ...pdfs.map((p) => ({ inlineData: { mimeType: 'application/pdf', data: p.buf.toString('base64') } })),
+        {
+          text: `Product: "${name}". This is for the stock list of an Indian first-aid, medical and safety equipment supplier.
+${pdfs.length ? `The ${pdfs.length} attached PDF(s) are numbered 0..${pdfs.length - 1} in order.` : 'No PDFs attached.'}
+YouTube videos (by title):
+${videos.map((v, i) => `${i}: ${v.title}`).join('\n') || 'none'}
+For each video and PDF decide: "exact" = about THIS product (same brand/model if one is named); "kind" = about the same kind of product (e.g. how to use any triangular bandage, a datasheet for another brand's cervical collar) and useful to a customer of this item; otherwise reject. ${NOT_SAME} Reject news, price lists, unrelated products, music, and videos not in English or Hindi.
+Reply ONLY JSON {"videos": [{"index": n, "level": "exact"|"kind"}], "brochures": [{"index": n, "level": "exact"|"kind", "title": "short title like 'Philips FRx brochure'"}]}`,
+        },
+      ],
+    }],
+    generationConfig: { temperature: 0 },
+  });
+  const v = jsonOf(textOf(data)) || {};
+  const rank = (list) => (list || []).filter((x) => x && ['exact', 'kind'].includes(x.level)).sort((a, b) => (a.level === 'exact' ? 0 : 1) - (b.level === 'exact' ? 0 : 1));
+  return { videos: rank(v.videos), brochures: rank(v.brochures) };
+}
+
+async function findExtrasWideFor(item) {
+  const name = describe(item);
+  const wantVideos = !item.media?.videos?.length;
+  const wantBrochures = !item.media?.brochures?.length;
+  let videos = [];
+  if (wantVideos) {
+    const seen = new Set();
+    for (const q of [item.displayName, `${item.displayName} how to use`]) {
+      for (const v of await youtubeSearch(q)) {
+        if (!seen.has(v.id)) {
+          seen.add(v.id);
+          videos.push(v);
+        }
+      }
+    }
+    videos = videos.slice(0, 12);
+  }
+  const pdfs = [];
+  if (wantBrochures) {
+    const { pdfUrls } = await searchExtras(`${name} - brochure, datasheet, catalogue or instructions for use (PDF)`, { wantVideos: false, wantBrochures: true });
+    for (const url of pdfUrls) {
+      if (pdfs.length >= 3) break;
+      const buf = await fetchPdf(url);
+      if (buf) pdfs.push({ url, buf });
+    }
+  }
+  if (!videos.length && !pdfs.length) return { videos: [], brochures: [] };
+  const verdict = await pickWide(name, videos, pdfs);
+  return {
+    videos: verdict.videos.map((x) => videos[x.index] && `https://www.youtube.com/watch?v=${videos[x.index].id}`).filter(Boolean).slice(0, 2),
+    brochures: verdict.brochures
+      .map((b) => pdfs[b.index] && { url: pdfs[b.index].url, title: `${String(b.title || 'Brochure').slice(0, 70)}${b.level === 'kind' ? ' (similar product)' : ''}` })
+      .filter(Boolean)
+      .slice(0, 2),
+  };
+}
+
+/** A photo of this product, or failing that the same kind of product - on white either way. */
+async function findPhotoWide(item) {
+  const name = describe(item);
+  const exact = await findFor(item).catch(() => null);
+  if (exact) return { ...exact, similar: false };
+  const { images, pages } = await searchCandidates(`${item.displayName} (any brand) product photo, white background`);
+  const candidates = images.map((u) => ({ url: u, page: '' }));
+  for (const p of pages) {
+    if (candidates.length >= 10) break;
+    try {
+      const r = await pageImage(p);
+      for (const u of r.images) candidates.push({ url: u, page: r.page });
+    } catch {
+      /* page unreachable */
+    }
+  }
+  const seen = new Set();
+  for (const c of candidates) {
+    if (seen.has(c.url) || seen.size >= 10) continue;
+    seen.add(c.url);
+    try {
+      const res = await axios.get(c.url, { responseType: 'arraybuffer', timeout: 20000, maxContentLength: 8 * 1024 * 1024, headers: { 'User-Agent': UA } });
+      const type = String(res.headers['content-type'] || '').split(';')[0].trim();
+      if (!/^image\/(jpeg|png|webp)$/.test(type) || res.data.byteLength < 10000) continue;
+      const data = await gemini({
+        contents: [{
+          role: 'user',
+          parts: [
+            { inlineData: { mimeType: type, data: Buffer.from(res.data).toString('base64') } },
+            {
+              text: `For the stock list of an Indian first-aid, medical and safety equipment supplier: does this photo show the same KIND of product as "${name}" (brand may differ)? ${NOT_SAME}
+Is the background white or very plain and light, with no people, and is it a clear single-product photo (no collage, no big watermark)?
+Reply ONLY JSON {"sameKind": true|false, "whiteBackground": true|false, "clear": true|false}`,
+            },
+          ],
+        }],
+        generationConfig: { temperature: 0 },
+      });
+      const v = jsonOf(textOf(data)) || {};
+      if (v.sameKind === true && v.whiteBackground === true && v.clear === true) return { ...c, similar: true };
+    } catch (err) {
+      if ([401, 403, 429].includes(err.response?.status) && /googleapis/.test(err.config?.url || '')) throw err;
+    }
+  }
+  return null;
+}
+
+/** Second pass over every line still missing a photo, video or brochure; five at a time. */
+async function findWide(limit) {
+  const items = await StockItem.find({
+    isArchived: false,
+    'media.wideSearchedAt': null,
+    $or: [
+      { zohoHasImage: { $ne: true }, 'media.images.0': { $exists: false } },
+      { 'media.videos.0': { $exists: false } },
+      { 'media.brochures.0': { $exists: false } },
+    ],
+  })
+    .populate('categoryId', 'name')
+    .limit(limit);
+  lastRun.wide = { total: items.length, tried: 0, photos: 0, videos: 0, brochures: 0 };
+  let stop = false;
+  const queue = [...items];
+  const worker = async () => {
+    while (queue.length && !stop) {
+      const item = queue.shift();
+      const set = { 'media.wideSearchedAt': new Date() };
+      try {
+        if (!item.zohoHasImage && !item.media?.images?.length) {
+          const hit = await findPhotoWide(item);
+          if (hit) {
+            Object.assign(set, {
+              'media.images': [hit.url],
+              'media.sourceUrl': item.media?.sourceUrl || hit.page || '',
+              'media.sourceTitle': item.media?.sourceTitle || (hit.similar ? 'Web photo (similar product)' : 'Web photo (checked)'),
+            });
+            lastRun.wide.photos += 1;
+          }
+        }
+        if (!item.media?.videos?.length || !item.media?.brochures?.length) {
+          const found = await findExtrasWideFor(item);
+          if (found.videos.length) set['media.videos'] = found.videos;
+          if (found.brochures.length) set['media.brochures'] = found.brochures;
+          lastRun.wide.videos += found.videos.length ? 1 : 0;
+          lastRun.wide.brochures += found.brochures.length ? 1 : 0;
+        }
+        if (Object.keys(set).length > 1) set['media.matchedAt'] = item.media?.matchedAt || new Date();
+      } catch (err) {
+        if ([401, 403, 429].includes(err.response?.status)) {
+          lastRun.error = `Google search unavailable: ${err.response?.data?.error?.message || err.message}`;
+          stop = true;
+          return; // leave this line unmarked so it's tried again
+        }
+      }
+      await StockItem.updateOne({ _id: item._id }, { $set: set });
+      lastRun.wide.tried += 1;
+    }
+  };
+  await Promise.all([worker(), worker(), worker(), worker(), worker()]);
+  logger.info(`Web media (wide): ${lastRun.wide.photos} photos, ${lastRun.wide.videos} video, ${lastRun.wide.brochures} brochure lines (of ${lastRun.wide.tried})`);
+}
+
 /** Searches up to `limit` lines with no photo, then videos/brochures. One run at a time; returns that run's promise. */
 function findWebImages({ limit = 150 } = {}) {
   if (!env.gemini.apiKey) throw new ApiError(503, 'Finding photos needs GEMINI_API_KEY on the server');
   if (running) return running;
   running = (async () => {
-    Object.assign(lastRun, { startedAt: new Date(), finishedAt: null, tried: 0, found: 0, error: null, results: [], extras: null });
+    Object.assign(lastRun, { startedAt: new Date(), finishedAt: null, tried: 0, found: 0, error: null, results: [], extras: null, wide: null });
     try {
       const retryBefore = new Date(Date.now() - RETRY_AFTER_DAYS * 864e5);
       const items = await StockItem.find({
@@ -368,6 +562,7 @@ function findWebImages({ limit = 150 } = {}) {
       }
       logger.info(`Web photo finder: ${lastRun.found}/${lastRun.tried} lines got a photo`);
       if (!lastRun.error) await findExtras(retryBefore, limit * 3);
+      if (!lastRun.error) await findWide(limit * 4);
     } catch (err) {
       lastRun.error = err.message;
       logger.error(`Web photo finder failed: ${err.message}`);
@@ -389,4 +584,4 @@ async function webImagesStatus() {
   return { ...lastRun, running: Boolean(running), missing, noVideo, noBrochure };
 }
 
-module.exports = { findWebImages, webImagesStatus, pageImage, pageExtras };
+module.exports = { findWebImages, webImagesStatus, pageImage, pageExtras, findExtrasWideFor, findPhotoWide };

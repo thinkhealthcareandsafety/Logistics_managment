@@ -85,6 +85,8 @@ const stockItemSchema = new mongoose.Schema(
       webSearchedAt: { type: Date, default: null },
       // Same, for the web search for product videos and brochures.
       extrasSearchedAt: { type: Date, default: null },
+      // The wider second pass (YouTube search, similar products) for lines still missing media.
+      wideSearchedAt: { type: Date, default: null },
     },
 
     sortOrder: { type: Number, default: 0 },

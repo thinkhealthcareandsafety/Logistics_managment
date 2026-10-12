@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { persisted } from '../utils/persistedQuery';
 import toast from 'react-hot-toast';
 import { stockApi } from '../api/stock';
 import type { ListStyle, StockCountChange, StockItemInput, StockSettings } from '../types/stock';
@@ -9,7 +10,7 @@ function errorMessage(err: any, fallback: string) {
 }
 
 export function useStock() {
-  return useQuery({ queryKey: ['stock'], queryFn: stockApi.get, refetchInterval: 60_000 });
+  return useQuery({ queryKey: ['stock'], ...persisted('stock', stockApi.get), refetchInterval: 60_000 });
 }
 
 export function useStockMessage(enabled = true) {

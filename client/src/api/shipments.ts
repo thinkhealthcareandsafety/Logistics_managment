@@ -1,5 +1,5 @@
 import { apiClient } from './client';
-import type { BulkImportResult, CreateShipmentInput, LabelDraft, Shipment } from '../types/shipment';
+import type { BulkImportResult, CreateShipmentInput, LabelDraft, Shipment, ShipmentUpdate } from '../types/shipment';
 
 export interface ShipmentFilters {
   status?: string;
@@ -20,7 +20,7 @@ export const shipmentsApi = {
   create: (data: CreateShipmentInput) =>
     apiClient.post<{ shipment: Shipment }>('/shipments', data).then((r) => r.data.shipment),
 
-  update: (id: string, data: Partial<Shipment> & { isBeingFollowedUp?: boolean }) =>
+  update: (id: string, data: ShipmentUpdate) =>
     apiClient.patch<{ shipment: Shipment }>(`/shipments/${id}`, data).then((r) => r.data.shipment),
 
   remove: (id: string) => apiClient.delete(`/shipments/${id}`),
