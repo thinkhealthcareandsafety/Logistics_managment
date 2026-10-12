@@ -292,6 +292,16 @@ const bulkImportShipments = asyncHandler(async (req, res) => {
   res.status(207).json({ imported, failed, totalRows: rows.length, expectedColumns: CSV_COLUMNS });
 });
 
+/** Back-fill from the logistics master sheet (JSON rows, up to 200 per call). */
+const importShipmentHistory = asyncHandler(async (req, res) => {
+  const { rows } = req.body || {};
+  if (!Array.isArray(rows) || rows.length === 0 || rows.length > 200) {
+    throw new ApiError(400, 'rows must be an array of 1-200 shipments');
+  }
+  const { importHistory } = require('../services/historyImport.service');
+  res.json(await importHistory(rows, req.userId));
+});
+
 /**
  * Manual re-send of the delivery thank-you + feedback request. The automatic send
  * happens once, when the carrier first reports delivery; this is the escape hatch for
@@ -375,5 +385,6 @@ module.exports = {
   bulkUpdateShipments,
   addExceptionNote,
   bulkImportShipments,
+  importShipmentHistory,
   resendDeliveryNotice,
 };

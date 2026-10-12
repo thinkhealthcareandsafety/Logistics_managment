@@ -117,6 +117,20 @@ const shipmentSchema = new mongoose.Schema(
       validUntil: { type: Date, default: null },
     },
 
+    /** Booking details from the logistics master sheet (invoice, value, boxes, payment...). */
+    booking: {
+      invoiceNumber: { type: String, default: '', trim: true, maxlength: 120 },
+      shipmentValue: { type: Number, min: 0, default: null },
+      boxes: { type: Number, min: 0, default: null },
+      dimensions: { type: String, default: '', trim: true, maxlength: 200 },
+      shipmentType: { type: String, default: '', trim: true, maxlength: 40 },
+      paymentType: { type: String, default: '', trim: true, maxlength: 60 },
+      pickupPincode: { type: String, default: '', trim: true, maxlength: 10 },
+      trackingLink: { type: String, default: '', trim: true, maxlength: 300 },
+      notes: { type: String, default: '', trim: true, maxlength: 500 },
+      source: { type: String, default: '', trim: true, maxlength: 60 },
+    },
+
     trackingExtras: {
       postalCode: { type: String, default: '', trim: true, maxlength: 20 },
       trackingKey: { type: String, default: '', trim: true, maxlength: 100 },

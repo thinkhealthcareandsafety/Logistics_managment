@@ -59,7 +59,7 @@ function applyCarrierRoute(shipment, route) {
  * Fetches the latest checkpoints for one shipment, persists any that are new,
  * and fans out real-time + notification side effects for each newly-seen checkpoint.
  */
-async function refreshShipment(shipment) {
+async function refreshShipment(shipment, { silent = false } = {}) {
   const adapter = getAdapterForCarrier(shipment.carrierCode);
   const { checkpoints, route } = await adapter.refreshTracking(shipment);
 
@@ -93,12 +93,13 @@ async function refreshShipment(shipment) {
   // The customer's thank-you + feedback request goes out the first time a shipment
   // lands on `delivered`. Done before the save so the sent-stamp persists with it.
   // Out for delivery: tell the customer once, and only on a new scan (not on old history).
-  if (shipment.status === 'out_for_delivery' && newCheckpoints.length > 0) {
+  // `silent`: a back-filled shipment's first fetch - its history isn't news to anyone.
+  if (!silent && shipment.status === 'out_for_delivery' && newCheckpoints.length > 0) {
     await notifyCustomerOutForDelivery(shipment).catch((err) =>
       logger.error(`notifyCustomerOutForDelivery failed for ${shipment.trackingNumber}: ${err.message}`)
     );
   }
-  if (shipment.status === 'delivered') {
+  if (!silent && shipment.status === 'delivered') {
     await notifyCustomerDelivered(shipment).catch((err) =>
       logger.error(`notifyCustomerDelivered failed for ${shipment.trackingNumber}: ${err.message}`)
     );
@@ -109,7 +110,7 @@ async function refreshShipment(shipment) {
   if (newCheckpoints.length > 0 || deliveredChanged) {
     emitShipmentUpdate(shipment.createdBy.toString(), shipment);
   }
-  if (newCheckpoints.length > 0) {
+  if (!silent && newCheckpoints.length > 0) {
     for (const checkpoint of newCheckpoints) {
       await notifyStatusChange(shipment, checkpoint).catch((err) =>
         logger.error(`notifyStatusChange failed: ${err.message}`)

@@ -509,6 +509,31 @@ function DeliveryCard({ shipment: s, onEdit }: { shipment: Shipment; onEdit: () 
           </dd>
         </div>
       </dl>
+
+      {s.booking && Object.entries(s.booking).some(([k, v]) => k !== 'source' && v !== '' && v != null) && (
+        <dl className="mt-4 grid grid-cols-2 gap-3 border-t border-slate-100 pt-3 text-[13px]">
+          {(
+            [
+              ['Invoice no.', s.booking.invoiceNumber],
+              ['Shipment value', s.booking.shipmentValue != null ? formatINR(s.booking.shipmentValue) : ''],
+              ['Boxes', s.booking.boxes != null ? String(s.booking.boxes) : ''],
+              ['Size', s.booking.dimensions],
+              ['Shipment type', s.booking.shipmentType],
+              ['Freight paid by', s.booking.paymentType],
+              ['Pickup pincode', s.booking.pickupPincode],
+              ['Notes', s.booking.notes],
+            ] as const
+          )
+            .filter(([, v]) => v)
+            .map(([label, v]) => (
+              <div key={label} className={clsx(label === 'Notes' && 'col-span-2')}>
+                <dt className="text-[12px] text-slate-500">{label}</dt>
+                <dd className="mt-0.5 break-words font-medium text-slate-900">{v}</dd>
+              </div>
+            ))}
+          {s.booking.source && <p className="col-span-2 text-[12px] text-slate-400">From the {s.booking.source}</p>}
+        </dl>
+      )}
     </section>
   );
 }

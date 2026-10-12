@@ -11,6 +11,7 @@ const {
   bulkUpdateShipments,
   addExceptionNote,
   bulkImportShipments,
+  importShipmentHistory,
   resendDeliveryNotice,
   extractFromLabel,
   setManualStatus,
@@ -30,6 +31,7 @@ router.get('/', listShipments);
 
 // Literal paths must come before '/:id' or Express matches them as an id.
 router.post('/bulk-import', upload.single('file'), bulkImportShipments);
+router.post('/import-history', importShipmentHistory);
 router.post('/extract', labelUpload.single('file'), extractFromLabel);
 router.post('/refresh-all', refreshAllShipments);
 router.patch('/bulk', bulkUpdateShipments);

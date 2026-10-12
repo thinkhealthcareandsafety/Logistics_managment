@@ -52,6 +52,19 @@ export interface CarrierRoute {
   fetchedAt: string | null;
 }
 
+export interface ShipmentBooking {
+  invoiceNumber: string;
+  shipmentValue: number | null;
+  boxes: number | null;
+  dimensions: string;
+  shipmentType: string;
+  paymentType: string;
+  pickupPincode: string;
+  trackingLink: string;
+  notes: string;
+  source: string;
+}
+
 export interface Shipment {
   _id: string;
   trackingNumber: string;
@@ -71,6 +84,8 @@ export interface Shipment {
   zohoInvoice?: { invoiceId: string; number: string; matchedBy: string };
   /** GST e-way bill for the consignment. */
   ewayBill?: { number: string; generatedAt: string | null; validUntil: string | null };
+  /** Booking details from the logistics master sheet. */
+  booking?: ShipmentBooking;
   /** When it was actually delivered (from the courier's delivered scan). */
   deliveredAt?: string | null;
   currentLocation: string;

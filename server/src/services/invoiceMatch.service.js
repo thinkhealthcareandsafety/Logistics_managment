@@ -63,8 +63,14 @@ async function matchInvoices() {
   let ewbSet = 0;
   for (const s of shipments) {
     const awb = norm(s.trackingNumber);
-    let inv = invoices.find((i) => awb && [i.reference_number, i.notes].some((f) => norm(f).includes(awb)));
-    let matchedBy = inv ? 'awb' : '';
+    // The invoice number from the master sheet is the surest link, then the AWB on the invoice.
+    const invNo = norm(s.booking?.invoiceNumber);
+    let inv = invNo ? invoices.find((i) => norm(i.invoice_number) === invNo) : null;
+    let matchedBy = inv ? 'invoice number' : '';
+    if (!inv) {
+      inv = invoices.find((i) => awb && [i.reference_number, i.notes].some((f) => norm(f).includes(awb)));
+      matchedBy = inv ? 'awb' : '';
+    }
     if (!inv && s.customerInfo?.name) {
       const cust = norm(s.customerInfo.name);
       const shipped = new Date(s.shippingDate || s.createdAt).getTime();
