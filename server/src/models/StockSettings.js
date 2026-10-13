@@ -28,6 +28,12 @@ const stockSettingsSchema = new mongoose.Schema(
 
     lastCountAt: { type: Date, default: null },
     lastCountBy: { type: String, default: '' },
+    /**
+     * Stops every WhatsApp message (customers, staff, stock update) until switched back
+     * on with PATCH /api/stock/settings { whatsappPaused: false }. Paused by default.
+     */
+    whatsappPaused: { type: Boolean, default: true },
+
     /** Set once every existing line has been switched to old + new tracking. */
     oldNewDefaultAt: { type: Date, default: null },
   },

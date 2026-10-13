@@ -3,6 +3,13 @@ const env = require('../config/env');
 const logger = require('../config/logger');
 const budget = require('./whatsappBudget');
 
+/** The on/off switch on the stock settings - while paused, nothing is sent. */
+async function isPaused() {
+  const StockSettings = require('../models/StockSettings');
+  const s = await StockSettings.findOne({ key: 'default' }).select('whatsappPaused');
+  return s ? s.whatsappPaused !== false : true;
+}
+
 /**
  * WhatsApp sending. Anantya.ai when ANANTYA_API_KEY is set, otherwise Gupshup; with
  * neither, every send is a logged no-op so missing credentials never break a flow.
@@ -197,6 +204,10 @@ async function sendWhatsApp({ to, text, template, context }) {
     logger.warn(`${context}: no destination number, skipping`);
     return false;
   }
+  if (await isPaused()) {
+    logger.info(`${context}: WhatsApp is paused - not sent to ${destination}`);
+    return false;
+  }
   // Each delivered message is billed - none goes out past the limits.
   if (!(await budget.reserve(destination, context))) return false;
   const ok = await (via === 'anantya' ? anantyaSend({ to: destination, text, template, context }) : gupshupSend({ to: destination, text, context }));
@@ -290,6 +301,7 @@ async function whatsAppStatus() {
     configured: true,
     senderNumber: env.anantya.senderNumber ? `…${env.anantya.senderNumber.slice(-4)}` : '',
     usage: await budget.usage().catch(() => null),
+    paused: await isPaused().catch(() => true),
   };
   try {
     const list = await anantyaTemplates({ fresh: true });

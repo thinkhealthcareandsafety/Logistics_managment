@@ -35,6 +35,7 @@ function settingsView(settings) {
     lastCountAt: settings.lastCountAt,
     lastCountBy: settings.lastCountBy,
     whatsappConfigured: isWhatsAppConfigured(),
+    whatsappPaused: settings.whatsappPaused,
   };
 }
 
@@ -236,9 +237,10 @@ const saveCount = asyncHandler(async (req, res) => {
 
 const updateSettings = asyncHandler(async (req, res) => {
   const settings = await StockSettings.get();
-  const { hideZeroInMessage, broadcast = {} } = req.body;
+  const { hideZeroInMessage, whatsappPaused, broadcast = {} } = req.body;
 
   if (hideZeroInMessage !== undefined) settings.hideZeroInMessage = !!hideZeroInMessage;
+  if (whatsappPaused !== undefined) settings.whatsappPaused = !!whatsappPaused;
   if (broadcast.enabled !== undefined) settings.broadcast.enabled = !!broadcast.enabled;
   if (broadcast.time !== undefined) {
     if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(broadcast.time)) throw new ApiError(400, 'Time must be HH:mm');

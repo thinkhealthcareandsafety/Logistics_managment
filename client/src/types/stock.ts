@@ -61,6 +61,7 @@ export interface StockSettings {
   lastCountAt: string | null;
   lastCountBy: string;
   whatsappConfigured: boolean;
+  whatsappPaused?: boolean;
 }
 
 export interface StockSnapshot {
