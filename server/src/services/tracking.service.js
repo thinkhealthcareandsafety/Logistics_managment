@@ -2,7 +2,7 @@ const Shipment = require('../models/Shipment');
 const { getAdapterForCarrier } = require('../adapters');
 const { emitShipmentUpdate } = require('../sockets');
 const { notifyStatusChange } = require('./notification.service');
-const { notifyCustomerDelivered, notifyCustomerBooked, notifyCustomerOutForDelivery } = require('./customerNotification.service');
+const { notifyCustomerDelivered, notifyCustomerBooked, notifyCustomerStage } = require('./customerNotification.service');
 const logger = require('../config/logger');
 const { deductForShipment } = require('./stock.service');
 const { syncDeliveredAt } = require('../utils/deliveredAt');
@@ -65,6 +65,7 @@ async function refreshShipment(shipment, { silent = false } = {}) {
 
   shipment.lastCheckedAt = new Date();
   applyCarrierRoute(shipment, route);
+  const previousStatus = shipment.status;
 
   if (checkpoints.length === 0) {
     syncDeliveredAt(shipment);
@@ -92,11 +93,13 @@ async function refreshShipment(shipment, { silent = false } = {}) {
 
   // The customer's thank-you + feedback request goes out the first time a shipment
   // lands on `delivered`. Done before the save so the sent-stamp persists with it.
-  // Out for delivery: tell the customer once, and only on a new scan (not on old history).
+  // In transit / out for delivery: tell the customer once per stage, only when the
+  // shipment has just moved into it (not on old history, not on every hub scan).
   // `silent`: a back-filled shipment's first fetch - its history isn't news to anyone.
-  if (!silent && shipment.status === 'out_for_delivery' && newCheckpoints.length > 0) {
-    await notifyCustomerOutForDelivery(shipment).catch((err) =>
-      logger.error(`notifyCustomerOutForDelivery failed for ${shipment.trackingNumber}: ${err.message}`)
+  const statusChanged = shipment.status !== previousStatus;
+  if (!silent && statusChanged && newCheckpoints.length > 0) {
+    await notifyCustomerStage(shipment).catch((err) =>
+      logger.error(`notifyCustomerStage failed for ${shipment.trackingNumber}: ${err.message}`)
     );
   }
   if (!silent && shipment.status === 'delivered') {
@@ -111,8 +114,10 @@ async function refreshShipment(shipment, { silent = false } = {}) {
     emitShipmentUpdate(shipment.createdBy.toString(), shipment);
   }
   if (!silent && newCheckpoints.length > 0) {
+    const last = newCheckpoints[newCheckpoints.length - 1];
     for (const checkpoint of newCheckpoints) {
-      await notifyStatusChange(shipment, checkpoint).catch((err) =>
+      // WhatsApp (billed) only for the scan that changed the status; in-app/email for every scan.
+      await notifyStatusChange(shipment, checkpoint, { whatsapp: statusChanged && checkpoint === last }).catch((err) =>
         logger.error(`notifyStatusChange failed: ${err.message}`)
       );
     }

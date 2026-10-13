@@ -108,6 +108,8 @@ const shipmentSchema = new mongoose.Schema(
       invoiceId: { type: String, default: '' },
       number: { type: String, default: '' },
       matchedBy: { type: String, default: '' },
+      /** Invoice total (₹) - over ₹50,000 the goods need an e-way bill. */
+      total: { type: Number, default: null },
     },
 
     /** When an older shipment was looked for in Zoho invoices and none matched (not retried). */
@@ -158,8 +160,9 @@ const shipmentSchema = new mongoose.Schema(
     // Set once and checked before sending, so a carrier re-issuing the delivered
     // checkpoint (or a manual re-sync) can't mail the same customer twice.
     deliveryNoticeSentAt: { type: Date },
-    // Same once-only guard for the customer's WhatsApp "booked" and "out for delivery" messages.
+    // Same once-only guard for the customer's WhatsApp "booked", "in transit" and "out for delivery" messages.
     bookedNoticeSentAt: { type: Date },
+    inTransitNoticeSentAt: { type: Date },
     outForDeliveryNoticeSentAt: { type: Date },
 
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },

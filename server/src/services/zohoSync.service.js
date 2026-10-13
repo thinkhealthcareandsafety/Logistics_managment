@@ -155,8 +155,10 @@ function sampleOf(items) {
   });
 }
 
+/** Only active goods come into stock - never services, inactive items or combos. */
 function isTracked(z) {
   if (z.status && z.status !== 'active') return false;
+  if (z.product_type && z.product_type !== 'goods') return false;
   if (z.is_combo_product) return false;
   if (z.item_type === 'inventory' || z.track_inventory === true) return true;
   const soh = z.stock_on_hand;

@@ -41,7 +41,7 @@ import { Skeleton, SkeletonRegion, Spinner } from '../components/ui/Loading';
 
 import { StockSkeleton } from '../components/skeletons/PageSkeletons';
 type Filter = 'all' | 'in' | 'out' | 'low' | 'expiring';
-type StockSort = 'sheet' | 'qty-desc' | 'qty-asc' | 'value-desc' | 'value-asc';
+type StockSort = 'qty-desc' | 'qty-asc' | 'value-desc' | 'value-asc';
 
 const unitPrice = (item: StockItem) => item.salePrice ?? item.purchasePrice ?? 0;
 
@@ -65,7 +65,6 @@ function keyExpiry(item: StockItem): string | null {
 }
 
 function sortItems(items: StockItem[], sort: StockSort): StockItem[] {
-  if (sort === 'sheet') return items;
   const key = (i: StockItem) => (sort.startsWith('qty') ? i.quantity : lineValue(i));
   const dir = sort.endsWith('desc') ? -1 : 1;
   return [...items].sort((a, b) => dir * (key(a) - key(b)) || a.name.localeCompare(b.name));
@@ -118,7 +117,7 @@ export function Stock() {
   // count actually happens - walk the shelf, then publish once.
   const [drafts, setDrafts] = useState<Drafts>({});
   const [filter, setFilter] = useState<Filter>('all');
-  const [sort, setSort] = useState<StockSort>('value-desc');
+  const [sort, setSort] = useState<StockSort>('qty-asc');
   const [search, setSearch] = useState('');
 
   const [dialog, setDialog] = useState<
@@ -401,7 +400,6 @@ export function Stock() {
               onChange={(e) => setSort(e.target.value as StockSort)}
               className="h-8 cursor-pointer appearance-none rounded-lg border border-slate-200 bg-white pl-2.5 pr-7 text-[13px] font-medium text-slate-700 shadow-[0_1px_2px_rgba(15,23,42,0.04)] outline-none transition hover:border-slate-300 focus:border-brand-500"
             >
-              <option value="sheet">Sheet order</option>
               <option value="qty-desc">Quantity: high to low</option>
               <option value="qty-asc">Quantity: low to high</option>
               <option value="value-desc">Value: high to low</option>

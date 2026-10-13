@@ -18,7 +18,7 @@ const STATUS_LABELS = {
  * Called by tracking.service whenever a shipment gains new checkpoint(s).
  * Respects each user's own notification preferences (in-app / email / which statuses).
  */
-async function notifyStatusChange(shipment, newCheckpoint) {
+async function notifyStatusChange(shipment, newCheckpoint, { whatsapp = true } = {}) {
   const user = await User.findById(shipment.createdBy);
   if (!user) return;
 
@@ -50,7 +50,7 @@ async function notifyStatusChange(shipment, newCheckpoint) {
     );
   }
 
-  if (prefs.whatsappEnabled && prefs.whatsappNumber) {
+  if (whatsapp && prefs.whatsappEnabled && prefs.whatsappNumber) {
     sendWhatsAppStatusMessage({
       to: prefs.whatsappNumber,
       shipment,

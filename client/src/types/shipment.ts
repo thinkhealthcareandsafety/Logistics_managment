@@ -81,7 +81,7 @@ export interface Shipment {
   carrierRoute?: CarrierRoute;
   status: ShipmentStatus;
   /** The Zoho Books invoice it was matched to (freight / e-way bill source). */
-  zohoInvoice?: { invoiceId: string; number: string; matchedBy: string };
+  zohoInvoice?: { invoiceId: string; number: string; matchedBy: string; total?: number | null };
   /** GST e-way bill for the consignment. */
   ewayBill?: { number: string; generatedAt: string | null; validUntil: string | null };
   /** Booking details from the logistics master sheet. */

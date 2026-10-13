@@ -133,8 +133,23 @@ export function destinationMismatch(s: Shipment): string | null {
   return `The courier shows this going to ${where}, but the delivery address is in ${entered}.`;
 }
 
-/** GST: consignments worth ₹50,000 or more need an e-way bill. */
+/** GST: consignments worth more than ₹50,000 need an e-way bill. */
 export const EWAY_BILL_THRESHOLD = 50000;
+
+/** What the goods are worth: the Zoho invoice total, else the value from the booking sheet. */
+export function shipmentValue(s: Shipment): number | null {
+  return s.zohoInvoice?.total || s.booking?.shipmentValue || null;
+}
+
+/**
+ * Whether e-way bill details belong on this shipment at all: over ₹50,000, or - when
+ * the value isn't known - when one was recorded anyway. Under ₹50,000 none is shown.
+ */
+export function ewayBillApplies(s: Shipment): boolean {
+  const value = shipmentValue(s);
+  return value != null ? value > EWAY_BILL_THRESHOLD : Boolean(s.ewayBill?.number);
+}
+
 export function ewayBillMissing(s: Shipment): boolean {
-  return !s.ewayBill?.number && (s.booking?.shipmentValue ?? 0) >= EWAY_BILL_THRESHOLD;
+  return !s.ewayBill?.number && (shipmentValue(s) ?? 0) > EWAY_BILL_THRESHOLD;
 }

@@ -6,7 +6,7 @@ import type { Shipment } from '../types/shipment';
 import { StatusBadge } from './StatusBadge';
 import { UrgencyBadge } from './UrgencyBadge';
 import { attentionReason, needsAttention } from '../utils/urgency';
-import { deliverTo, deliveredOn, deliveryVerdict, destinationMismatch, ewayBillMissing, formatINR, formatWeight } from '../utils/logistics';
+import { deliverTo, deliveredOn, deliveryVerdict, destinationMismatch, ewayBillApplies, ewayBillMissing, formatINR, formatWeight } from '../utils/logistics';
 import { EditDeliveryDialog } from './EditDeliveryDialog';
 import { useCarriers } from '../hooks/useCarriers';
 import { CourierLogo } from './CourierPicker';
@@ -108,18 +108,18 @@ export function ShipmentTable({
                   {shipment.productDetails?.name || 'Unnamed product'}
                   {qty ? <span className="text-slate-400"> · {qty} unit{qty === 1 ? '' : 's'}</span> : null}
                 </p>
-                <p className="mt-0.5 text-[12px]">
-                  {shipment.ewayBill?.number ? (
-                    <span className="font-mono tabular-nums text-slate-600">
-                      <span className="font-sans text-slate-400">E-way bill </span>
-                      {shipment.ewayBill.number.replace(/(\d{4})(?=\d)/g, '$1 ')}
-                    </span>
-                  ) : ewayBillMissing(shipment) ? (
-                    <span className="font-medium text-amber-700" title="Worth ₹50,000 or more - an e-way bill is required">E-way bill needed</span>
-                  ) : (
-                    <span className="text-slate-400">No e-way bill</span>
-                  )}
-                </p>
+                {ewayBillApplies(shipment) && (
+                  <p className="mt-0.5 text-[12px]">
+                    {shipment.ewayBill?.number ? (
+                      <span className="font-mono tabular-nums text-slate-600">
+                        <span className="font-sans text-slate-400">E-way bill </span>
+                        {shipment.ewayBill.number.replace(/(\d{4})(?=\d)/g, '$1 ')}
+                      </span>
+                    ) : ewayBillMissing(shipment) ? (
+                      <span className="font-medium text-amber-700" title="Worth over ₹50,000 - an e-way bill is required">E-way bill needed</span>
+                    ) : null}
+                  </p>
+                )}
               </td>
 
               <td className="hidden min-w-0 py-3 pr-4 lg:table-cell">

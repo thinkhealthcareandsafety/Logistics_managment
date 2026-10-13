@@ -136,6 +136,7 @@ async function importHistory(rows, userId) {
         // History: the customer was dealt with at the time. A live one only skips the
         // "booked" message - its out-for-delivery / delivered messages go as normal.
         bookedNoticeSentAt: now,
+        inTransitNoticeSentAt: live ? undefined : now,
         outForDeliveryNoticeSentAt: live ? undefined : now,
         deliveryNoticeSentAt: live ? undefined : now,
         createdBy: userId,
@@ -173,6 +174,7 @@ async function trackLive(ids) {
         }
         // Already out for delivery / delivered when it came in - not news to the customer now.
         const stamp = {};
+        if (shipment.status !== 'pending') stamp.inTransitNoticeSentAt = new Date();
         if (['out_for_delivery', 'delivered'].includes(shipment.status)) stamp.outForDeliveryNoticeSentAt = new Date();
         if (shipment.status === 'delivered') stamp.deliveryNoticeSentAt = new Date();
         if (Object.keys(stamp).length) await Shipment.updateOne({ _id: id }, { $set: stamp });

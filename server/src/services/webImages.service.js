@@ -6,8 +6,9 @@ const StockItem = require('../models/StockItem');
 
 /**
  * Product photos from the web for lines that have none from buyaedindia.com or Zoho.
- * Gemini with Google Search suggests image links and product pages; each candidate is
- * downloaded and shown back to Gemini, and only a photo that really is this product on a
+ * Candidates come from Bing Images (free, no key), then - only if that finds nothing -
+ * from Gemini with Google Search, whose free quota runs out quickly. Each candidate is
+ * downloaded and shown to Gemini, and only a photo that really is this product on a
  * white/plain background, sharp enough to use, is kept. Lines are searched once a month
  * at most, found or not.
  */
@@ -56,6 +57,65 @@ const describe = (item) => {
 const NOT_SAME = 'A different kind of product that merely shares the name (e.g. a brand called "Whistle" that sells dental aligners) does NOT count.';
 
 const isHttp = (u) => typeof u === 'string' && /^https?:\/\//i.test(u) && u.length < 2000;
+
+// Stock-photo libraries watermark their previews - never usable.
+const WATERMARKED = /(dreamstime|gettyimages|shutterstock|alamy|istockphoto|123rf|depositphotos|vecteezy|freepik|adobestock|stock\.adobe)\./i;
+
+/** Full-size image links (and the page each is on) from Bing Images. Free, no key. */
+async function bingImages(query, limit = MAX_CANDIDATES) {
+  const { data } = await axios.get('https://www.bing.com/images/search', {
+    params: { q: query, form: 'HDRSC2', first: 1 },
+    headers: { 'User-Agent': UA, 'Accept-Language': 'en-IN,en;q=0.9' },
+    timeout: 15000,
+  });
+  const out = [];
+  for (const m of String(data).matchAll(/\bm="(\{[^"]*\})"/g)) {
+    try {
+      const j = JSON.parse(m[1].replace(/&quot;/g, '"').replace(/&amp;/g, '&'));
+      if (isHttp(j.murl) && !WATERMARKED.test(j.murl) && !WATERMARKED.test(j.purl || '')) out.push({ url: j.murl, page: isHttp(j.purl) ? j.purl : '' });
+    } catch {
+      /* not a result tile */
+    }
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
+// Gemini's Google Search quota: once it says no, leave it alone for a few hours.
+let groundingDownUntil = 0;
+const groundingDown = () => Date.now() < groundingDownUntil;
+function noteGroundingError(err) {
+  if ([403, 429].includes(err.response?.status)) groundingDownUntil = Date.now() + 6 * 60 * 60 * 1000;
+}
+
+/**
+ * Candidate photos for a product: Bing first; Gemini's Google Search only when Bing
+ * has nothing. `query` is the plain search text for Bing.
+ */
+async function candidatesFor(name, query, limit = MAX_CANDIDATES) {
+  const fromBing = await bingImages(query, limit).catch((err) => {
+    logger.warn(`Bing image search failed for "${query}": ${err.message}`);
+    return [];
+  });
+  if (fromBing.length || groundingDown()) return fromBing;
+  try {
+    const { images, pages } = await searchCandidates(name);
+    const out = images.map((u) => ({ url: u, page: '' }));
+    for (const p of pages) {
+      if (out.length >= limit) break;
+      try {
+        const r = await pageImage(p);
+        for (const u of r.images) out.push({ url: u, page: r.page });
+      } catch {
+        /* page unreachable - next one */
+      }
+    }
+    return out;
+  } catch (err) {
+    noteGroundingError(err);
+    return [];
+  }
+}
 
 /** Image links and product pages for a product, from a Google-grounded search. */
 async function searchCandidates(name) {
@@ -131,17 +191,7 @@ Reply ONLY JSON {"sameProduct": true|false, "whiteBackground": true|false, "shar
 
 async function findFor(item) {
   const name = describe(item);
-  const { images, pages } = await searchCandidates(name);
-  const candidates = images.map((u) => ({ url: u, page: '' }));
-  for (const p of pages) {
-    if (candidates.length >= MAX_CANDIDATES) break;
-    try {
-      const r = await pageImage(p);
-      for (const u of r.images) candidates.push({ url: u, page: r.page });
-    } catch {
-      /* page unreachable - next one */
-    }
-  }
+  const candidates = await candidatesFor(name, `${item.displayName} product`);
   const seen = new Set();
   for (const c of candidates) {
     if (seen.has(c.url) || seen.size >= MAX_CANDIDATES) continue;
@@ -304,7 +354,7 @@ async function findExtras(retryBefore, limit) {
         found = await findExtrasFor(item);
       } catch (err) {
         if ([401, 403, 429].includes(err.response?.status)) {
-          lastRun.error = `Google search unavailable: ${err.response?.data?.error?.message || err.message}`;
+          noteGroundingError(err);
           stop = true;
           return; // leave this line unmarked so it's tried again
         }
@@ -396,8 +446,16 @@ async function findExtrasWideFor(item) {
     videos = videos.slice(0, 12);
   }
   const pdfs = [];
+  let pdfUrls = [];
+  if (wantBrochures && !groundingDown()) {
+    try {
+      ({ pdfUrls } = await searchExtras(`${name} - brochure, datasheet, catalogue or instructions for use (PDF)`, { wantVideos: false, wantBrochures: true }));
+    } catch (err) {
+      noteGroundingError(err);
+      if (!groundingDown()) throw err;
+    }
+  }
   if (wantBrochures) {
-    const { pdfUrls } = await searchExtras(`${name} - brochure, datasheet, catalogue or instructions for use (PDF)`, { wantVideos: false, wantBrochures: true });
     for (const url of pdfUrls) {
       if (pdfs.length >= 3) break;
       const buf = await fetchPdf(url);
@@ -420,17 +478,11 @@ async function findPhotoWide(item) {
   const name = describe(item);
   const exact = await findFor(item).catch(() => null);
   if (exact) return { ...exact, similar: false };
-  const { images, pages } = await searchCandidates(`${item.displayName} (any brand) product photo, white background`);
-  const candidates = images.map((u) => ({ url: u, page: '' }));
-  for (const p of pages) {
-    if (candidates.length >= 10) break;
-    try {
-      const r = await pageImage(p);
-      for (const u of r.images) candidates.push({ url: u, page: r.page });
-    } catch {
-      /* page unreachable */
-    }
-  }
+  const candidates = await candidatesFor(
+    `${item.displayName} (any brand) product photo, white background`,
+    `${item.displayName} white background`,
+    10
+  );
   const seen = new Set();
   for (const c of candidates) {
     if (seen.has(c.url) || seen.size >= 10) continue;
@@ -481,7 +533,10 @@ async function findWide(limit) {
   const worker = async () => {
     while (queue.length && !stop) {
       const item = queue.shift();
-      const set = { 'media.wideSearchedAt': new Date() };
+      const set = {};
+      // Marked searched only when every part ran - brochures skipped for want of Google
+      // Search leave the line to be tried again (its photo, if found, is kept either way).
+      let complete = !groundingDown() || Boolean(item.media?.brochures?.length);
       try {
         if (!item.zohoHasImage && !item.media?.images?.length) {
           const hit = await findPhotoWide(item);
@@ -501,15 +556,17 @@ async function findWide(limit) {
           lastRun.wide.videos += found.videos.length ? 1 : 0;
           lastRun.wide.brochures += found.brochures.length ? 1 : 0;
         }
-        if (Object.keys(set).length > 1) set['media.matchedAt'] = item.media?.matchedAt || new Date();
       } catch (err) {
         if ([401, 403, 429].includes(err.response?.status)) {
-          lastRun.error = `Google search unavailable: ${err.response?.data?.error?.message || err.message}`;
+          lastRun.error = `Gemini unavailable: ${err.response?.data?.error?.message || err.message}`;
           stop = true;
-          return; // leave this line unmarked so it's tried again
+          complete = false;
         }
       }
-      await StockItem.updateOne({ _id: item._id }, { $set: set });
+      if (Object.keys(set).length) set['media.matchedAt'] = item.media?.matchedAt || new Date();
+      if (complete && !groundingDown()) set['media.wideSearchedAt'] = new Date();
+      if (Object.keys(set).length) await StockItem.updateOne({ _id: item._id }, { $set: set });
+      if (stop) return;
       lastRun.wide.tried += 1;
     }
   };
@@ -540,7 +597,7 @@ function findWebImages({ limit = 150 } = {}) {
         } catch (err) {
           const msg = err.response?.data?.error?.message || err.message;
           if ([401, 403, 429].includes(err.response?.status)) {
-            lastRun.error = `Google search unavailable: ${msg}`;
+            lastRun.error = `Gemini unavailable: ${msg}`;
             logger.warn(`Web photo finder stopped: ${msg}`);
             break; // don't mark the rest as searched
           }
@@ -561,8 +618,10 @@ function findWebImages({ limit = 150 } = {}) {
         lastRun.results = lastRun.results.slice(0, 40);
       }
       logger.info(`Web photo finder: ${lastRun.found}/${lastRun.tried} lines got a photo`);
-      if (!lastRun.error) await findExtras(retryBefore, limit * 3);
+      // Photos matter most: the wider pass (Bing + YouTube, no Google Search needed) runs
+      // first; the Google-Search-only video/brochure pass afterwards, if its quota allows.
       if (!lastRun.error) await findWide(limit * 4);
+      if (!lastRun.error && !groundingDown()) await findExtras(retryBefore, limit * 3);
     } catch (err) {
       lastRun.error = err.message;
       logger.error(`Web photo finder failed: ${err.message}`);

@@ -54,8 +54,14 @@ const env = {
   // "name" or "name|field,field,..." (fields: awb, status, link, name, feedbackUrl, date, summary).
   anantya: {
     apiKey: process.env.ANANTYA_API_KEY || '',
-    // Customer WhatsApp on booking and out-for-delivery (the delivery thank-you is separate). Off with "false".
+    // Customer WhatsApp at each stage: booked, picked up, out for delivery (the delivery thank-you is separate). Off with "false".
     customerUpdates: process.env.WHATSAPP_CUSTOMER_UPDATES !== 'false',
+    // Every delivered message is billed, so sends stop at these (see services/whatsappBudget.js).
+    limits: {
+      dailyLimit: Number(process.env.WHATSAPP_DAILY_LIMIT) || 40,
+      monthlyLimit: Number(process.env.WHATSAPP_MONTHLY_LIMIT) || 500,
+      perNumberDailyLimit: Number(process.env.WHATSAPP_PER_NUMBER_DAILY_LIMIT) || 3,
+    },
     senderNumber: process.env.ANANTYA_SENDER_NUMBER || '',
     baseUrl: (process.env.ANANTYA_BASE_URL || 'https://apiv1.anantya.ai').replace(/\/$/, ''),
     templates: {

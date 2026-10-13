@@ -7,7 +7,7 @@ import { StatusBadge } from './StatusBadge';
 import { UrgencyBadge } from './UrgencyBadge';
 import { ProgressRail } from './ProgressRail';
 import { attentionReason, needsAttention } from '../utils/urgency';
-import { deliverTo, deliveredOn, deliveryVerdict, ewayBillMissing, formatINR, formatWeight } from '../utils/logistics';
+import { deliverTo, deliveredOn, deliveryVerdict, ewayBillApplies, ewayBillMissing, formatINR, formatWeight } from '../utils/logistics';
 import { EditDeliveryDialog } from './EditDeliveryDialog';
 import { useCarriers } from '../hooks/useCarriers';
 import { CourierLogo } from './CourierPicker';
@@ -62,17 +62,17 @@ export function ShipmentCard({
           {shipment.customerInfo?.name || 'No customer set'}
           {qty ? ` · ${qty} unit${qty === 1 ? '' : 's'}` : ''}
         </p>
-        <p className="mt-0.5 text-[12px] text-slate-400">
-          {shipment.ewayBill?.number ? (
-            <>
-              E-way bill <span className="font-mono tabular-nums text-slate-600">{shipment.ewayBill.number.replace(/(\d{4})(?=\d)/g, '$1 ')}</span>
-            </>
-          ) : ewayBillMissing(shipment) ? (
-            <span className="font-medium text-amber-700">E-way bill needed (₹50,000+)</span>
-          ) : (
-            'No e-way bill'
-          )}
-        </p>
+        {ewayBillApplies(shipment) && (
+          <p className="mt-0.5 text-[12px] text-slate-400">
+            {shipment.ewayBill?.number ? (
+              <>
+                E-way bill <span className="font-mono tabular-nums text-slate-600">{shipment.ewayBill.number.replace(/(\d{4})(?=\d)/g, '$1 ')}</span>
+              </>
+            ) : ewayBillMissing(shipment) ? (
+              <span className="font-medium text-amber-700">E-way bill needed (over ₹50,000)</span>
+            ) : null}
+          </p>
+        )}
 
         <ProgressRail status={shipment.status} className="mt-4" />
 

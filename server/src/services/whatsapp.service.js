@@ -1,6 +1,7 @@
 const axios = require('axios');
 const env = require('../config/env');
 const logger = require('../config/logger');
+const budget = require('./whatsappBudget');
 
 /**
  * WhatsApp sending. Anantya.ai when ANANTYA_API_KEY is set, otherwise Gupshup; with
@@ -196,7 +197,11 @@ async function sendWhatsApp({ to, text, template, context }) {
     logger.warn(`${context}: no destination number, skipping`);
     return false;
   }
-  return via === 'anantya' ? anantyaSend({ to: destination, text, template, context }) : gupshupSend({ to: destination, text, context });
+  // Each delivered message is billed - none goes out past the limits.
+  if (!(await budget.reserve(destination, context))) return false;
+  const ok = await (via === 'anantya' ? anantyaSend({ to: destination, text, template, context }) : gupshupSend({ to: destination, text, context }));
+  if (!ok) await budget.release(destination);
+  return ok;
 }
 
 /** Status update: AWB, status and live tracking link. */
@@ -280,7 +285,12 @@ function isWhatsAppConfigured() {
 async function whatsAppStatus() {
   const via = provider();
   if (via !== 'anantya') return { provider: via, configured: Boolean(via) };
-  const out = { provider: 'anantya', configured: true, senderNumber: env.anantya.senderNumber ? `…${env.anantya.senderNumber.slice(-4)}` : '' };
+  const out = {
+    provider: 'anantya',
+    configured: true,
+    senderNumber: env.anantya.senderNumber ? `…${env.anantya.senderNumber.slice(-4)}` : '',
+    usage: await budget.usage().catch(() => null),
+  };
   try {
     const list = await anantyaTemplates({ fresh: true });
     out.keyWorks = true;

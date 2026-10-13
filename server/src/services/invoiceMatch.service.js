@@ -8,12 +8,20 @@ const zoho = require('./zoho.client');
  * is matched to its invoice - for sure when the invoice's Reference# (or notes) holds
  * the AWB, otherwise when exactly one invoice for the same customer is dated within 3
  * days of shipping. Freight = the invoice's shipping charge. Zoho's public API has no
- * e-way bill section, so any e-way bill number printed on the invoice is picked up.
+ * e-way bill section, so any e-way bill number on the invoice is picked up.
+ *
+ * E-way bills are only needed over ₹50,000, and in Zoho they're usually made after the
+ * invoice - so matched invoices over that amount are re-read for a few days until the
+ * e-way bill number appears.
  */
 
 const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 const day = (d) => new Date(d).toISOString().slice(0, 10);
 const DAY = 24 * 60 * 60 * 1000;
+/** GST: goods worth more than this travel with an e-way bill. */
+const EWAY_BILL_THRESHOLD = 50000;
+const EWB_RECHECK_DAYS = 10;
+const money = (v) => (Number.isFinite(Number(v)) && v !== '' && v != null ? Number(v) : null);
 
 /** Any 12-digit e-way bill number in fields named like e-way bill. */
 function findEwayBill(invoice) {
@@ -45,9 +53,39 @@ const invoiceNumbers = (s) =>
     .map(norm)
     .filter((n) => n.length >= 5);
 
+/**
+ * Matched invoices over ₹50,000 whose e-way bill wasn't on the invoice yet: read the
+ * invoice again (a few a run), for up to EWB_RECHECK_DAYS after shipping.
+ */
+async function recheckEwayBills(conn, budget) {
+  const since = new Date(Date.now() - EWB_RECHECK_DAYS * DAY);
+  const due = await Shipment.find({
+    'zohoInvoice.invoiceId': { $nin: ['', null] },
+    'zohoInvoice.total': { $gt: EWAY_BILL_THRESHOLD },
+    'ewayBill.number': { $in: ['', null] },
+    $or: [{ shippingDate: { $gte: since } }, { shippingDate: null, createdAt: { $gte: since } }],
+  }).limit(budget);
+  let found = 0;
+  for (const s of due) {
+    try {
+      const ewb = findEwayBill(await zoho.getInvoice(conn, s.zohoInvoice.invoiceId));
+      await sleep(650);
+      if (ewb) {
+        await Shipment.updateOne({ _id: s._id }, { $set: { 'ewayBill.number': ewb } });
+        found += 1;
+      }
+    } catch (err) {
+      if (err.statusCode === 429) break;
+    }
+  }
+  return found;
+}
+
 async function matchInvoices() {
   const conn = await ZohoConnection.get();
   if (!conn.isConnected) return { skipped: 'not connected' };
+  // E-way bills made after their invoice was matched (cheap: a handful of reads a run).
+  const lateEwb = await recheckEwayBills(conn, 20).catch(() => 0);
   const recent = new Date(Date.now() - 60 * DAY);
   // Recent shipments, plus any shipment with an invoice number (the master-sheet history).
   const shipments = await Shipment.find({
@@ -58,7 +96,7 @@ async function matchInvoices() {
     ],
     invoiceCheckedAt: { $in: [null] },
   }).sort({ shippingDate: -1 });
-  if (!shipments.length) return { matched: 0 };
+  if (!shipments.length) return { matched: 0, ewbSet: lateEwb };
   const oldest = shipments.reduce((min, s) => Math.min(min, new Date(s.shippingDate || s.createdAt).getTime()), Date.now());
   let invoices;
   try {
@@ -74,6 +112,14 @@ async function matchInvoices() {
     await conn.save();
     return { error: conn.invoiceError };
   }
+  // Shipments matched before invoice totals were kept: fill the total from this list.
+  const byId = new Map(invoices.map((i) => [String(i.invoice_id), i]));
+  const noTotal = await Shipment.find({ 'zohoInvoice.invoiceId': { $nin: ['', null] }, 'zohoInvoice.total': null }).select('zohoInvoice');
+  for (const s of noTotal) {
+    const total = money(byId.get(String(s.zohoInvoice.invoiceId))?.total);
+    if (total) await Shipment.updateOne({ _id: s._id }, { $set: { 'zohoInvoice.total': total } });
+  }
+
   const byNumber = new Map(invoices.map((i) => [norm(i.invoice_number), i]));
   const findByNumber = (n) => byNumber.get(n) || invoices.find((i) => norm(i.invoice_number).endsWith(n));
 
@@ -113,6 +159,7 @@ async function matchInvoices() {
     }
     let freight = 0;
     let ewb = '';
+    let total = 0;
     for (const inv of found) {
       let full = inv;
       try {
@@ -124,18 +171,21 @@ async function matchInvoices() {
       }
       const f = Number(full.shipping_charge);
       if (Number.isFinite(f) && f > 0) freight += f;
+      total += money(full.total ?? inv.total) || 0;
       ewb = ewb || findEwayBill(full);
     }
     s.zohoInvoice = {
       invoiceId: String(found[0].invoice_id),
       number: found.map((i) => i.invoice_number).filter(Boolean).join(', '),
       matchedBy,
+      total: total > 0 ? Math.round(total * 100) / 100 : null,
     };
     if (s.freightAmount == null && freight > 0) {
       s.freightAmount = Math.round(freight * 100) / 100;
       freightSet += 1;
     }
-    if (ewb && !s.ewayBill?.number) {
+    // Under ₹50,000 no e-way bill is needed - a number Zoho happens to carry isn't shown.
+    if (ewb && !s.ewayBill?.number && !(total > 0 && total <= EWAY_BILL_THRESHOLD)) {
       s.ewayBill = { number: ewb, generatedAt: s.ewayBill?.generatedAt || null, validUntil: s.ewayBill?.validUntil || null };
       ewbSet += 1;
     }
@@ -143,10 +193,10 @@ async function matchInvoices() {
     matched += 1;
   }
   conn.invoiceMatchAt = new Date();
-  conn.invoiceMatchSummary = `${matched} matched · ${freightSet} freight · ${ewbSet} e-way bills (of ${shipments.length} shipments, ${invoices.length} invoices)`;
+  conn.invoiceMatchSummary = `${matched} matched · ${freightSet} freight · ${ewbSet + lateEwb} e-way bills (of ${shipments.length} shipments, ${invoices.length} invoices)`;
   await conn.save();
   if (matched) logger.info(`Invoice match: ${conn.invoiceMatchSummary}`);
   return { matched, freightSet, ewbSet };
 }
 
-module.exports = { matchInvoices, findEwayBill };
+module.exports = { matchInvoices, findEwayBill, EWAY_BILL_THRESHOLD };

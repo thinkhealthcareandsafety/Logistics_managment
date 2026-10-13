@@ -7,6 +7,8 @@ const { sendWhatsAppDeliveryMessage, sendWhatsAppBookedMessage, sendWhatsAppCust
 
 /** How long after delivery we keep trying to get the thank-you out. */
 const RETRY_WINDOW_DAYS = 7;
+/** Stage messages only for shipments sent in the last couple of weeks - never old ones. */
+const STAGE_MESSAGE_DAYS = 15;
 
 /**
  * Links handed to the customer. Both are public and keyed by tracking number - the
@@ -63,27 +65,39 @@ async function notifyCustomerDelivered(shipment) {
   return delivered;
 }
 
+const isRecent = (shipment) =>
+  Date.now() - new Date(shipment.shippingDate || shipment.createdAt || Date.now()).getTime() <= STAGE_MESSAGE_DAYS * 24 * 60 * 60 * 1000;
+
 /**
- * WhatsApp to the customer when their shipment is booked, and when it goes out for
- * delivery - once each (the caller saves). Off with WHATSAPP_CUSTOMER_UPDATES=false.
+ * WhatsApp to the customer at each stage - booked, in transit (picked up), out for
+ * delivery - once each (the caller saves); the delivered thank-you is
+ * notifyCustomerDelivered. One message per stage, not per courier scan: a shipment
+ * passes through many hubs and every message is billed. Off with
+ * WHATSAPP_CUSTOMER_UPDATES=false.
  */
 async function notifyCustomerBooked(shipment) {
   const phone = shipment.customerInfo?.phone;
   if (!env.anantya.customerUpdates || shipment.bookedNoticeSentAt || !phone || !isWhatsAppConfigured()) return false;
-  if (shipment.status === 'delivered') return false;
+  if (shipment.status === 'delivered' || !isRecent(shipment)) return false;
   const { trackingUrl } = customerLinks(shipment);
   const ok = await sendWhatsAppBookedMessage({ to: phone, shipment, trackingUrl });
   if (ok) shipment.bookedNoticeSentAt = new Date();
   return ok;
 }
 
-async function notifyCustomerOutForDelivery(shipment) {
+const STAGE_STAMP = { in_transit: 'inTransitNoticeSentAt', out_for_delivery: 'outForDeliveryNoticeSentAt' };
+
+/** The in-transit or out-for-delivery message, if the shipment is at that stage and hasn't had it. */
+async function notifyCustomerStage(shipment) {
+  const stamp = STAGE_STAMP[shipment.status];
   const phone = shipment.customerInfo?.phone;
-  if (!env.anantya.customerUpdates || shipment.outForDeliveryNoticeSentAt || !phone || !isWhatsAppConfigured()) return false;
-  if (shipment.status !== 'out_for_delivery') return false;
+  if (!stamp || !env.anantya.customerUpdates || shipment[stamp] || !phone || !isWhatsAppConfigured()) return false;
+  // Already out for delivery? "In transit" would be old news.
+  if (shipment.status === 'in_transit' && shipment.outForDeliveryNoticeSentAt) return false;
+  if (!isRecent(shipment)) return false;
   const { trackingUrl } = customerLinks(shipment);
-  const ok = await sendWhatsAppCustomerStatus({ to: phone, shipment, status: 'out_for_delivery', trackingUrl });
-  if (ok) shipment.outForDeliveryNoticeSentAt = new Date();
+  const ok = await sendWhatsAppCustomerStatus({ to: phone, shipment, status: shipment.status, trackingUrl });
+  if (ok) shipment[stamp] = new Date();
   return ok;
 }
 
@@ -125,7 +139,7 @@ async function retryPendingDeliveryNotices() {
 
 module.exports = {
   notifyCustomerBooked,
-  notifyCustomerOutForDelivery,
+  notifyCustomerStage,
   notifyCustomerDelivered,
   retryPendingDeliveryNotices,
   deliveryChannels,
