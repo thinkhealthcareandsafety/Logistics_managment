@@ -527,6 +527,9 @@ async function findWide(limit) {
   })
     .populate('categoryId', 'name')
     .limit(limit);
+  // Lines with no photo at all first - before Gemini's daily quota goes on videos/brochures.
+  const needsPhoto = (i) => (!i.zohoHasImage && !i.media?.images?.length ? 1 : 0);
+  items.sort((a, b) => needsPhoto(b) - needsPhoto(a));
   lastRun.wide = { total: items.length, tried: 0, photos: 0, videos: 0, brochures: 0 };
   let stop = false;
   const queue = [...items];
