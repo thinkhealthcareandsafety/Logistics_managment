@@ -110,7 +110,7 @@ export function Stock() {
   // count actually happens - walk the shelf, then publish once.
   const [drafts, setDrafts] = useState<Drafts>({});
   const [filter, setFilter] = useState<Filter>('all');
-  const [sort, setSort] = useState<StockSort>('qty-asc');
+  const [sort, setSort] = useState<StockSort>('qty-desc');
   const [search, setSearch] = useState('');
 
   const [dialog, setDialog] = useState<
