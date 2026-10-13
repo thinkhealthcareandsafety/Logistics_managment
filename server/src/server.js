@@ -25,6 +25,9 @@ async function main() {
   startZohoSyncJob();
   startProductMediaJob();
   require('./services/courierCatalog.service').getCatalog().catch(() => {});
+  require('./controllers/shipment.controller')
+    .warmShipmentLists()
+    .catch((err) => logger.error(`Shipment list warm-up failed: ${err.message}`));
 
   httpServer.listen(env.port, () => {
     logger.info(`Server listening on port ${env.port} [${env.nodeEnv}]`);

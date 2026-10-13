@@ -69,6 +69,15 @@ const listShipments = asyncHandler(async (req, res) => {
   if (cached) return res.type('json').send(cached);
   const atVersion = listCache.currentVersion();
 
+  const build = () => buildShipmentList(query);
+  // Searches are one-offs; the plain lists are what people reopen, so keep those warm.
+  if (!search) listCache.remember(cacheKey, build);
+  const body = await build();
+  listCache.set(cacheKey, body, atVersion);
+  res.type('json').send(body);
+});
+
+async function buildShipmentList(query) {
   const shipments = await Shipment.find(query, { trackingExtras: 0, trackingMoreId: 0, __v: 0 }).sort({ createdAt: -1 }).lean();
   for (const s of shipments) {
     const cps = s.checkpoints || [];
@@ -79,10 +88,28 @@ const listShipments = asyncHandler(async (req, res) => {
     }
     if (s.exceptionFollowUp?.notes?.length > 3) s.exceptionFollowUp.notes = s.exceptionFollowUp.notes.slice(-3);
   }
-  const body = JSON.stringify({ shipments });
-  listCache.set(cacheKey, body, atVersion);
-  res.type('json').send(body);
-});
+  return JSON.stringify({ shipments });
+}
+
+/**
+ * Builds every user's active and archived lists at startup, so the first person to open
+ * the dashboard after a restart or deploy gets them from memory, not the database.
+ */
+async function warmShipmentLists() {
+  const listCache = require('../utils/shipmentListCache');
+  const owners = await Shipment.distinct('createdBy');
+  for (const owner of owners) {
+    for (const isArchived of [false, true]) {
+      // Same shape (and key order) as the query listShipments builds for this user.
+      const query = { createdBy: String(owner), isArchived };
+      const key = JSON.stringify(query);
+      const build = () => buildShipmentList(query);
+      listCache.remember(key, build);
+      const atVersion = listCache.currentVersion();
+      listCache.set(key, await build(), atVersion);
+    }
+  }
+}
 
 const getShipment = asyncHandler(async (req, res) => {
   const shipment = await Shipment.findOne({
@@ -436,6 +463,7 @@ module.exports = {
   extractFromLabel,
   createShipment,
   listShipments,
+  warmShipmentLists,
   getShipment,
   updateShipment,
   deleteShipment,

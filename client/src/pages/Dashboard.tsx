@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { formatDistanceToNow } from 'date-fns';
 import clsx from 'clsx';
 import { useCarriers } from '../hooks/useCarriers';
+import { useInView } from '../hooks/useInView';
 import { useBulkArchiveShipments, useRefreshAllShipments, useShipments } from '../hooks/useShipments';
 import { ShipmentCard } from '../components/ShipmentCard';
 import { ShipmentTable } from '../components/ShipmentTable';
@@ -30,6 +31,7 @@ const SORT_LABELS: Record<Sort, string> = {
 };
 
 const VIEW_STORAGE_KEY = 'th.dashboard.view';
+const ROWS_PER_BATCH = 60;
 
 const toolbarButton =
   'inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 text-[13px] font-medium text-slate-700 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600';
@@ -208,6 +210,16 @@ export function Dashboard() {
       return timeOf(b.createdAt) - timeOf(a.createdAt);
     });
   }, [all, archived, attentionOnly, status, search, sort]);
+
+  // Hundreds of rows take a moment to draw, so the first screenful goes up at once and
+  // the rest follows as you scroll. Select-all, export and counts still use every row.
+  const [shownCount, setShownCount] = useState(ROWS_PER_BATCH);
+  useEffect(() => setShownCount(ROWS_PER_BATCH), [scope, status, attentionOnly, courier, search, sort]);
+  const [moreRef, nearEnd] = useInView<HTMLDivElement>({ rootMargin: '1200px 0px' });
+  useEffect(() => {
+    if (nearEnd && shownCount < visible.length) setShownCount((n) => n + ROWS_PER_BATCH * 2);
+  }, [nearEnd, shownCount, visible.length]);
+  const shown = visible.length > shownCount ? visible.slice(0, shownCount) : visible;
 
   // Spelled out in the WhatsApp message so the reader knows it's a filtered view.
   const viewScope = [
@@ -616,18 +628,23 @@ export function Dashboard() {
           />
         ) : effectiveView === 'list' ? (
           <ShipmentTable
-            shipments={visible}
+            shipments={shown}
+            allSelected={visible.length > 0 && visible.every((s) => selectedIds.has(s._id))}
+            someSelected={visible.some((s) => selectedIds.has(s._id))}
             selectedIds={selectedIds}
             onToggleSelect={toggleSelect}
             onToggleSelectAll={toggleSelectAll}
           />
         ) : (
           <div className="grid grid-cols-1 gap-3 bg-slate-50/60 p-4 sm:grid-cols-2 xl:grid-cols-3">
-            {visible.map((s) => (
+            {shown.map((s) => (
               <ShipmentCard key={s._id} shipment={s} selected={selectedIds.has(s._id)} onToggleSelect={toggleSelect} />
             ))}
           </div>
         )}
+
+        {/* Draws the next batch of rows when scrolled near; always mounted so it's observed. */}
+        <div ref={moreRef} aria-hidden />
 
         {/* Footer */}
         {!listLoading && visible.length > 0 && (

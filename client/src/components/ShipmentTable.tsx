@@ -19,19 +19,22 @@ import { CourierLogo } from './CourierPicker';
 export function ShipmentTable({
   shipments,
   selectedIds,
+  allSelected,
+  someSelected,
   onToggleSelect,
   onToggleSelectAll,
 }: {
+  /** The rows drawn so far - the select-all state covers the whole filtered list. */
   shipments: Shipment[];
   selectedIds: Set<string>;
+  allSelected: boolean;
+  someSelected: boolean;
   onToggleSelect: (id: string) => void;
   onToggleSelectAll: () => void;
 }) {
   const navigate = useNavigate();
   const { byCode } = useCarriers();
   const [editing, setEditing] = useState<Shipment | null>(null);
-  const allSelected = shipments.length > 0 && shipments.every((s) => selectedIds.has(s._id));
-  const someSelected = shipments.some((s) => selectedIds.has(s._id)) && !allSelected;
 
   return (
     <>
@@ -43,7 +46,7 @@ export function ShipmentTable({
           <th scope="col" className="w-11 py-2.5 pl-4">
             <Checkbox
               checked={allSelected}
-              indeterminate={someSelected}
+              indeterminate={someSelected && !allSelected}
               onChange={onToggleSelectAll}
               label="Select all shipments"
             />

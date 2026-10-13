@@ -43,8 +43,17 @@ import { StockSkeleton } from '../components/skeletons/PageSkeletons';
 type Filter = 'all' | 'in' | 'out' | 'low' | 'expiring';
 type StockSort = 'sheet' | 'qty-desc' | 'qty-asc' | 'value-desc' | 'value-asc';
 
+const unitPrice = (item: StockItem) => item.salePrice ?? item.purchasePrice ?? 0;
+
 /** Value of what's on the shelf: total units × sale price from Zoho (cost price if no sale price). */
-export const lineValue = (item: StockItem, qty = item.quantity) => qty * (item.salePrice ?? item.purchasePrice ?? 0);
+export const lineValue = (item: StockItem, qty = item.quantity) => qty * unitPrice(item);
+
+/**
+ * The total shown for a category (and overall): the sale price of every line that has
+ * stock, once each. Out-of-stock lines add nothing, however high their price.
+ */
+export const inStockPriceTotal = (items: StockItem[], qtyOf: (item: StockItem) => number = (i) => i.quantity) =>
+  items.reduce((sum, i) => (qtyOf(i) > 0 ? sum + unitPrice(i) : sum), 0);
 const inr = (n: number) => `₹${Math.round(n).toLocaleString('en-IN')}`;
 
 /** The date that matters on a line: the next one to expire, else the latest that already has. */
@@ -188,7 +197,16 @@ export function Stock() {
       if (itemExpiryState(item) !== 'ok') expiring += 1;
       for (const d of item.expiryDates) if (!nextExpiry || d < nextExpiry) nextExpiry = d;
     }
-    return { units, value, out, low, expiring, nextExpiry, withThreshold: items.filter((i) => i.lowStockAt != null).length };
+    return {
+      units,
+      value,
+      priceTotal: inStockPriceTotal(items),
+      out,
+      low,
+      expiring,
+      nextExpiry,
+      withThreshold: items.filter((i) => i.lowStockAt != null).length,
+    };
   }, [items]);
 
   const query = search.trim().toLowerCase();
@@ -317,7 +335,7 @@ export function Stock() {
         <Metric
           label="Units in stock"
           value={summary.units}
-          detail={`${items.length} lines · ${categories.length} categories${summary.value ? ` · ${inr(summary.value)} value` : ''}`}
+          detail={`${items.length} lines · ${categories.length} categories${summary.priceTotal ? ` · ${inr(summary.priceTotal)} total` : ''}`}
         />
         <Metric
           label="Out of stock"
@@ -564,6 +582,7 @@ function CategorySection({
   sort: StockSort;
 }) {
   const total = allItems.reduce((sum, i) => sum + draftTotal(i, drafts), 0);
+  const priceTotal = inStockPriceTotal(allItems, (i) => draftTotal(i, drafts));
   const value = allItems.reduce((sum, i) => sum + lineValue(i, draftTotal(i, drafts)), 0);
   const removeItem = useRemoveStockItem();
   const listed = category.listStyle !== 'plain';
@@ -579,9 +598,13 @@ function CategorySection({
           <span className="shrink-0 text-[13px] tabular-nums text-slate-500">
             {total.toLocaleString('en-IN')} unit{total === 1 ? '' : 's'}
           </span>
-          {value > 0 && (
-            <span className="shrink-0 text-[13px] font-medium tabular-nums text-slate-700" title="Total units × sale price from Zoho Books">
-              · {inr(value)}
+          {priceTotal > 0 && (
+            <span
+              className="shrink-0 text-[13px] font-medium tabular-nums text-slate-700"
+              title={`Sale price of each in-stock item, once each - out-of-stock items add nothing.
+Stock value (units × sale price): ${inr(value)}`}
+            >
+              · {inr(priceTotal)}
             </span>
           )}
         </h2>
