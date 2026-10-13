@@ -32,8 +32,9 @@ async function gemini(body) {
       return data;
     } catch (err) {
       lastErr = err;
-      // A quota or key problem is the same on every model - stop here.
-      if ([401, 403, 429].includes(err.response?.status)) break;
+      // A key problem is the same on every model - stop here. Free-tier quotas are per
+      // model, so a 429 moves on to the next one.
+      if ([401, 403].includes(err.response?.status)) break;
     }
   }
   throw lastErr;
