@@ -6,6 +6,7 @@ import { useInView } from '../hooks/useInView';
 import { useBulkArchiveShipments, useRefreshAllShipments, useShipments } from '../hooks/useShipments';
 import { ShipmentCard } from '../components/ShipmentCard';
 import { ShipmentTable } from '../components/ShipmentTable';
+import { ShipmentBoard } from '../components/ShipmentBoard';
 import { ShipmentSkeletonGrid, ShipmentSkeletonRows } from '../components/ShipmentSkeleton';
 import { AddShipmentDialog } from '../components/AddShipmentDialog';
 import { BulkImportDialog } from '../components/BulkImportDialog';
@@ -381,6 +382,9 @@ export function Dashboard() {
           detail={`Across ${summary.inFlight} consignment${summary.inFlight === 1 ? '' : 's'}`}
         />
       </section>
+
+      {/* ───────── Board: in transit / out for delivery / delivered ───────── */}
+      {!isLoading && <ShipmentBoard shipments={active} />}
 
       {/* ───────── Shipments panel ───────── */}
       <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]">

@@ -29,6 +29,7 @@ import {
   processingTime,
 } from '../utils/logistics';
 import type { Shipment } from '../types/shipment';
+import { InvoiceDocuments } from '../components/InvoiceDocuments';
 
 import { DetailSkeleton } from '../components/skeletons/PageSkeletons';
 export function ShipmentDetail() {
@@ -472,12 +473,9 @@ function DeliveryCard({ shipment: s, onEdit }: { shipment: Shipment; onEdit: () 
       )}
 
       <div className="mt-4 border-t border-slate-100 pt-3 text-[13px]">
-        {s.zohoInvoice?.number && (
-          <p className="mb-2 text-[12px] text-slate-500">
-            Zoho invoice <span className="font-medium text-slate-800">{s.zohoInvoice.number}</span>
-            {s.zohoInvoice.matchedBy === 'customer+date' && ' (matched by customer and date)'}
-          </p>
-        )}
+        <div className="mb-3 empty:mb-0">
+          <InvoiceDocuments shipment={s} part="invoices" />
+        </div>
         {ewayBillApplies(s) && (
           <>
             <p className="text-[12px] text-slate-500">E-way bill</p>
@@ -493,6 +491,9 @@ function DeliveryCard({ shipment: s, onEdit }: { shipment: Shipment; onEdit: () 
                     </span>
                   )}
                 </p>
+                <div className="mt-2">
+                  <InvoiceDocuments shipment={s} part="ewayBill" />
+                </div>
               </div>
             ) : (
               <p className="mt-1 text-slate-500">

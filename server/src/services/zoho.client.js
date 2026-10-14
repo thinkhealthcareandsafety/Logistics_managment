@@ -191,6 +191,49 @@ async function getInvoice(conn, invoiceId) {
   return body.invoice || {};
 }
 
+/** The invoice whose number is exactly `number`, or null. */
+async function findInvoiceByNumber(conn, number) {
+  const body = await booksGet(conn, '/invoices', { organization_id: conn.organizationId, invoice_number: number });
+  const norm = (v) => String(v || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  return (body.invoices || []).find((i) => norm(i.invoice_number) === norm(number)) || null;
+}
+
+/** The invoice as Zoho prints it - a PDF Buffer. */
+async function getInvoicePdf(conn, invoiceId) {
+  const run = async (token) =>
+    axios.get(`${conn.apiDomain || defaultApiDomain()}/books/v3/invoices/${encodeURIComponent(invoiceId)}`, {
+      params: { organization_id: conn.organizationId, accept: 'pdf' },
+      headers: { Authorization: `Zoho-oauthtoken ${token}` },
+      responseType: 'arraybuffer',
+      timeout: 30000,
+    });
+  let res;
+  try {
+    res = await run(await accessToken(conn));
+  } catch (err) {
+    if (err.response?.status === 401) res = await run(await accessToken(conn, { force: true }));
+    else if (err.response?.status === 404) throw new ApiError(404, 'Zoho Books has no such invoice any more');
+    else if (err.response) {
+      let msg = '';
+      try {
+        msg = JSON.parse(Buffer.from(err.response.data).toString()).message || '';
+      } catch {
+        /* not JSON */
+      }
+      throw new ApiError(502, `Zoho Books: ${msg || `HTTP ${err.response.status}`}`);
+    } else throw new ApiError(502, `Couldn’t reach Zoho Books (${err.message})`);
+  }
+  const buf = Buffer.from(res.data);
+  if (buf.subarray(0, 5).toString() !== '%PDF-') throw new ApiError(502, 'Zoho Books didn’t return a PDF for this invoice');
+  return buf;
+}
+
+/** The invoice's page in Zoho Books (its e-way bill can be printed from there). */
+function invoiceWebUrl(conn, invoiceId) {
+  const domain = DC_DOMAINS[env.zoho.dc] || DC_DOMAINS.in;
+  return `https://books.${domain}/app/${encodeURIComponent(conn.organizationId)}#/invoices/${encodeURIComponent(invoiceId)}`;
+}
+
 /** One item in full (includes stock and per-warehouse figures where the list may not). */
 async function getItem(conn, itemId) {
   const body = await booksGet(conn, `/items/${encodeURIComponent(itemId)}`, { organization_id: conn.organizationId });
@@ -237,5 +280,8 @@ module.exports = {
   listInventoryItems,
   listInvoices,
   getInvoice,
+  findInvoiceByNumber,
+  getInvoicePdf,
+  invoiceWebUrl,
   revoke,
 };

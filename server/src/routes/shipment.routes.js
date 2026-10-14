@@ -1,5 +1,16 @@
 const express = require('express');
 const { costlyLimiter } = require('../middleware/rateLimiter');
+const rateLimit = require('express-rate-limit');
+
+// Invoices come from Zoho Books (free, but Zoho caps calls a day): plenty for people,
+// not enough for a script to pull every invoice out.
+const invoiceLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  limit: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'Too many invoice downloads - try again in a while.' },
+});
 const multer = require('multer');
 const {
   createShipment,
@@ -8,6 +19,8 @@ const {
   updateShipment,
   deleteShipment,
   refreshShipmentNow,
+  getInvoicePdf,
+  getInvoiceLink,
   refreshAllShipments,
   bulkUpdateShipments,
   addExceptionNote,
@@ -41,6 +54,8 @@ router.post('/extract', costlyLimiter, labelUpload.single('file'), extractFromLa
 router.post('/refresh-all', costlyLimiter, refreshAllShipments);
 router.patch('/bulk', bulkUpdateShipments);
 
+router.get('/:id/invoice.pdf', invoiceLimiter, getInvoicePdf);
+router.get('/:id/invoice-link', invoiceLimiter, getInvoiceLink);
 router.get('/:id', getShipment);
 router.patch('/:id', updateShipment);
 router.delete('/:id', deleteShipment);

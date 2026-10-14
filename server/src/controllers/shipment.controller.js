@@ -457,7 +457,78 @@ const extractFromLabel = asyncHandler(async (req, res) => {
   res.json({ draft });
 });
 
+// ─────────────────────────── Invoice PDF from Zoho Books ───────────────────────────
+
+/** "2026-01-282, 2026-01-315" -> both numbers. */
+const splitNumbers = (text) =>
+  String(text || '')
+    .split(/[,&/\\]+|\s+and\s+/i)
+    .map((n) => n.trim())
+    .filter((n) => n.length >= 3);
+
+const invoiceIdCache = new Map(); // invoice number -> Zoho invoice id
+const pdfCache = new Map(); // Zoho invoice id -> { buf, at }
+const PDF_CACHE_MS = 30 * 60 * 1000;
+
+/** The Zoho invoice for one of this shipment's invoice numbers: { conn, invoiceId, number }. */
+async function resolveInvoice(req) {
+  const shipment = await Shipment.findOne({ _id: req.params.id, createdBy: req.userId });
+  if (!shipment) throw new ApiError(404, 'Shipment not found');
+  const numbers = [...new Set([...splitNumbers(shipment.zohoInvoice?.number), ...splitNumbers(shipment.booking?.invoiceNumber)])];
+  if (!numbers.length) throw new ApiError(404, 'This shipment has no invoice number');
+  const number = req.query.number ? String(req.query.number) : numbers[0];
+  if (!numbers.includes(number)) throw new ApiError(400, 'That invoice isn’t on this shipment');
+
+  const ZohoConnection = require('../models/ZohoConnection');
+  const zoho = require('../services/zoho.client');
+  const conn = await ZohoConnection.get();
+  if (!conn.isConnected) throw new ApiError(503, 'Zoho Books isn’t connected - connect it from the Stock page');
+
+  let invoiceId = invoiceIdCache.get(number);
+  if (!invoiceId && shipment.zohoInvoice?.invoiceId && splitNumbers(shipment.zohoInvoice.number)[0] === number) {
+    invoiceId = shipment.zohoInvoice.invoiceId;
+  }
+  if (!invoiceId) {
+    const found = await zoho.findInvoiceByNumber(conn, number);
+    if (!found) throw new ApiError(404, `Invoice ${number} isn’t in Zoho Books`);
+    invoiceId = String(found.invoice_id);
+    if (!shipment.zohoInvoice?.invoiceId) {
+      await Shipment.updateOne(
+        { _id: shipment._id },
+        { $set: { 'zohoInvoice.invoiceId': invoiceId, 'zohoInvoice.number': found.invoice_number, 'zohoInvoice.matchedBy': 'invoice number' } }
+      );
+    }
+  }
+  if (invoiceIdCache.size > 500) invoiceIdCache.clear();
+  invoiceIdCache.set(number, invoiceId);
+  return { conn, invoiceId, number, zoho };
+}
+
+/** The invoice PDF, inline to view or ?download=1 to save. */
+const getInvoicePdf = asyncHandler(async (req, res) => {
+  const { conn, invoiceId, number, zoho } = await resolveInvoice(req);
+  let hit = pdfCache.get(invoiceId);
+  if (!hit || Date.now() - hit.at > PDF_CACHE_MS) {
+    hit = { buf: await zoho.getInvoicePdf(conn, invoiceId), at: Date.now() };
+    if (pdfCache.size > 30) pdfCache.delete(pdfCache.keys().next().value);
+    pdfCache.set(invoiceId, hit);
+  }
+  const file = `Invoice-${number.replace(/[^\w.-]+/g, '_')}.pdf`;
+  res.set('Content-Type', 'application/pdf');
+  res.set('Content-Disposition', `${req.query.download ? 'attachment' : 'inline'}; filename="${file}"`);
+  res.set('Cache-Control', 'private, no-store');
+  res.send(hit.buf);
+});
+
+/** Where the invoice opens in Zoho Books - its e-way bill can be printed from there. */
+const getInvoiceLink = asyncHandler(async (req, res) => {
+  const { conn, invoiceId, number, zoho } = await resolveInvoice(req);
+  res.json({ number, url: zoho.invoiceWebUrl(conn, invoiceId) });
+});
+
 module.exports = {
+  getInvoicePdf,
+  getInvoiceLink,
   setManualStatus,
   extractFromLabel,
   createShipment,

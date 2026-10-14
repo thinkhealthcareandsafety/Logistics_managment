@@ -23,6 +23,8 @@ export interface WeekdayRow {
   shipments: number;
   units: number;
   deliveries: number;
+  /** Units that left the stock shelf that day (Zoho invoices, stock-outs). */
+  dispatch: number;
 }
 
 export interface LocationRow {

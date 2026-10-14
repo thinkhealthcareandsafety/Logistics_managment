@@ -1,5 +1,6 @@
 const Shipment = require('../models/Shipment');
 const Feedback = require('../models/Feedback');
+const StockMovement = require('../models/StockMovement');
 const { STATUSES } = require('../utils/statusMap');
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -95,8 +96,8 @@ function locationBreakdown(shipments) {
  * Orders, units and deliveries per day of the week (Monday first, India time), so the
  * team can see which days are busiest and staff / stock for them.
  */
-function weekdayBreakdown(shipments) {
-  const rows = WEEKDAYS.map((day) => ({ day, orders: 0, shipments: 0, units: 0, deliveries: 0 }));
+function weekdayBreakdown(shipments, stockOuts = []) {
+  const rows = WEEKDAYS.map((day) => ({ day, orders: 0, shipments: 0, units: 0, deliveries: 0, dispatch: 0 }));
   const indexOf = (date) => WEEKDAYS.indexOf(weekdayInIndia.format(new Date(date)));
   for (const s of shipments) {
     const booked = indexOf(bookedAt(s));
@@ -115,7 +116,27 @@ function weekdayBreakdown(shipments) {
       if (d >= 0) rows[d].deliveries += 1;
     }
   }
+  // Dispatch: units that left the stock shelf (Zoho invoices, stock-outs, shipments booked
+  // against a stock line), by the day they went out.
+  for (const m of stockOuts) {
+    const d = indexOf(m.createdAt);
+    if (d >= 0) rows[d].dispatch += Math.abs(m.change);
+  }
   return rows;
+}
+
+/** Stock leaving the shelf in the range - not one-off corrections or first links to Zoho. */
+function stockOutsBetween(from, to) {
+  const query = {
+    $or: [{ reason: { $in: ['dispatch', 'shipment'] } }, { reason: 'zoho', change: { $lt: 0 } }],
+    note: { $not: /^(Corrected|Linked)/ },
+  };
+  if (from || to) {
+    query.createdAt = {};
+    if (from) query.createdAt.$gte = new Date(from);
+    if (to) query.createdAt.$lte = endOfDay(to);
+  }
+  return StockMovement.find(query).select('change createdAt').lean();
 }
 
 function endOfDay(date) {
@@ -257,7 +278,7 @@ async function getAnalyticsSummary({ userId, from, to }) {
     exceptionRateByCarrier,
     exceptionCount,
     exceptionRate: shipments.length ? exceptionCount / shipments.length : 0,
-    weekdayBreakdown: weekdayBreakdown(shipments),
+    weekdayBreakdown: weekdayBreakdown(shipments, await stockOutsBetween(from, to)),
     locationBreakdown: locationBreakdown(shipments),
     dateRange: { from: from || null, to: to || null },
   };

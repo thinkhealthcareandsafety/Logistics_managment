@@ -4,13 +4,14 @@ import { SegmentedControl } from './SegmentedControl';
 import { DownloadCsvButton } from './DownloadCsvButton';
 import type { WeekdayRow } from '../api/analytics';
 
-type Measure = 'orders' | 'shipments' | 'units' | 'deliveries';
+type Measure = 'orders' | 'shipments' | 'units' | 'deliveries' | 'dispatch';
 
 const MEASURES: Record<Measure, { label: string; noun: [string, string]; hint: string }> = {
   orders: { label: 'Orders', noun: ['order', 'orders'], hint: 'by the day they were booked' },
   shipments: { label: 'Shipments', noun: ['shipment', 'shipments'], hint: 'by the day the courier picked them up' },
   units: { label: 'Units', noun: ['unit', 'units'], hint: 'shipped, by booking day' },
   deliveries: { label: 'Deliveries', noun: ['delivery', 'deliveries'], hint: 'by the day they were delivered' },
+  dispatch: { label: 'Dispatch', noun: ['unit', 'units'], hint: 'out of stock (Zoho invoices, stock-outs), by the day they left' },
 };
 
 /**
@@ -39,7 +40,8 @@ export function WeekdayChart({ rows }: { rows: WeekdayRow[] }) {
   const [view, setView] = useState<'chart' | 'table'>('chart');
   const [active, setActive] = useState<number | null>(null);
 
-  const values = rows.map((r) => r[measure]);
+  // `?? 0`: a summary cached from before Dispatch existed has no such field.
+  const values = rows.map((r) => r[measure] ?? 0);
   const total = values.reduce((a, b) => a + b, 0);
   const max = Math.max(...values, 0);
   const top = niceMax(max);
@@ -80,8 +82,8 @@ export function WeekdayChart({ rows }: { rows: WeekdayRow[] }) {
           {/* Same columns as the table; the share column follows the measure picked above. */}
           <DownloadCsvButton
             name={`${measure}-by-day-of-week`}
-            headers={['Day', 'Orders', 'Shipments', 'Units', 'Deliveries', `Share of ${MEASURES[measure].noun[1]} (%)`]}
-            rows={total === 0 ? [] : rows.map((r, i) => [r.day, r.orders, r.shipments, r.units, r.deliveries, pct(values[i])])}
+            headers={['Day', 'Orders', 'Shipments', 'Units', 'Deliveries', 'Dispatch (units)', `Share of ${MEASURES[measure].noun[1]} (%)`]}
+            rows={total === 0 ? [] : rows.map((r, i) => [r.day, r.orders, r.shipments, r.units, r.deliveries, r.dispatch ?? 0, pct(values[i])])}
           />
         </div>
       </div>
@@ -209,6 +211,7 @@ export function WeekdayChart({ rows }: { rows: WeekdayRow[] }) {
                     <th scope="col" className="py-2 pr-4 text-right font-medium">Shipments</th>
                     <th scope="col" className="py-2 pr-4 text-right font-medium">Units</th>
                     <th scope="col" className="py-2 pr-4 text-right font-medium">Deliveries</th>
+                    <th scope="col" className="py-2 pr-4 text-right font-medium">Dispatch</th>
                     <th scope="col" className="py-2 text-right font-medium">Share of {MEASURES[measure].noun[1]}</th>
                   </tr>
                 </thead>
@@ -220,6 +223,7 @@ export function WeekdayChart({ rows }: { rows: WeekdayRow[] }) {
                       <td className="py-2 pr-4 text-right text-slate-700">{r.shipments}</td>
                       <td className="py-2 pr-4 text-right text-slate-700">{r.units.toLocaleString('en-IN')}</td>
                       <td className="py-2 pr-4 text-right text-slate-700">{r.deliveries}</td>
+                      <td className="py-2 pr-4 text-right text-slate-700">{(r.dispatch ?? 0).toLocaleString('en-IN')}</td>
                       <td className="py-2 text-right text-slate-500">{pct(values[i])}%</td>
                     </tr>
                   ))}
