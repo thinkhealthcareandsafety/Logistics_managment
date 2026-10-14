@@ -354,6 +354,8 @@ async function seedData() {
  * when there are no users at all, so a redeploy never overwrites real shipments.
  */
 async function seedIfEmpty() {
+  // The demo login's password is public - it must never exist on the live site.
+  if (process.env.NODE_ENV === 'production') return false;
   if (await User.exists({})) return false;
   logger.info('Empty database - loading demo data');
   await seedData();

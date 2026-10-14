@@ -16,9 +16,12 @@ function errorHandler(err, req, res, next) {
   if (statusCode >= 500) {
     logger.error(err.stack || err.message);
   }
+  // Unexpected failures can carry internals (database errors, upstream responses) -
+  // in production the caller only learns that something went wrong.
+  const hide = statusCode >= 500 && process.env.NODE_ENV === 'production' && !(err instanceof ApiError);
   res.status(statusCode).json({
-    message: err.message || 'Internal server error',
-    details: err.details,
+    message: hide ? 'Something went wrong - please try again' : err.message || 'Internal server error',
+    details: hide ? undefined : err.details,
   });
 }
 

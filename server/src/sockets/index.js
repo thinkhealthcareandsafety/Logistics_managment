@@ -1,5 +1,4 @@
 const { Server } = require('socket.io');
-const jwt = require('jsonwebtoken');
 const env = require('../config/env');
 const logger = require('../config/logger');
 
@@ -14,14 +13,17 @@ function initSocket(httpServer) {
     cors: { origin: env.clientUrl, credentials: true },
   });
 
-  io.use((socket, next) => {
+  io.use(async (socket, next) => {
     try {
       const token =
         socket.handshake.auth?.token ||
         socket.handshake.headers?.authorization?.replace('Bearer ', '');
       if (!token) return next(new Error('Unauthorized'));
-      const payload = jwt.verify(token, env.jwtSecret);
-      socket.userId = payload.sub;
+      // Same check as the API: signed, unexpired, and not revoked.
+      const { verifySession } = require('../middleware/auth.middleware');
+      const userId = await verifySession(token);
+      if (!userId) return next(new Error('Unauthorized'));
+      socket.userId = userId;
       next();
     } catch (err) {
       next(new Error('Unauthorized'));

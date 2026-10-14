@@ -1,4 +1,5 @@
 const express = require('express');
+const { costlyLimiter } = require('../middleware/rateLimiter');
 const {
   getStatus,
   startConnect,
@@ -22,7 +23,7 @@ router.use(requireAuth);
 router.get('/', getStatus);
 router.post('/connect', startConnect);
 router.patch('/', updateSettings);
-router.post('/sync', runSync);
+router.post('/sync', costlyLimiter, runSync);
 router.post('/webhook-token/rotate', rotateWebhook);
 router.delete('/', disconnect);
 

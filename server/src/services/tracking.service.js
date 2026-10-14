@@ -59,9 +59,10 @@ function applyCarrierRoute(shipment, route) {
  * Fetches the latest checkpoints for one shipment, persists any that are new,
  * and fans out real-time + notification side effects for each newly-seen checkpoint.
  */
-async function refreshShipment(shipment, { silent = false } = {}) {
+async function refreshShipment(shipment, { silent = false, prefetched = null } = {}) {
   const adapter = getAdapterForCarrier(shipment.carrierCode);
-  const { checkpoints, route } = await adapter.refreshTracking(shipment);
+  // `prefetched`: this shipment's result from a batched lookup (no extra API call).
+  const { checkpoints, route } = prefetched || (await adapter.refreshTracking(shipment));
 
   shipment.lastCheckedAt = new Date();
   applyCarrierRoute(shipment, route);
@@ -143,4 +144,43 @@ async function backfillDeliveredAt() {
   return fixed;
 }
 
-module.exports = { registerShipment, refreshShipment, backfillDeliveredAt };
+const REGISTER_RETRY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Refreshes many shipments with as few TrackingMore calls as possible: one batched
+ * lookup per 40, then each shipment is updated from its share of the answer. One the
+ * batch didn't return isn't registered with TrackingMore: it gets one registration
+ * call (at most once a day - a wrong AWB must not cost calls every hour), and the next
+ * batch picks it up. Returns { refreshed, failed }.
+ */
+async function refreshBatch(shipments, { background = true } = {}) {
+  const adapter = getAdapterForCarrier();
+  const results = await adapter.refreshMany(shipments).catch((err) => {
+    if (err.isBudget || !background) throw err;
+    logger.warn(`Batched tracking lookup failed: ${err.message}`);
+    return new Map();
+  });
+  let refreshed = 0;
+  let failed = 0;
+  for (const shipment of shipments) {
+    const prefetched = results.get(adapter.batchKey(shipment.trackingNumber, shipment.carrierCode));
+    try {
+      if (prefetched) {
+        await refreshShipment(shipment, { prefetched });
+        refreshed += 1;
+        continue;
+      }
+      const tried = shipment.trackingRegisterTriedAt;
+      if (tried && Date.now() - new Date(tried).getTime() < REGISTER_RETRY_MS) continue;
+      await Shipment.updateOne({ _id: shipment._id }, { $set: { trackingRegisterTriedAt: new Date() } });
+      await adapter.createTracking(shipment);
+    } catch (err) {
+      failed += 1;
+      logger.warn(`Refresh failed for ${shipment.trackingNumber}: ${err.message}`);
+      if (err.isBudget) break; // today's limit is used up - the rest wait for tomorrow
+    }
+  }
+  return { refreshed, failed };
+}
+
+module.exports = { registerShipment, refreshShipment, refreshBatch, backfillDeliveredAt };

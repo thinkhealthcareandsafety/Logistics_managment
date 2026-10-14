@@ -22,9 +22,9 @@ services:
         generateValue: true
       - key: INGEST_API_KEY
         generateValue: true
-      # Loads the demo login + sample data the first time, only into an empty database.
-      - key: SEED_IF_EMPTY
-        value: "true"
+      # Sign-up is off unless this is "true" - turn it on briefly to add a colleague.
+      - key: SIGNUP_ENABLED
+        value: "false"
       - key: SIGNUP_ALLOWED_DOMAINS
         value: thinkhealth.in
       - key: TRACKINGMORE_API_KEY

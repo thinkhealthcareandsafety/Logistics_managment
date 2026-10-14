@@ -7,9 +7,11 @@ const apiLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+// Sign-in / sign-up / password change: few enough per address that guessing passwords
+// is hopeless (accounts also lock after 5 wrong passwords - see auth.controller).
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  limit: 20,
+  limit: 10,
   standardHeaders: true,
   legacyHeaders: false,
   message: { message: 'Too many attempts, please try again later.' },
@@ -44,4 +46,14 @@ const leadLimiter = rateLimit({
   message: { message: 'Too many enquiries from this address, please email us directly.' },
 });
 
-module.exports = { apiLimiter, authLimiter, publicTrackingLimiter, feedbackLimiter, leadLimiter };
+// Actions that spend a paid API (label scan, photo search, sync everything, Zoho sync):
+// a handful an hour is plenty for a person and stops a script from draining the quotas.
+const costlyLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  limit: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'Too many of these requests - please wait a while and try again.' },
+});
+
+module.exports = { apiLimiter, authLimiter, publicTrackingLimiter, feedbackLimiter, leadLimiter, costlyLimiter };

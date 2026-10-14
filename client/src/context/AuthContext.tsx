@@ -10,6 +10,8 @@ interface AuthContextValue {
   login: (email: string, password: string) => Promise<void>;
   register: (name: string, email: string, password: string, company?: string) => Promise<void>;
   logout: () => Promise<void>;
+  /** Swaps in a new session for this browser (after a password change / signing out elsewhere). */
+  replaceSession: (token: string, user: User) => void;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -74,6 +76,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     persist(res.token, res.user);
   }
 
+  function replaceSession(token: string, nextUser: User) {
+    localStorage.setItem(TOKEN_STORAGE_KEY, token);
+    localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(nextUser));
+    setAuthToken(token);
+    setUser(nextUser);
+  }
+
   async function logout() {
     try {
       await authApi.logout();
@@ -87,7 +96,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, register, logout }}>{children}</AuthContext.Provider>
+    <AuthContext.Provider value={{ user, isLoading, login, register, logout, replaceSession }}>{children}</AuthContext.Provider>
   );
 }
 

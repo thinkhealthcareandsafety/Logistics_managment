@@ -64,6 +64,9 @@ function isNotRegistered(err) {
   return text.includes('no exists') || text.includes('not exist') || text.includes('create a tracking');
 }
 
+/** How refreshMany's results are looked up: tracking number + courier. */
+const batchKey = (trackingNumber, courierCode) => `${String(trackingNumber).trim().toUpperCase()}|${String(courierCode || '').toLowerCase()}`;
+
 /**
  * TrackingMore covers every courier this app tracks - its whole catalog (~1,700,
  * including 53 Indian couriers such as Shree Maruti, Delhivery, Blue Dart, DTDC and
@@ -82,11 +85,33 @@ const trackingMoreAdapter = {
       });
       return { externalId: result?.data?.id || '' };
     } catch (err) {
+      if (err.isBudget) throw err; // today's TrackingMore limit - not an "already exists"
       // TrackingMore returns a 4009-style "already exists" error if it's already tracked
       // (e.g. re-adding a shipment) - that's fine, refreshTracking will still work.
       logger.warn(`createTracking: ${err.message} (continuing, tracking may already exist)`);
       return { externalId: '' };
     }
+  },
+
+  /**
+   * Results for many shipments from as few calls as possible (40 per call), keyed by
+   * batchKey(). A shipment missing from the answer (not registered with TrackingMore
+   * yet) is left out - refreshTracking handles it on its own.
+   */
+  async refreshMany(shipments) {
+    const out = new Map();
+    const numbers = [...new Set(shipments.map((s) => s.trackingNumber))];
+    for (let i = 0; i < numbers.length; i += trackingMoreClient.BATCH_SIZE) {
+      const result = await trackingMoreClient.getTrackings(numbers.slice(i, i + trackingMoreClient.BATCH_SIZE));
+      const list = Array.isArray(result?.data) ? result.data : result?.data ? [result.data] : [];
+      for (const tracking of list) {
+        out.set(batchKey(tracking.tracking_number, tracking.courier_code), {
+          checkpoints: normalizeTrackingMoreCheckpoints(tracking),
+          route: extractRoute(tracking),
+        });
+      }
+    }
+    return out;
   },
 
   async refreshTracking(shipment) {
@@ -124,5 +149,7 @@ const trackingMoreAdapter = {
     return { checkpoints: normalizeTrackingMoreCheckpoints(tracking), route: extractRoute(tracking) };
   },
 };
+
+trackingMoreAdapter.batchKey = batchKey;
 
 module.exports = trackingMoreAdapter;

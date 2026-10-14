@@ -24,6 +24,15 @@ const userSchema = new mongoose.Schema(
     passwordHash: { type: String, required: true },
     company: { type: String, default: 'ThinkHealth' },
     notificationPreferences: { type: notificationPreferencesSchema, default: () => ({}) },
+
+    /** Bumped on password change / "sign out everywhere" - every older session stops working. */
+    tokenVersion: { type: Number, default: 0 },
+    /** Wrong passwords in a row, and the lock they trigger (see auth.controller). */
+    failedLogins: { type: Number, default: 0 },
+    lockedUntil: { type: Date, default: null },
+    lastLoginAt: { type: Date, default: null },
+    lastLoginIp: { type: String, default: '' },
+    passwordChangedAt: { type: Date, default: null },
   },
   { timestamps: true }
 );
@@ -36,6 +45,8 @@ userSchema.methods.toSafeJSON = function toSafeJSON() {
     company: this.company,
     notificationPreferences: this.notificationPreferences,
     createdAt: this.createdAt,
+    lastLoginAt: this.lastLoginAt,
+    passwordChangedAt: this.passwordChangedAt,
   };
 };
 

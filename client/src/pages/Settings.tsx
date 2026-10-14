@@ -5,6 +5,8 @@ import { useNotificationPreferences, useUpdateNotificationPreferences } from '..
 import { ALL_STATUSES, STATUS_LABELS, STATUS_STYLES } from '../utils/status';
 import type { ShipmentStatus } from '../types/shipment';
 import { Spinner } from '../components/ui/Loading';
+import { useQuery } from '@tanstack/react-query';
+import { systemApi } from '../api/auth';
 
 import { SettingsSkeleton } from '../components/skeletons/PageSkeletons';
 const STATUS_HINTS: Record<ShipmentStatus, string> = {
@@ -171,6 +173,8 @@ export function Settings() {
         </fieldset>
       </SettingsSection>
 
+      <ApiUsageSection />
+
       {/* Sticky save bar - appears only with unsaved changes. */}
       <div
         className={clsx(
@@ -198,6 +202,49 @@ export function Settings() {
         </div>
       </div>
     </div>
+  );
+}
+
+/** Today's calls to each paid API against its hard daily limit (resets at midnight IST). */
+function ApiUsageSection() {
+  const { data } = useQuery({ queryKey: ['system-usage'], queryFn: systemApi.usage, refetchInterval: 60_000 });
+  return (
+    <SettingsSection
+      title="API usage today"
+      description="Each paid service has a hard daily limit so its key can never be run up. Background jobs stop early, leaving room for what you do by hand. Resets at midnight."
+    >
+      {!data ? (
+        <Spinner />
+      ) : (
+        <ul className="space-y-4">
+          {data.apis.map((a) => {
+            const pct = Math.min(100, Math.round((a.used / Math.max(1, a.limit)) * 100));
+            return (
+              <li key={a.provider}>
+                <div className="flex items-baseline justify-between gap-3 text-[13px]">
+                  <span className="font-medium text-slate-800">
+                    {a.name}
+                    {!a.configured && <span className="ml-2 text-[12px] font-normal text-slate-400">no key set</span>}
+                  </span>
+                  <span className="tabular-nums text-slate-600">
+                    {a.used} / {a.limit} calls{a.blocked ? <span className="ml-1 text-amber-700">· {a.blocked} refused</span> : null}
+                  </span>
+                </div>
+                <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-slate-100" role="meter" aria-valuemin={0} aria-valuemax={a.limit} aria-valuenow={a.used} aria-label={`${a.name} calls today`}>
+                  <div className={clsx('h-full rounded-full', pct >= 90 ? 'bg-red-500' : pct >= 70 ? 'bg-amber-500' : 'bg-brand-700')} style={{ width: `${pct}%` }} />
+                </div>
+              </li>
+            );
+          })}
+          {data.whatsappMessages && (
+            <li className="border-t border-slate-100 pt-3 text-[12px] text-slate-500">
+              WhatsApp messages: {data.whatsappMessages.today} / {data.whatsappMessages.limits.dailyLimit} today ·{' '}
+              {data.whatsappMessages.thisMonth} / {data.whatsappMessages.limits.monthlyLimit} this month
+            </li>
+          )}
+        </ul>
+      )}
+    </SettingsSection>
   );
 }
 

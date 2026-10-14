@@ -6,6 +6,7 @@ const cors = require('cors');
 const cookieParser = require('cookie-parser');
 const env = require('./config/env');
 const { apiLimiter } = require('./middleware/rateLimiter');
+const { securityHeaders, sanitizeInput } = require('./middleware/security');
 const { notFoundHandler, errorHandler } = require('./middleware/error.middleware');
 
 const authRoutes = require('./routes/auth.routes');
@@ -18,17 +19,21 @@ const analyticsRoutes = require('./routes/analytics.routes');
 const stockRoutes = require('./routes/stock.routes');
 const geoRoutes = require('./routes/geo.routes');
 const zohoRoutes = require('./routes/zoho.routes');
+const systemRoutes = require('./routes/system.routes');
 
 const app = express();
 // Behind the host's load balancer (Render etc.): trust its X-Forwarded-* headers so
 // rate limits see real client IPs and secure cookies work over HTTPS.
 app.set('trust proxy', 1);
+app.disable('x-powered-by');
+app.use(securityHeaders);
 
 // gzip every response - the courier catalogue alone is ~350 KB of JSON, ~40 KB zipped.
 app.use(compression());
 app.use(cors({ origin: env.clientUrl, credentials: true }));
 app.use(express.json({ limit: '1mb' }));
 app.use(cookieParser());
+app.use(sanitizeInput);
 app.use('/api', apiLimiter);
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok', time: new Date().toISOString() }));
@@ -43,6 +48,7 @@ app.use('/api/analytics', analyticsRoutes);
 app.use('/api/stock', stockRoutes);
 app.use('/api/geo', geoRoutes);
 app.use('/api/integrations/zoho', zohoRoutes);
+app.use('/api/system', systemRoutes);
 
 // Hosted as one site: when the client has been built, Express serves it too, so the
 // app, its API and its links all share one address (no CORS or cross-site cookies).

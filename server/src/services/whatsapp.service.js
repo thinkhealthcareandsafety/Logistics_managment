@@ -69,8 +69,15 @@ function buildDeliveryText({ shipment, trackingUrl, feedbackUrl }) {
 
 // ─────────────────────────── Anantya.ai ───────────────────────────
 
-const anantyaApi = () =>
-  axios.create({ baseURL: env.anantya.baseUrl, headers: { 'X-Api-Key': env.anantya.apiKey, accept: '*/*' }, timeout: 15000 });
+/** Every Anantya request - sends and template lookups alike - counts against the daily API limit. */
+const anantyaApi = () => {
+  const api = axios.create({ baseURL: env.anantya.baseUrl, headers: { 'X-Api-Key': env.anantya.apiKey, accept: '*/*' }, timeout: 15000 });
+  api.interceptors.request.use(async (config) => {
+    await require('./apiBudget').take('whatsapp');
+    return config;
+  });
+  return api;
+};
 
 const isAccepted = (t) => t.isActive !== false && /accept|approv/i.test(t.templateStatus || '');
 
@@ -177,6 +184,7 @@ async function gupshupSend({ to, text, context }) {
     message: JSON.stringify({ type: 'text', text }),
   });
   try {
+    await require('./apiBudget').take('whatsapp');
     await axios.post(GUPSHUP_SEND_URL, body, {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded', apikey: env.gupshup.apiKey },
       timeout: 10000,

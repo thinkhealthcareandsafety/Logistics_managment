@@ -18,7 +18,10 @@ const env = {
   mongoUri: required('MONGODB_URI', 'mongodb://127.0.0.1:27017/logistics-tracker'),
 
   jwtSecret: required('JWT_SECRET', 'dev-only-insecure-secret'),
-  jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',
+  // A stolen session is only good for a working day.
+  jwtExpiresIn: process.env.JWT_EXPIRES_IN || '12h',
+  // New accounts can only be created while this is "true" (e.g. briefly, for a new colleague).
+  signupEnabled: process.env.SIGNUP_ENABLED === 'true',
   cookieName: process.env.COOKIE_NAME || 'lt_token',
 
   // This is an internal ops tool: a signed-in user sees the shared sales pipeline
@@ -114,6 +117,12 @@ const env = {
     ownerEmail: process.env.INGEST_OWNER_EMAIL || '',
   },
 };
+
+// A guessable signing secret would let anyone mint a valid session - in production the
+// server refuses to start without a long random one (Render generates it).
+if (env.nodeEnv === 'production' && (env.jwtSecret === 'dev-only-insecure-secret' || env.jwtSecret.length < 32)) {
+  throw new Error('JWT_SECRET must be a random value of at least 32 characters in production');
+}
 
 module.exports = env;
 

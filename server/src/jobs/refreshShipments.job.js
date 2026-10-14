@@ -1,7 +1,6 @@
 const cron = require('node-cron');
-const pLimit = require('p-limit');
 const Shipment = require('../models/Shipment');
-const { refreshShipment, backfillDeliveredAt } = require('../services/tracking.service');
+const { refreshBatch, backfillDeliveredAt } = require('../services/tracking.service');
 const { retryPendingDeliveryNotices } = require('../services/customerNotification.service');
 const env = require('../config/env');
 const logger = require('../config/logger');
@@ -9,6 +8,14 @@ const logger = require('../config/logger');
 // 'exception' is deliberately NOT terminal here - a delayed/held shipment can still
 // move to delivered, so it keeps getting polled until it does (or someone archives it).
 const TERMINAL_STATUSES = ['delivered'];
+
+/**
+ * Couriers are asked about every active shipment at most once an hour, in one batched
+ * call per 40 shipments - about 24 TrackingMore calls a day, inside its daily limit
+ * (services/apiBudget.js) with room left for new shipments and manual refreshes.
+ */
+const POLL_EVERY_MS = 55 * 60 * 1000;
+let lastPollAt = 0;
 
 async function runRefreshCycle() {
   // Delivered shipments aren't polled below, so their pending thank-you messages get
@@ -19,27 +26,21 @@ async function runRefreshCycle() {
   // Same reason: a delivered shipment missing its delivered date won't be refreshed again.
   await backfillDeliveredAt().catch((err) => logger.error(`Delivered-date backfill failed: ${err.message}`));
 
-  const staleBefore = new Date(Date.now() - env.refresh.minIntervalMinutes * 60 * 1000);
+  if (!env.trackingMore.apiKey || Date.now() - lastPollAt < POLL_EVERY_MS) return;
 
   const dueShipments = await Shipment.find({
     isArchived: false,
     status: { $nin: TERMINAL_STATUSES },
-    $or: [{ lastCheckedAt: { $lt: staleBefore } }, { lastCheckedAt: null }],
   });
-
   if (dueShipments.length === 0) return;
+  lastPollAt = Date.now();
 
   logger.info(`Refresh cycle: checking ${dueShipments.length} shipment(s)`);
-  const limit = pLimit(env.refresh.concurrency);
-
-  const results = await Promise.allSettled(
-    dueShipments.map((shipment) => limit(() => refreshShipment(shipment)))
-  );
-
-  const failures = results.filter((r) => r.status === 'rejected');
-  if (failures.length > 0) {
-    logger.warn(`Refresh cycle: ${failures.length}/${dueShipments.length} shipment(s) failed`);
-    failures.forEach((f) => logger.warn(f.reason?.message || f.reason));
+  try {
+    const { refreshed, failed } = await refreshBatch(dueShipments, { background: true });
+    if (failed) logger.warn(`Refresh cycle: ${failed}/${dueShipments.length} shipment(s) failed (${refreshed} refreshed)`);
+  } catch (err) {
+    logger.warn(`Refresh cycle skipped: ${err.message}`);
   }
 }
 

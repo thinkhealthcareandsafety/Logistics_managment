@@ -24,6 +24,8 @@ let running = null;
 async function gemini(body) {
   let lastErr;
   for (const model of [...new Set(MODELS)]) {
+    // Background work: stops before the daily Gemini limit's reserve for label scans.
+    await require('./apiBudget').take('gemini', { background: true });
     try {
       const { data } = await axios.post(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, body, {
         headers: { 'x-goog-api-key': env.gemini.apiKey },
@@ -200,7 +202,7 @@ async function findFor(item) {
     try {
       if ((await verify(name, c.url)).ok) return c;
     } catch (err) {
-      if ([401, 403, 429].includes(err.response?.status) && /googleapis/.test(err.config?.url || '')) throw err;
+      if (err.isBudget || ([401, 403, 429].includes(err.response?.status) && /googleapis/.test(err.config?.url || ''))) throw err;
     }
   }
   return null;
@@ -509,7 +511,7 @@ Reply ONLY JSON {"sameKind": true|false, "whiteBackground": true|false, "clear":
       const v = jsonOf(textOf(data)) || {};
       if (v.sameKind === true && v.whiteBackground === true && v.clear === true) return { ...c, similar: true };
     } catch (err) {
-      if ([401, 403, 429].includes(err.response?.status) && /googleapis/.test(err.config?.url || '')) throw err;
+      if (err.isBudget || ([401, 403, 429].includes(err.response?.status) && /googleapis/.test(err.config?.url || ''))) throw err;
     }
   }
   return null;

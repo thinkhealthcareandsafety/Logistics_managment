@@ -1,5 +1,4 @@
 const { parse } = require('csv-parse/sync');
-const pLimit = require('p-limit');
 const Shipment = require('../models/Shipment');
 const User = require('../models/User');
 const { registerShipment, refreshShipment } = require('../services/tracking.service');
@@ -7,7 +6,6 @@ const { notifyCustomerDelivered } = require('../services/customerNotification.se
 const { resolveCarrier } = require('../services/courierCatalog.service');
 const { extractShipmentFromDocument } = require('../services/labelExtraction.service');
 const StockItem = require('../models/StockItem');
-const env = require('../config/env');
 const ApiError = require('../utils/ApiError');
 const asyncHandler = require('../utils/asyncHandler');
 const { commercialFields } = require('../utils/shipmentFields');
@@ -50,13 +48,15 @@ const listShipments = asyncHandler(async (req, res) => {
   const { status, search, archived, carrier } = req.query;
 
   const query = { createdBy: req.userId, isArchived: archived === 'true' };
-  if (status) query.status = status;
+  if (status) query.status = String(status);
   if (carrier) query.carrierCode = String(carrier).toLowerCase();
   if (search) {
+    // Escaped: the search is plain text, never a pattern someone can make expensive.
+    const text = require('../middleware/security').escapeRegex(search);
     query.$or = [
-      { trackingNumber: { $regex: search, $options: 'i' } },
-      { 'customerInfo.name': { $regex: search, $options: 'i' } },
-      { 'productDetails.name': { $regex: search, $options: 'i' } },
+      { trackingNumber: { $regex: text, $options: 'i' } },
+      { 'customerInfo.name': { $regex: text, $options: 'i' } },
+      { 'productDetails.name': { $regex: text, $options: 'i' } },
     ];
   }
 
@@ -215,11 +215,10 @@ const refreshAllShipments = asyncHandler(async (req, res) => {
     status: { $ne: 'delivered' },
   }).limit(REFRESH_ALL_CAP);
 
-  const limit = pLimit(env.refresh.concurrency);
-  const results = await Promise.allSettled(shipments.map((s) => limit(() => refreshShipment(s))));
-
-  const failed = results.filter((r) => r.status === 'rejected').length;
-  res.json({ refreshed: results.length - failed, failed, total: shipments.length });
+  // One batched TrackingMore call per 40 shipments, not one each.
+  const { refreshBatch } = require('../services/tracking.service');
+  const { refreshed, failed } = await refreshBatch(shipments, { background: false });
+  res.json({ refreshed, failed, total: shipments.length });
 });
 
 const bulkUpdateShipments = asyncHandler(async (req, res) => {

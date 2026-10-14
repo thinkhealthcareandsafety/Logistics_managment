@@ -85,6 +85,8 @@ ${couriers.join('\n')}`;
 const RETRYABLE = new Set([429, 500, 502, 503, 504]);
 
 async function callGemini(model, body) {
+  // Counted against the daily Gemini limit (a person's action - may use the reserve).
+  await require('./apiBudget').take('gemini');
   const base = (process.env.GEMINI_BASE_URL || 'https://generativelanguage.googleapis.com').replace(/\/$/, '');
   const { data } = await axios.post(`${base}/v1beta/models/${model}:generateContent`, body, {
     headers: { 'x-goog-api-key': env.gemini.apiKey },
@@ -101,6 +103,7 @@ async function generate(body) {
     try {
       return await callGemini(model, body);
     } catch (err) {
+      if (err.isBudget) throw err;
       lastErr = err;
       const status = err.response?.status;
       const message = err.response?.data?.error?.message || err.message;

@@ -15,4 +15,6 @@ export interface User {
   company: string;
   notificationPreferences: NotificationPreferences;
   createdAt: string;
+  lastLoginAt?: string | null;
+  passwordChangedAt?: string | null;
 }

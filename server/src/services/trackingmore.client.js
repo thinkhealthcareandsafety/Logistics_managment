@@ -22,11 +22,13 @@ function sleep(ms) {
 /**
  * Thin retry wrapper: exponential backoff on rate limits (429) and transient
  * 5xx errors. Anything else (4xx validation errors, auth failures) fails fast.
+ * Every attempt counts against the daily TrackingMore limit (services/apiBudget).
  */
-async function request(config) {
+async function request(config, { background = false } = {}) {
   let attempt = 0;
   // eslint-disable-next-line no-constant-condition
   while (true) {
+    await require('./apiBudget').take('trackingmore', { background });
     try {
       const response = await http.request(config);
       return response.data;
@@ -79,9 +81,21 @@ function getTracking({ trackingNumber, carrierCode }) {
   });
 }
 
+/**
+ * Latest results for many shipments in one call (TrackingMore takes up to 40 numbers),
+ * so the scheduled refresh costs one call per 40 shipments, not one each.
+ */
+const BATCH_SIZE = 40;
+function getTrackings(trackingNumbers, { background = true } = {}) {
+  return request(
+    { method: 'get', url: '/trackings/get', params: { tracking_numbers: trackingNumbers.slice(0, BATCH_SIZE).join(',') } },
+    { background }
+  );
+}
+
 /** TrackingMore's full courier catalog (v4: /couriers/all - ~1,700 couriers). */
 function listCarriers() {
-  return request({ method: 'get', url: '/couriers/all' });
+  return request({ method: 'get', url: '/couriers/all' }, { background: true });
 }
 
 /** Couriers whose tracking-number format matches - a guess to suggest, not to trust. */
@@ -89,4 +103,4 @@ function detectCourier(trackingNumber) {
   return request({ method: 'post', url: '/couriers/detect', data: { tracking_number: trackingNumber } });
 }
 
-module.exports = { createTracking, getTracking, listCarriers, detectCourier };
+module.exports = { createTracking, getTracking, getTrackings, listCarriers, detectCourier, BATCH_SIZE };

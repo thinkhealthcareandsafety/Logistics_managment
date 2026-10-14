@@ -153,6 +153,8 @@ const shipmentSchema = new mongoose.Schema(
     checkpoints: { type: [checkpointSchema], default: [] },
 
     lastCheckedAt: { type: Date },
+    /** Last time this AWB was (re-)registered with TrackingMore - at most once a day. */
+    trackingRegisterTriedAt: { type: Date, default: null },
     isArchived: { type: Boolean, default: false },
     exceptionFollowUp: { type: exceptionFollowUpSchema, default: () => ({}) },
 

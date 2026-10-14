@@ -1,4 +1,5 @@
 const express = require('express');
+const { costlyLimiter } = require('../middleware/rateLimiter');
 const multer = require('multer');
 const {
   createShipment,
@@ -32,18 +33,18 @@ router.post('/', createShipment);
 router.get('/', listShipments);
 
 // Literal paths must come before '/:id' or Express matches them as an id.
-router.post('/bulk-import', upload.single('file'), bulkImportShipments);
-router.post('/import-history', importShipmentHistory);
+router.post('/bulk-import', costlyLimiter, upload.single('file'), bulkImportShipments);
+router.post('/import-history', costlyLimiter, importShipmentHistory);
 router.post('/delivered-dates/backfill', backfillDeliveredDates);
 router.get('/delivered-dates/backfill', backfillDeliveredDatesStatus);
-router.post('/extract', labelUpload.single('file'), extractFromLabel);
-router.post('/refresh-all', refreshAllShipments);
+router.post('/extract', costlyLimiter, labelUpload.single('file'), extractFromLabel);
+router.post('/refresh-all', costlyLimiter, refreshAllShipments);
 router.patch('/bulk', bulkUpdateShipments);
 
 router.get('/:id', getShipment);
 router.patch('/:id', updateShipment);
 router.delete('/:id', deleteShipment);
-router.post('/:id/refresh', refreshShipmentNow);
+router.post('/:id/refresh', costlyLimiter, refreshShipmentNow);
 router.post('/:id/notes', addExceptionNote);
 router.post('/:id/status', setManualStatus);
 router.get('/:id/feedback', getShipmentFeedback);

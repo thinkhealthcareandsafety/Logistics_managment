@@ -1,4 +1,5 @@
 const express = require('express');
+const { costlyLimiter } = require('../middleware/rateLimiter');
 const {
   getStock,
   getMessage,
@@ -46,17 +47,17 @@ router.post('/items/:id/stock-out', stockOut);
 
 router.post('/count', saveCount);
 
-router.post('/media/refresh', refreshMedia);
-router.post('/duplicates/suggest', suggestDuplicates);
+router.post('/media/refresh', costlyLimiter, refreshMedia);
+router.post('/duplicates/suggest', costlyLimiter, suggestDuplicates);
 router.post('/items/:id/merge', mergeItems);
 router.post('/items/:id/unmerge', unmergeItem);
 router.post('/media/import', express.json({ limit: '5mb' }), importMedia);
 router.get('/media/status', getMediaStatus);
-router.post('/media/web-search', searchWebImages);
+router.post('/media/web-search', costlyLimiter, searchWebImages);
 router.get('/items/:id/zoho-image', zohoImage);
 
 router.patch('/settings', updateSettings);
-router.post('/broadcast', sendNow);
+router.post('/broadcast', costlyLimiter, sendNow);
 router.get('/whatsapp/status', getWhatsAppStatus);
 router.post('/share-token/rotate', rotateShareToken);
 

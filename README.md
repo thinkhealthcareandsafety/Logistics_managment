@@ -438,6 +438,29 @@ the day they were booked (shipping date, else first scan, else when added) and d
 by the day they were delivered. Shown as a column chart with a Chart/Table toggle, the
 busiest and quietest day, and the weekend share; it follows the date range at the top.
 
+## Security
+
+The app holds customer details, invoices and stock values, so:
+
+- **Accounts.** Sign-up is off (`SIGNUP_ENABLED=true` turns it on briefly to add a colleague,
+  still limited to `SIGNUP_ALLOWED_DOMAINS`). Passwords need 10+ characters with letters and
+  numbers. Five wrong passwords lock an account for 15 minutes; sign-in is also limited to
+  10 tries per 15 minutes per address. Sessions last 12 hours (`JWT_EXPIRES_IN`).
+- **Sessions can be ended.** Changing the password (Profile) or "Sign out on all other
+  devices" invalidates every other session at once, live connections included.
+- **Requests.** Strict security headers (Content-Security-Policy, HSTS, no framing), MongoDB
+  operators stripped from all input, searches escaped, internal errors never shown in
+  production, constant-time secret comparisons, and per-hour limits on actions that spend a
+  paid API.
+- **Production checks.** The server won't start without a long random `JWT_SECRET`, and the
+  demo seed never runs in production.
+- **Paid API limits.** Every call to Gemini, TrackingMore and WhatsApp (Anantya/Gupshup)
+  takes a slot from a daily limit kept in the database - 40 each by default
+  (`GEMINI_DAILY_LIMIT`, `TRACKINGMORE_DAILY_LIMIT`, `WHATSAPP_API_DAILY_LIMIT`), resetting at
+  midnight IST. Background jobs stop early and leave a reserve for what people do by hand.
+  Today's use is shown in **Settings → API usage today**. Courier tracking polls all active
+  shipments in one batched call about once an hour.
+
 ## Architecture
 
 ```
@@ -497,11 +520,12 @@ npm run seed
 npm run dev   # runs server (5000) and client (5173) together
 ```
 
-Then open **http://localhost:5173** and sign in with **demo@thinkhealth.in / Demo@12345**, or
-register a new account from the login screen.
+Then open **http://localhost:5173** and sign in with the seeded local demo account (its
+password is in `server/src/scripts/seed.js`). The seed never runs in production, and sign-up
+is off unless `SIGNUP_ENABLED=true`.
 
 Once `TRACKINGMORE_API_KEY` is set, newly-added shipments (however they're added) register
-with TrackingMore and refresh automatically every `REFRESH_CRON` interval (default: every 15
+with TrackingMore and are refreshed in one batched call about once an hour (checked every `REFRESH_CRON` interval, default every 15
 minutes), or on-demand via "Refresh" on a shipment's detail page.
 
 ## Environment variables

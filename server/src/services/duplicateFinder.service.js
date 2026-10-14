@@ -51,12 +51,14 @@ async function findDuplicates() {
   let lastErr;
   for (const model of [...new Set(MODELS)]) {
     try {
+      await require('./apiBudget').take('gemini', { background: true });
       ({ data } = await axios.post(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, body, {
         headers: { 'x-goog-api-key': env.gemini.apiKey },
         timeout: 120000,
       }));
       break;
     } catch (err) {
+      if (err.isBudget) throw err;
       lastErr = err;
     }
   }
