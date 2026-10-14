@@ -25,6 +25,8 @@ function sleep(ms) {
  * Every attempt counts against the daily TrackingMore limit (services/apiBudget).
  */
 async function request(config, { background = false } = {}) {
+  // No key: don't call (or count) anything - TrackingMore would only refuse it.
+  if (!env.trackingMore.apiKey) throw new ApiError(503, 'Courier tracking is off - no TRACKINGMORE_API_KEY on the server');
   let attempt = 0;
   // eslint-disable-next-line no-constant-condition
   while (true) {
