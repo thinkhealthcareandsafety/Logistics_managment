@@ -20,48 +20,55 @@ export interface MediaStatus {
   running: boolean;
 }
 
+/** The sheet actions of one stock book - '/stock' (Zoho-linked) or '/manual-stock' (kept by hand). */
+export function ledgerApi(base: string) {
+  return {
+    get: () => apiClient.get<StockSnapshot>(base).then((r) => r.data),
+
+    message: () =>
+      apiClient.get<{ text: string; parts: number; generatedAt: string }>(`${base}/message`).then((r) => r.data),
+
+    movements: (limit = 30, direction?: 'in') =>
+      apiClient.get<{ movements: StockMovement[] }>(`${base}/movements`, { params: { limit, direction } }).then((r) => r.data.movements),
+
+    saveCount: (changes: StockCountChange[]) =>
+      apiClient.post<StockSnapshot & { updated: number }>(`${base}/count`, { changes }).then((r) => r.data),
+
+    stockOut: (id: string, body: { quantity: number; customer?: string; note?: string }) =>
+      apiClient
+        .post<{ item: StockItem; movement: StockMovement }>(`${base}/items/${id}/stock-out`, body)
+        .then((r) => r.data),
+
+    createItem: (body: StockItemInput) => apiClient.post<{ item: StockItem }>(`${base}/items`, body).then((r) => r.data.item),
+
+    updateItem: (id: string, body: StockItemInput) =>
+      apiClient.patch<{ item: StockItem }>(`${base}/items/${id}`, body).then((r) => r.data.item),
+
+    removeItem: (id: string) => apiClient.delete(`${base}/items/${id}`),
+
+    createCategory: (body: { name: string; listStyle?: ListStyle }) =>
+      apiClient.post<{ category: StockCategory }>(`${base}/categories`, body).then((r) => r.data.category),
+
+    updateCategory: (id: string, body: Partial<Pick<StockCategory, 'name' | 'listStyle'>>) =>
+      apiClient.patch<{ category: StockCategory }>(`${base}/categories/${id}`, body).then((r) => r.data.category),
+
+    deleteCategory: (id: string) => apiClient.delete(`${base}/categories/${id}`),
+
+    updateSettings: (body: { hideZeroInMessage?: boolean; broadcast?: Partial<StockSettings['broadcast']> }) =>
+      apiClient.patch<{ settings: StockSettings }>(`${base}/settings`, body).then((r) => r.data.settings),
+
+    rotateShareToken: () =>
+      apiClient.post<{ settings: StockSettings }>(`${base}/share-token/rotate`).then((r) => r.data.settings),
+  };
+}
+
 export const stockApi = {
-  get: () => apiClient.get<StockSnapshot>('/stock').then((r) => r.data),
-
-  message: () =>
-    apiClient.get<{ text: string; parts: number; generatedAt: string }>('/stock/message').then((r) => r.data),
-
-  movements: (limit = 30, direction?: 'in') =>
-    apiClient.get<{ movements: StockMovement[] }>('/stock/movements', { params: { limit, direction } }).then((r) => r.data.movements),
-
-  saveCount: (changes: StockCountChange[]) =>
-    apiClient.post<StockSnapshot & { updated: number }>('/stock/count', { changes }).then((r) => r.data),
-
-  stockOut: (id: string, body: { quantity: number; customer?: string; note?: string }) =>
-    apiClient
-      .post<{ item: StockItem; movement: StockMovement }>(`/stock/items/${id}/stock-out`, body)
-      .then((r) => r.data),
-
-  createItem: (body: StockItemInput) => apiClient.post<{ item: StockItem }>('/stock/items', body).then((r) => r.data.item),
-
-  updateItem: (id: string, body: StockItemInput) =>
-    apiClient.patch<{ item: StockItem }>(`/stock/items/${id}`, body).then((r) => r.data.item),
-
-  removeItem: (id: string) => apiClient.delete(`/stock/items/${id}`),
-
-  createCategory: (body: { name: string; listStyle?: ListStyle }) =>
-    apiClient.post<{ category: StockCategory }>('/stock/categories', body).then((r) => r.data.category),
-
-  updateCategory: (id: string, body: Partial<Pick<StockCategory, 'name' | 'listStyle'>>) =>
-    apiClient.patch<{ category: StockCategory }>(`/stock/categories/${id}`, body).then((r) => r.data.category),
-
-  deleteCategory: (id: string) => apiClient.delete(`/stock/categories/${id}`),
-
-  updateSettings: (body: { hideZeroInMessage?: boolean; broadcast?: Partial<StockSettings['broadcast']> }) =>
-    apiClient.patch<{ settings: StockSettings }>('/stock/settings', body).then((r) => r.data.settings),
+  ...ledgerApi('/stock'),
 
   sendNow: () =>
     apiClient
       .post<{ sent: number; failed: number; total: number; messagesPerRecipient: number }>('/stock/broadcast')
       .then((r) => r.data),
-
-  rotateShareToken: () =>
-    apiClient.post<{ settings: StockSettings }>('/stock/share-token/rotate').then((r) => r.data.settings),
 
   zoho: {
     status: () => apiClient.get<{ zoho: ZohoStatus }>('/integrations/zoho').then((r) => r.data.zoho),
@@ -85,5 +92,6 @@ export const stockApi = {
   refreshMedia: () => apiClient.post<{ media: MediaStatus }>('/stock/media/refresh').then((r) => r.data.media),
   mediaStatus: () => apiClient.get<{ media: MediaStatus }>('/stock/media/status').then((r) => r.data.media),
 
-  publicStock: (token: string) => apiClient.get<PublicStock>(`/public/stock/${token}`).then((r) => r.data),
+  publicStock: (token: string, publicBase = '/public/stock') =>
+    apiClient.get<PublicStock>(`${publicBase}/${token}`).then((r) => r.data),
 };

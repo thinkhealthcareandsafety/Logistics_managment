@@ -3,6 +3,7 @@ import toast from 'react-hot-toast';
 import { Modal } from '../Modal';
 import { useSendStockNow, useStockMessage } from '../../hooks/useStock';
 import { liveStockUrl, whatsappShareUrl } from '../../utils/stock';
+import { useLedger } from '../../context/StockLedger';
 import type { StockSettings } from '../../types/stock';
 import { Skeleton, SkeletonRegion, Spinner } from '../ui/Loading';
 
@@ -50,6 +51,10 @@ export function ShareStockDialog({
 }) {
   const { data, isLoading, isError } = useStockMessage();
   const sendNow = useSendStockNow();
+  // Manual stock: no automatic sending (that goes through the paid WhatsApp API) -
+  // copy the message or open it in your own WhatsApp, both free.
+  const ledger = useLedger();
+  const manual = ledger.kind === 'manual';
   const text = data?.text ?? '';
   const recipients = settings.broadcast.recipients;
 
@@ -115,14 +120,15 @@ export function ShareStockDialog({
             </p>
           </div>
 
-          <div className="border-t border-slate-100 pt-4">
-            <p className="font-semibold text-slate-900">Send to people directly</p>
-            {recipients.length > 0 ? (
-              <>
-                <p className="mt-1 leading-relaxed text-slate-500">
-                  {recipients.length} saved number{recipients.length === 1 ? '' : 's'}.
-                  {data && data.parts > 1 && (
-                    <> Goes as {data.parts} messages - WhatsApp caps one message at 4,096 characters.</>
+          {!manual && (
+            <div className="border-t border-slate-100 pt-4">
+              <p className="font-semibold text-slate-900">Send to people directly</p>
+              {recipients.length > 0 ? (
+                <>
+                  <p className="mt-1 leading-relaxed text-slate-500">
+                    {recipients.length} saved number{recipients.length === 1 ? '' : 's'}.
+                    {data && data.parts > 1 && (
+                      <> Goes as {data.parts} messages - WhatsApp caps one message at 4,096 characters.</>
                   )}
                 </p>
                 <button
@@ -149,13 +155,14 @@ export function ShareStockDialog({
               </p>
             )}
           </div>
+          )}
 
           <div className="border-t border-slate-100 pt-4">
             <p className="font-semibold text-slate-900">Live stock link</p>
             <p className="mt-1 leading-relaxed text-slate-500">Always current. Pin it in the group once.</p>
             <button
               type="button"
-              onClick={() => copy(liveStockUrl(settings.shareToken), 'Live stock link')}
+              onClick={() => copy(liveStockUrl(settings.shareToken, ledger.livePath), 'Live stock link')}
               className="btn-secondary mt-2 inline-flex h-8 w-full items-center justify-center gap-2 px-3 py-0 text-[13px]"
             >
               <LinkIcon />

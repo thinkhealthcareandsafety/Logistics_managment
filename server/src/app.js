@@ -20,6 +20,7 @@ const stockRoutes = require('./routes/stock.routes');
 const geoRoutes = require('./routes/geo.routes');
 const zohoRoutes = require('./routes/zoho.routes');
 const systemRoutes = require('./routes/system.routes');
+const manualStockRoutes = require('./routes/manualStock.routes');
 
 const app = express();
 // Behind the host's load balancer (Render etc.): trust its X-Forwarded-* headers so
@@ -46,6 +47,7 @@ app.use('/api/ingest', ingestRoutes);
 app.use('/api/public', publicTrackingRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/stock', stockRoutes);
+app.use('/api/manual-stock', manualStockRoutes);
 app.use('/api/geo', geoRoutes);
 app.use('/api/integrations/zoho', zohoRoutes);
 app.use('/api/system', systemRoutes);

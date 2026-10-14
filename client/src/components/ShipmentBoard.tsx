@@ -52,9 +52,11 @@ export function ShipmentBoard({ shipments }: { shipments: Shipment[] }) {
   // Months that have deliveries, newest first, with their counts.
   const months = useMemo(() => {
     const m = new Map<string, number>();
+    // A delivery dated in the future is a typo, not a month to pick (it stays under "All months").
+    const now = Date.now();
     for (const s of byStatus.delivered) {
       const on = deliveredOn(s);
-      if (on) m.set(istMonth(on), (m.get(istMonth(on)) || 0) + 1);
+      if (on && on.getTime() <= now) m.set(istMonth(on), (m.get(istMonth(on)) || 0) + 1);
     }
     return [...m.entries()].sort((a, b) => b[0].localeCompare(a[0]));
   }, [byStatus.delivered]);

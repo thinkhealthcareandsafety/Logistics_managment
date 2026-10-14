@@ -1,36 +1,48 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { persisted } from '../utils/persistedQuery';
 import toast from 'react-hot-toast';
-import { stockApi } from '../api/stock';
+import { ledgerApi, stockApi } from '../api/stock';
+import { useLedger } from '../context/StockLedger';
 import type { ListStyle, StockCountChange, StockItemInput, StockSettings } from '../types/stock';
 
 function errorMessage(err: any, fallback: string) {
   return err?.response?.data?.message || fallback;
 }
 
+/** The current stock book (main or manual - see context/StockLedger) and its API. */
+export function useLedgerApi() {
+  const ledger = useLedger();
+  const api = useMemo(() => ledgerApi(ledger.base), [ledger.base]);
+  return { ledger, api };
+}
+
 export function useStock() {
-  return useQuery({ queryKey: ['stock'], ...persisted('stock', stockApi.get), refetchInterval: 60_000 });
+  const { ledger, api } = useLedgerApi();
+  return useQuery({ queryKey: [ledger.key], ...persisted(ledger.key, api.get), refetchInterval: 60_000 });
 }
 
 export function useStockMessage(enabled = true) {
-  return useQuery({ queryKey: ['stock', 'message'], queryFn: stockApi.message, enabled });
+  const { ledger, api } = useLedgerApi();
+  return useQuery({ queryKey: [ledger.key, 'message'], queryFn: api.message, enabled });
 }
 
 export function useStockMovements() {
-  return useQuery({ queryKey: ['stock', 'movements'], queryFn: () => stockApi.movements(30) });
+  const { ledger, api } = useLedgerApi();
+  return useQuery({ queryKey: [ledger.key, 'movements'], queryFn: () => api.movements(30) });
 }
 
-/** Any stock write invalidates the whole ['stock'] tree: sheet, message and history move together. */
+/** Any stock write invalidates that book's whole tree: sheet, message and history move together. */
 function useStockMutation<TArgs, TResult>(
   fn: (args: TArgs) => Promise<TResult>,
   { success, failure }: { success?: string | ((r: TResult) => string); failure: string }
 ) {
   const queryClient = useQueryClient();
+  const { key } = useLedger();
   return useMutation({
     mutationFn: fn,
     onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: ['stock'] });
+      queryClient.invalidateQueries({ queryKey: [key] });
       if (success) toast.success(typeof success === 'function' ? success(result) : success);
     },
     onError: (err) => toast.error(errorMessage(err, failure)),
@@ -38,16 +50,18 @@ function useStockMutation<TArgs, TResult>(
 }
 
 export function useSaveStockCount() {
-  return useStockMutation((changes: StockCountChange[]) => stockApi.saveCount(changes), {
+  const { api } = useLedgerApi();
+  return useStockMutation((changes: StockCountChange[]) => api.saveCount(changes), {
     success: (r) => `Stock saved - ${r.updated} line${r.updated === 1 ? '' : 's'} updated`,
     failure: 'Could not save the count',
   });
 }
 
 export function useStockOut() {
+  const { api } = useLedgerApi();
   return useStockMutation(
     ({ id, body }: { id: string; body: { quantity: number; customer?: string; note?: string } }) =>
-      stockApi.stockOut(id, body),
+      api.stockOut(id, body),
     {
       success: ({ movement }) =>
         `Stock out recorded - ${Math.abs(movement.change)} ${movement.itemName}${movement.customer ? ` to ${movement.customer}` : ''}`,
@@ -59,59 +73,67 @@ export function useStockOut() {
 /** Quiet save for the inline internal note - no toast on every blur. */
 export function useSaveInternalNote() {
   const queryClient = useQueryClient();
+  const { ledger, api } = useLedgerApi();
   return useMutation({
-    mutationFn: ({ id, internalNote }: { id: string; internalNote: string }) => stockApi.updateItem(id, { internalNote }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['stock'] }),
+    mutationFn: ({ id, internalNote }: { id: string; internalNote: string }) => api.updateItem(id, { internalNote }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: [ledger.key] }),
     onError: (err) => toast.error(errorMessage(err, 'Could not save the note')),
   });
 }
 
 export function useCreateStockItem() {
-  return useStockMutation((body: StockItemInput) => stockApi.createItem(body), {
+  const { api } = useLedgerApi();
+  return useStockMutation((body: StockItemInput) => api.createItem(body), {
     success: (item) => `${item.name} added`,
     failure: 'Could not add the item',
   });
 }
 
 export function useUpdateStockItem() {
-  return useStockMutation(({ id, body }: { id: string; body: StockItemInput }) => stockApi.updateItem(id, body), {
+  const { api } = useLedgerApi();
+  return useStockMutation(({ id, body }: { id: string; body: StockItemInput }) => api.updateItem(id, body), {
     success: 'Item updated',
     failure: 'Could not update the item',
   });
 }
 
 export function useRemoveStockItem() {
-  return useStockMutation((id: string) => stockApi.removeItem(id), {
+  const { api } = useLedgerApi();
+  return useStockMutation((id: string) => api.removeItem(id), {
     success: 'Item removed from stock',
     failure: 'Could not remove the item',
   });
 }
 
 export function useCreateStockCategory() {
-  return useStockMutation((body: { name: string; listStyle?: ListStyle }) => stockApi.createCategory(body), {
+  const { api } = useLedgerApi();
+  return useStockMutation((body: { name: string; listStyle?: ListStyle }) => api.createCategory(body), {
     success: (c) => `Category "${c.name}" added`,
     failure: 'Could not add the category',
   });
 }
 
 export function useUpdateStockCategory() {
+  const { api } = useLedgerApi();
   return useStockMutation(
-    ({ id, body }: { id: string; body: { name?: string; listStyle?: ListStyle } }) => stockApi.updateCategory(id, body),
+    ({ id, body }: { id: string; body: { name?: string; listStyle?: ListStyle } }) => api.updateCategory(id, body),
     { failure: 'Could not update the category' }
   );
 }
 
 export function useDeleteStockCategory() {
-  return useStockMutation((id: string) => stockApi.deleteCategory(id), {
+  const { api } = useLedgerApi();
+  return useStockMutation((id: string) => api.deleteCategory(id), {
     success: 'Category removed',
     failure: 'Could not remove the category',
   });
 }
 
 export function useUpdateStockSettings() {
+  const { api } = useLedgerApi();
   return useStockMutation(
     (body: { hideZeroInMessage?: boolean; broadcast?: Partial<StockSettings['broadcast']> }) =>
-      stockApi.updateSettings(body),
+      api.updateSettings(body),
     { success: 'Stock sharing settings saved', failure: 'Could not save the settings' }
   );
 }
@@ -128,12 +150,13 @@ export function useSendStockNow() {
 
 // ─────────────────────────── Zoho Books ───────────────────────────
 
-export function useZohoStatus() {
+export function useZohoStatus(enabled = true) {
   const queryClient = useQueryClient();
   const wasSyncing = useRef(false);
   const query = useQuery({
     queryKey: ['stock', 'zoho'],
     queryFn: stockApi.zoho.status,
+    enabled,
     // Check often while a long sync runs, so the sheet updates as soon as it finishes.
     refetchInterval: (q) => (q.state.data?.syncing ? 5_000 : 60_000),
   });
@@ -192,7 +215,8 @@ export function useDisconnectZoho() {
 }
 
 export function useRotateStockLink() {
-  return useStockMutation(() => stockApi.rotateShareToken(), {
+  const { api } = useLedgerApi();
+  return useStockMutation(() => api.rotateShareToken(), {
     success: 'New link created - the old one no longer works',
     failure: 'Could not replace the link',
   });

@@ -131,7 +131,50 @@ async function refreshShipment(shipment, { silent = false, prefetched = null } =
  * One-off catch-up for shipments delivered before deliveredAt existed (or whose
  * delivered scan arrived without it being set). Runs at startup; cheap and idempotent.
  */
+/**
+ * A date in the future can't be a scan that happened - it's a typo'd year (a master
+ * sheet saying 18/05/2028 for a shipment sent 15/05/2026). Put in the shipping year
+ * when that gives a date between shipping and now; otherwise leave it for a person.
+ */
+function correctedYear(at, shippedAt) {
+  const t = new Date(at);
+  if (!shippedAt || t.getTime() <= Date.now() + 24 * 60 * 60 * 1000) return null;
+  const shipped = new Date(shippedAt);
+  const fixed = new Date(t);
+  fixed.setUTCFullYear(shipped.getUTCFullYear());
+  if (fixed < shipped) fixed.setUTCFullYear(shipped.getUTCFullYear() + 1);
+  return fixed >= shipped && fixed.getTime() <= Date.now() ? fixed : null;
+}
+
+async function fixFutureDates() {
+  const soon = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  const odd = await Shipment.find({ $or: [{ deliveredAt: { $gt: soon } }, { 'checkpoints.checkpointTime': { $gt: soon } }] });
+  for (const shipment of odd) {
+    const shipped = shipment.shippingDate || shipment.createdAt;
+    let changed = false;
+    for (const cp of shipment.checkpoints) {
+      const fixed = correctedYear(cp.checkpointTime, shipped);
+      if (fixed) {
+        logger.warn(`${shipment.trackingNumber}: scan dated ${cp.checkpointTime.toISOString().slice(0, 10)} is in the future - corrected to ${fixed.toISOString().slice(0, 10)}`);
+        cp.checkpointTime = fixed;
+        changed = true;
+      }
+    }
+    const fixedDelivered = shipment.deliveredAt && correctedYear(shipment.deliveredAt, shipped);
+    if (fixedDelivered) {
+      shipment.deliveredAt = fixedDelivered;
+      changed = true;
+    }
+    if (changed) {
+      shipment.checkpoints.sort((a, b) => new Date(a.checkpointTime) - new Date(b.checkpointTime));
+      syncDeliveredAt(shipment);
+      await shipment.save();
+    }
+  }
+}
+
 async function backfillDeliveredAt() {
+  await fixFutureDates().catch((err) => logger.warn(`Future-date check failed: ${err.message}`));
   const stale = await Shipment.find({ status: 'delivered', deliveredAt: null });
   let fixed = 0;
   for (const shipment of stale) {
@@ -183,4 +226,4 @@ async function refreshBatch(shipments, { background = true } = {}) {
   return { refreshed, failed };
 }
 
-module.exports = { registerShipment, refreshShipment, refreshBatch, backfillDeliveredAt };
+module.exports = { registerShipment, refreshShipment, refreshBatch, backfillDeliveredAt, correctedYear };

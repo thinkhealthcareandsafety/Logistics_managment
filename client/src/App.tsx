@@ -4,6 +4,7 @@ import { useAuth } from './context/AuthContext';
 import { Layout } from './components/Layout';
 import { PageLoader } from './components/ui/Loading';
 import { Login } from './pages/Login';
+import { StockLedgerProvider } from './context/StockLedger';
 
 // Each page is its own download, fetched the first time it's opened - the landing
 // page doesn't ship the dashboard, and staff don't download the marketing site.
@@ -49,6 +50,14 @@ export default function App() {
         {/* Secret-link stock view pinned in the logistics WhatsApp group */}
         <Route path="/stock/live/:token" element={<PublicStock />} />
         <Route
+          path="/manual-stock/live/:token"
+          element={
+            <StockLedgerProvider kind="manual">
+              <PublicStock />
+            </StockLedgerProvider>
+          }
+        />
+        <Route
           element={
             <ProtectedRoute>
               <Layout />
@@ -57,7 +66,16 @@ export default function App() {
         >
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/analytics" element={<Analytics />} />
-          <Route path="/stock" element={<Stock />} />
+          <Route path="/stock" element={<Stock key="zoho" />} />
+          {/* Kept by hand, not connected to Zoho Books - same page on its own collections. */}
+          <Route
+            path="/manual-stock"
+            element={
+              <StockLedgerProvider kind="manual">
+                <Stock key="manual" />
+              </StockLedgerProvider>
+            }
+          />
           <Route path="/shipments/:id" element={<ShipmentDetail />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/profile" element={<Profile />} />

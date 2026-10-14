@@ -60,8 +60,8 @@ export const LIST_STYLE_LABELS: Record<ListStyle, string> = {
   letters: 'A. B. C.',
 };
 
-export function liveStockUrl(token: string): string {
-  return `${window.location.origin}/stock/live/${token}`;
+export function liveStockUrl(token: string, livePath = '/stock/live'): string {
+  return `${window.location.origin}${livePath}/${token}`;
 }
 
 export function whatsappShareUrl(text: string): string {

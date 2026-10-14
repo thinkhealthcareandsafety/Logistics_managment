@@ -4,6 +4,7 @@ import { format, formatDistanceToNow } from 'date-fns';
 import clsx from 'clsx';
 import toast from 'react-hot-toast';
 import { stockApi } from '../api/stock';
+import { useLedger } from '../context/StockLedger';
 import { Skeleton, SkeletonRegion } from '../components/ui/Loading';
 import { expiryState, formatExpiry, listPrefix, whatsappShareUrl } from '../utils/stock';
 
@@ -13,10 +14,11 @@ import { expiryState, formatExpiry, listPrefix, whatsappShareUrl } from '../util
  * the whole workflow.
  */
 export function PublicStock() {
+  const ledger = useLedger();
   const { token = '' } = useParams<{ token: string }>();
   const { data, isLoading, isError, refetch, isFetching } = useQuery({
-    queryKey: ['public-stock', token],
-    queryFn: () => stockApi.publicStock(token),
+    queryKey: ['public-stock', ledger.kind, token],
+    queryFn: () => stockApi.publicStock(token, ledger.publicBase),
     refetchInterval: 60_000,
     retry: false,
   });

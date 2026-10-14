@@ -11,24 +11,15 @@ const asyncHandler = require('../utils/asyncHandler');
 const env = require('../config/env');
 const { isWhatsAppConfigured, whatsAppStatus } = require('../services/whatsapp.service');
 const { LIST_STYLES } = require('../models/StockCategory');
-const {
-  loadStock,
-  buildStockMessage,
-  stockOutToday,
-  stockInToday,
-  currentMessage,
-  splitForWhatsApp,
-  applyCount,
-  recordStockOut,
-  broadcastStock,
-} = require('../services/stock.service');
+const { buildStockMessage, splitForWhatsApp, broadcastStock } = require('../services/stock.service');
 
 function assertId(id, what = 'item') {
   if (!mongoose.isValidObjectId(id)) throw new ApiError(404, `Stock ${what} not found`);
 }
 
-function settingsView(settings) {
+function settingsView(settings, manual = false) {
   return {
+    manual,
     shareToken: settings.shareToken,
     hideZeroInMessage: settings.hideZeroInMessage,
     broadcast: settings.broadcast,
@@ -74,192 +65,291 @@ function itemFields(body) {
   return fields;
 }
 
-async function assertCodeFree(productCode, exceptId) {
-  if (!productCode) return;
-  const clash = await StockItem.findOne({ productCode, isArchived: false, _id: { $ne: exceptId } });
-  if (clash) throw new ApiError(409, `Product code ${productCode} is already linked to "${clash.displayName}"`);
+/**
+ * The handlers for one stock ledger (main, or the manual stock kept by hand). Both run
+ * the same code against their own collections; Zoho, photos and broadcasting stay
+ * with the main stock.
+ */
+function stockHandlers({ Category, Item, Movement, Settings, ledger, manual = false }) {
+  const { loadStock, stockOutToday, stockInToday, currentMessage, applyCount, recordStockOut } = ledger;
+
+  async function assertCodeFree(productCode, exceptId) {
+    if (!productCode) return;
+    const clash = await Item.findOne({ productCode, isArchived: false, _id: { $ne: exceptId } });
+    if (clash) throw new ApiError(409, `Product code ${productCode} is already linked to "${clash.displayName}"`);
+  }
+
+  // ─────────────────────────── Read ───────────────────────────
+
+  const getStock = asyncHandler(async (req, res) => {
+    const { categories, items, settings } = await loadStock();
+    res.json({ categories, items, settings: settingsView(settings, manual) });
+  });
+
+  const getMessage = asyncHandler(async (req, res) => {
+    const text = await currentMessage();
+    // How many WhatsApp messages the automatic send would need for this text.
+    res.json({ text, parts: splitForWhatsApp(text).length, generatedAt: new Date() });
+  });
+
+  const listMovements = asyncHandler(async (req, res) => {
+    const limit = Math.min(Number(req.query.limit) || 30, 200);
+    const filter =
+      req.query.direction === 'in'
+        ? { change: { $gt: 0 }, reason: { $in: ['zoho', 'count', 'created'] }, note: { $not: /^(Corrected|Linked)/ } }
+        : {};
+    const movements = await Movement.find(filter).sort({ createdAt: -1 }).limit(limit);
+    res.json({ movements });
+  });
+
+  // ─────────────────────────── Categories ───────────────────────────
+
+  const createCategory = asyncHandler(async (req, res) => {
+    const name = String(req.body.name || '').trim();
+    if (!name) throw new ApiError(400, 'Give the category a name');
+    const last = await Category.findOne().sort({ sortOrder: -1 });
+    const category = await Category.create({
+      name,
+      listStyle: listStyleOf(req.body.listStyle) || 'plain',
+      sortOrder: (last?.sortOrder ?? -1) + 1,
+    });
+    res.status(201).json({ category });
+  });
+
+  const updateCategory = asyncHandler(async (req, res) => {
+    assertId(req.params.id, 'category');
+    const updates = {};
+    if (req.body.name !== undefined) {
+      updates.name = String(req.body.name).trim();
+      if (!updates.name) throw new ApiError(400, 'Give the category a name');
+    }
+    if (req.body.listStyle !== undefined) updates.listStyle = listStyleOf(req.body.listStyle);
+    if (req.body.sortOrder !== undefined) updates.sortOrder = Number(req.body.sortOrder) || 0;
+    const category = await Category.findByIdAndUpdate(req.params.id, { $set: updates }, { new: true });
+    if (!category) throw new ApiError(404, 'Stock category not found');
+    res.json({ category });
+  });
+
+  const deleteCategory = asyncHandler(async (req, res) => {
+    assertId(req.params.id, 'category');
+    const inUse = await Item.countDocuments({ categoryId: req.params.id, isArchived: false });
+    if (inUse > 0) throw new ApiError(409, 'Move or remove the items in this category first');
+    await Category.findByIdAndDelete(req.params.id);
+    res.status(204).send();
+  });
+
+  // ─────────────────────────── Items ───────────────────────────
+
+  const createItem = asyncHandler(async (req, res) => {
+    const fields = itemFields(req.body);
+    if (!fields.name) throw new ApiError(400, 'Give the item a name');
+    if (!fields.categoryId) throw new ApiError(400, 'Pick a category');
+    if (!(await Category.exists({ _id: fields.categoryId }))) throw new ApiError(404, 'Stock category not found');
+    await assertCodeFree(fields.productCode);
+
+    const quantity = Number(req.body.quantity ?? 0);
+    if (!Number.isInteger(quantity) || quantity < 0) throw new ApiError(400, 'Quantity must be a whole number, 0 or more');
+    // Split into old + new by default; a new line's stock is all new. splitOldNew:false opts out.
+    const oldQuantity = req.body.splitOldNew === false ? null : req.body.oldQuantity == null ? 0 : Number(req.body.oldQuantity);
+    if (oldQuantity !== null && (!Number.isInteger(oldQuantity) || oldQuantity < 0 || oldQuantity > quantity)) {
+      throw new ApiError(400, 'Old stock must be a whole number no more than the total');
+    }
+
+    const last = await Item.findOne({ categoryId: fields.categoryId }).sort({ sortOrder: -1 });
+    const item = await Item.create({ ...fields, quantity, oldQuantity, sortOrder: (last?.sortOrder ?? -1) + 1 });
+
+    const user = await User.findById(req.userId).select('name');
+    await Movement.create({
+      itemId: item._id,
+      itemName: item.displayName,
+      change: quantity,
+      quantityAfter: quantity,
+      reason: 'created',
+      userId: req.userId,
+      userName: user?.name || '',
+    });
+    res.status(201).json({ item });
+  });
+
+  /**
+   * Details only - quantity changes go through /count or /stock-out so every change is
+   * logged. `splitOldNew` turns the old/new split on (everything counts as new until
+   * the next count) or off (old and new merge into one number).
+   */
+  const updateItem = asyncHandler(async (req, res) => {
+    assertId(req.params.id);
+    const fields = itemFields(req.body);
+    if (fields.name === '') throw new ApiError(400, 'Give the item a name');
+    if (fields.productCode !== undefined) await assertCodeFree(fields.productCode, req.params.id);
+    if (fields.categoryId && !(await Category.exists({ _id: fields.categoryId }))) {
+      throw new ApiError(404, 'Stock category not found');
+    }
+
+    const item = await Item.findOne({ _id: req.params.id, isArchived: false });
+    if (!item) throw new ApiError(404, 'Stock item not found');
+    Object.assign(item, fields);
+    if (req.body.splitOldNew === true && item.oldQuantity == null) item.oldQuantity = item.quantity;
+    if (req.body.splitOldNew === false) item.oldQuantity = null;
+    await item.save();
+    res.json({ item });
+  });
+
+  const stockOut = asyncHandler(async (req, res) => {
+    assertId(req.params.id);
+    const { item, movement } = await recordStockOut({
+      itemId: req.params.id,
+      quantity: Number(req.body.quantity),
+      customer: req.body.customer,
+      note: req.body.note,
+      userId: req.userId,
+    });
+    res.status(201).json({ item, movement });
+  });
+
+  /** Archived, not deleted: movements keep pointing at a real record. */
+  const removeItem = asyncHandler(async (req, res) => {
+    assertId(req.params.id);
+    const item = await Item.findByIdAndUpdate(
+      req.params.id,
+      { $set: { isArchived: true, productCode: '' } },
+      { new: true }
+    );
+    if (!item) throw new ApiError(404, 'Stock item not found');
+    res.status(204).send();
+  });
+
+  const saveCount = asyncHandler(async (req, res) => {
+    const changes = (req.body.changes || []).map((c) => {
+      assertId(c.itemId);
+      return {
+        itemId: c.itemId,
+        quantity: Number(c.quantity),
+        oldQuantity: c.oldQuantity == null ? null : Number(c.oldQuantity),
+      };
+    });
+    const result = await applyCount({ changes, note: req.body.note, userId: req.userId });
+    const { categories, items, settings } = await loadStock();
+    res.json({ ...result, categories, items, settings: settingsView(settings, manual) });
+  });
+
+  // ─────────────────────────── Publishing ───────────────────────────
+
+  const updateSettings = asyncHandler(async (req, res) => {
+    const settings = await Settings.get();
+    const { hideZeroInMessage, whatsappPaused, broadcast = {} } = req.body;
+
+    if (hideZeroInMessage !== undefined) settings.hideZeroInMessage = !!hideZeroInMessage;
+    if (whatsappPaused !== undefined) settings.whatsappPaused = !!whatsappPaused;
+    if (broadcast.enabled !== undefined) settings.broadcast.enabled = !!broadcast.enabled;
+    if (broadcast.time !== undefined) {
+      if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(broadcast.time)) throw new ApiError(400, 'Time must be HH:mm');
+      settings.broadcast.time = broadcast.time;
+    }
+    if (broadcast.recipients !== undefined) {
+      if (!Array.isArray(broadcast.recipients)) throw new ApiError(400, 'recipients must be a list');
+      const cleaned = [...new Set(broadcast.recipients.map((r) => String(r).trim()).filter(Boolean))];
+      const bad = cleaned.find((r) => r.replace(/[^\d]/g, '').length < 10);
+      if (bad) throw new ApiError(400, `"${bad}" doesn't look like a WhatsApp number - include the country code`);
+      settings.broadcast.recipients = cleaned.slice(0, 50);
+    }
+    if (settings.broadcast.enabled && settings.broadcast.recipients.length === 0) {
+      throw new ApiError(400, 'Add at least one WhatsApp number before turning on the daily update');
+    }
+
+    await settings.save();
+    res.json({ settings: settingsView(settings, manual) });
+  });
+
+  const rotateShareToken = asyncHandler(async (req, res) => {
+    const settings = await Settings.get();
+    settings.shareToken = newShareToken();
+    await settings.save();
+    res.json({ settings: settingsView(settings, manual) });
+  });
+
+  // ─────────────────────────── Public (secret link) ───────────────────────────
+
+  /**
+   * Read-only stock for anyone holding the link - meant to be pinned in the WhatsApp
+   * group so the number is always current without anyone posting. No product codes,
+   * no history, no names.
+   */
+  const getPublicStock = asyncHandler(async (req, res) => {
+    const settings = await Settings.findOne({ key: 'default' });
+    const token = Buffer.from(String(req.params.token || ''));
+    const expected = Buffer.from(settings?.shareToken || '');
+    // Constant-time compare so the token can't be guessed a character at a time.
+    if (!settings || token.length !== expected.length || !crypto.timingSafeEqual(token, expected)) {
+      throw new ApiError(404, 'This stock link is invalid or has been replaced');
+    }
+    const [{ categories, items }, out, inToday] = await Promise.all([loadStock(), stockOutToday(), stockInToday()]);
+    // Internal notes, product codes and who-did-what stay inside the app.
+    res.json({
+      updatedAt: settings.lastCountAt || settings.updatedAt,
+      categories: categories.map((c) => ({
+        id: c._id,
+        name: c.name,
+        listStyle: c.listStyle,
+        items: items
+          .filter((i) => String(i.categoryId) === String(c._id))
+          .map((i) => ({
+            id: i._id,
+            name: i.name,
+            size: i.size,
+            quantity: i.quantity,
+            oldQuantity: i.oldQuantity,
+            note: i.note,
+            expiryDates: i.expiryDates,
+          })),
+      })),
+      message: buildStockMessage({ categories, items, stockOut: out, stockIn: inToday, hideZero: settings.hideZeroInMessage }),
+    });
+  });
+
+  return {
+    getStock,
+    getMessage,
+    listMovements,
+    createCategory,
+    updateCategory,
+    deleteCategory,
+    createItem,
+    updateItem,
+    stockOut,
+    removeItem,
+    saveCount,
+    updateSettings,
+    rotateShareToken,
+    getPublicStock,
+  };
 }
 
-// ─────────────────────────── Read ───────────────────────────
-
-const getStock = asyncHandler(async (req, res) => {
-  const { categories, items, settings } = await loadStock();
-  res.json({ categories, items, settings: settingsView(settings) });
+const stockService = require('../services/stock.service');
+const mainHandlers = stockHandlers({
+  Category: StockCategory,
+  Item: StockItem,
+  Movement: StockMovement,
+  Settings: StockSettings,
+  ledger: stockService,
 });
-
-const getMessage = asyncHandler(async (req, res) => {
-  const text = await currentMessage();
-  // How many WhatsApp messages the automatic send would need for this text.
-  res.json({ text, parts: splitForWhatsApp(text).length, generatedAt: new Date() });
-});
-
-const listMovements = asyncHandler(async (req, res) => {
-  const limit = Math.min(Number(req.query.limit) || 30, 200);
-  const filter =
-    req.query.direction === 'in'
-      ? { change: { $gt: 0 }, reason: { $in: ['zoho', 'count', 'created'] }, note: { $not: /^(Corrected|Linked)/ } }
-      : {};
-  const movements = await StockMovement.find(filter).sort({ createdAt: -1 }).limit(limit);
-  res.json({ movements });
-});
-
-// ─────────────────────────── Categories ───────────────────────────
-
-const createCategory = asyncHandler(async (req, res) => {
-  const name = String(req.body.name || '').trim();
-  if (!name) throw new ApiError(400, 'Give the category a name');
-  const last = await StockCategory.findOne().sort({ sortOrder: -1 });
-  const category = await StockCategory.create({
-    name,
-    listStyle: listStyleOf(req.body.listStyle) || 'plain',
-    sortOrder: (last?.sortOrder ?? -1) + 1,
-  });
-  res.status(201).json({ category });
-});
-
-const updateCategory = asyncHandler(async (req, res) => {
-  assertId(req.params.id, 'category');
-  const updates = {};
-  if (req.body.name !== undefined) {
-    updates.name = String(req.body.name).trim();
-    if (!updates.name) throw new ApiError(400, 'Give the category a name');
-  }
-  if (req.body.listStyle !== undefined) updates.listStyle = listStyleOf(req.body.listStyle);
-  if (req.body.sortOrder !== undefined) updates.sortOrder = Number(req.body.sortOrder) || 0;
-  const category = await StockCategory.findByIdAndUpdate(req.params.id, { $set: updates }, { new: true });
-  if (!category) throw new ApiError(404, 'Stock category not found');
-  res.json({ category });
-});
-
-const deleteCategory = asyncHandler(async (req, res) => {
-  assertId(req.params.id, 'category');
-  const inUse = await StockItem.countDocuments({ categoryId: req.params.id, isArchived: false });
-  if (inUse > 0) throw new ApiError(409, 'Move or remove the items in this category first');
-  await StockCategory.findByIdAndDelete(req.params.id);
-  res.status(204).send();
-});
-
-// ─────────────────────────── Items ───────────────────────────
-
-const createItem = asyncHandler(async (req, res) => {
-  const fields = itemFields(req.body);
-  if (!fields.name) throw new ApiError(400, 'Give the item a name');
-  if (!fields.categoryId) throw new ApiError(400, 'Pick a category');
-  if (!(await StockCategory.exists({ _id: fields.categoryId }))) throw new ApiError(404, 'Stock category not found');
-  await assertCodeFree(fields.productCode);
-
-  const quantity = Number(req.body.quantity ?? 0);
-  if (!Number.isInteger(quantity) || quantity < 0) throw new ApiError(400, 'Quantity must be a whole number, 0 or more');
-  // Split into old + new by default; a new line's stock is all new. splitOldNew:false opts out.
-  const oldQuantity = req.body.splitOldNew === false ? null : req.body.oldQuantity == null ? 0 : Number(req.body.oldQuantity);
-  if (oldQuantity !== null && (!Number.isInteger(oldQuantity) || oldQuantity < 0 || oldQuantity > quantity)) {
-    throw new ApiError(400, 'Old stock must be a whole number no more than the total');
-  }
-
-  const last = await StockItem.findOne({ categoryId: fields.categoryId }).sort({ sortOrder: -1 });
-  const item = await StockItem.create({ ...fields, quantity, oldQuantity, sortOrder: (last?.sortOrder ?? -1) + 1 });
-
-  const user = await User.findById(req.userId).select('name');
-  await StockMovement.create({
-    itemId: item._id,
-    itemName: item.displayName,
-    change: quantity,
-    quantityAfter: quantity,
-    reason: 'created',
-    userId: req.userId,
-    userName: user?.name || '',
-  });
-  res.status(201).json({ item });
-});
-
-/**
- * Details only - quantity changes go through /count or /stock-out so every change is
- * logged. `splitOldNew` turns the old/new split on (everything counts as new until
- * the next count) or off (old and new merge into one number).
- */
-const updateItem = asyncHandler(async (req, res) => {
-  assertId(req.params.id);
-  const fields = itemFields(req.body);
-  if (fields.name === '') throw new ApiError(400, 'Give the item a name');
-  if (fields.productCode !== undefined) await assertCodeFree(fields.productCode, req.params.id);
-  if (fields.categoryId && !(await StockCategory.exists({ _id: fields.categoryId }))) {
-    throw new ApiError(404, 'Stock category not found');
-  }
-
-  const item = await StockItem.findOne({ _id: req.params.id, isArchived: false });
-  if (!item) throw new ApiError(404, 'Stock item not found');
-  Object.assign(item, fields);
-  if (req.body.splitOldNew === true && item.oldQuantity == null) item.oldQuantity = item.quantity;
-  if (req.body.splitOldNew === false) item.oldQuantity = null;
-  await item.save();
-  res.json({ item });
-});
-
-const stockOut = asyncHandler(async (req, res) => {
-  assertId(req.params.id);
-  const { item, movement } = await recordStockOut({
-    itemId: req.params.id,
-    quantity: Number(req.body.quantity),
-    customer: req.body.customer,
-    note: req.body.note,
-    userId: req.userId,
-  });
-  res.status(201).json({ item, movement });
-});
-
-/** Archived, not deleted: movements keep pointing at a real record. */
-const removeItem = asyncHandler(async (req, res) => {
-  assertId(req.params.id);
-  const item = await StockItem.findByIdAndUpdate(
-    req.params.id,
-    { $set: { isArchived: true, productCode: '' } },
-    { new: true }
-  );
-  if (!item) throw new ApiError(404, 'Stock item not found');
-  res.status(204).send();
-});
-
-const saveCount = asyncHandler(async (req, res) => {
-  const changes = (req.body.changes || []).map((c) => {
-    assertId(c.itemId);
-    return {
-      itemId: c.itemId,
-      quantity: Number(c.quantity),
-      oldQuantity: c.oldQuantity == null ? null : Number(c.oldQuantity),
-    };
-  });
-  const result = await applyCount({ changes, note: req.body.note, userId: req.userId });
-  const { categories, items, settings } = await loadStock();
-  res.json({ ...result, categories, items, settings: settingsView(settings) });
-});
-
-// ─────────────────────────── Publishing ───────────────────────────
-
-const updateSettings = asyncHandler(async (req, res) => {
-  const settings = await StockSettings.get();
-  const { hideZeroInMessage, whatsappPaused, broadcast = {} } = req.body;
-
-  if (hideZeroInMessage !== undefined) settings.hideZeroInMessage = !!hideZeroInMessage;
-  if (whatsappPaused !== undefined) settings.whatsappPaused = !!whatsappPaused;
-  if (broadcast.enabled !== undefined) settings.broadcast.enabled = !!broadcast.enabled;
-  if (broadcast.time !== undefined) {
-    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(broadcast.time)) throw new ApiError(400, 'Time must be HH:mm');
-    settings.broadcast.time = broadcast.time;
-  }
-  if (broadcast.recipients !== undefined) {
-    if (!Array.isArray(broadcast.recipients)) throw new ApiError(400, 'recipients must be a list');
-    const cleaned = [...new Set(broadcast.recipients.map((r) => String(r).trim()).filter(Boolean))];
-    const bad = cleaned.find((r) => r.replace(/[^\d]/g, '').length < 10);
-    if (bad) throw new ApiError(400, `"${bad}" doesn't look like a WhatsApp number - include the country code`);
-    settings.broadcast.recipients = cleaned.slice(0, 50);
-  }
-  if (settings.broadcast.enabled && settings.broadcast.recipients.length === 0) {
-    throw new ApiError(400, 'Add at least one WhatsApp number before turning on the daily update');
-  }
-
-  await settings.save();
-  res.json({ settings: settingsView(settings) });
-});
+const {
+  getStock,
+  getMessage,
+  listMovements,
+  createCategory,
+  updateCategory,
+  deleteCategory,
+  createItem,
+  updateItem,
+  stockOut,
+  removeItem,
+  saveCount,
+  updateSettings,
+  rotateShareToken,
+  getPublicStock,
+} = mainHandlers;
+/** The hand-kept stock: same handlers on the manual collections (see models/ManualStock). */
+const manualHandlers = stockHandlers({ ...require('../models/ManualStock'), ledger: stockService.manualLedger, manual: true });
 
 const sendNow = asyncHandler(async (req, res) => {
   if (!isWhatsAppConfigured()) {
@@ -275,51 +365,6 @@ const getWhatsAppStatus = asyncHandler(async (req, res) => {
   res.json({ whatsapp: await whatsAppStatus() });
 });
 
-const rotateShareToken = asyncHandler(async (req, res) => {
-  const settings = await StockSettings.get();
-  settings.shareToken = newShareToken();
-  await settings.save();
-  res.json({ settings: settingsView(settings) });
-});
-
-// ─────────────────────────── Public (secret link) ───────────────────────────
-
-/**
- * Read-only stock for anyone holding the link - meant to be pinned in the WhatsApp
- * group so the number is always current without anyone posting. No product codes,
- * no history, no names.
- */
-const getPublicStock = asyncHandler(async (req, res) => {
-  const settings = await StockSettings.findOne({ key: 'default' });
-  const token = Buffer.from(String(req.params.token || ''));
-  const expected = Buffer.from(settings?.shareToken || '');
-  // Constant-time compare so the token can't be guessed a character at a time.
-  if (!settings || token.length !== expected.length || !crypto.timingSafeEqual(token, expected)) {
-    throw new ApiError(404, 'This stock link is invalid or has been replaced');
-  }
-  const [{ categories, items }, out, inToday] = await Promise.all([loadStock(), stockOutToday(), stockInToday()]);
-  // Internal notes, product codes and who-did-what stay inside the app.
-  res.json({
-    updatedAt: settings.lastCountAt || settings.updatedAt,
-    categories: categories.map((c) => ({
-      id: c._id,
-      name: c.name,
-      listStyle: c.listStyle,
-      items: items
-        .filter((i) => String(i.categoryId) === String(c._id))
-        .map((i) => ({
-          id: i._id,
-          name: i.name,
-          size: i.size,
-          quantity: i.quantity,
-          oldQuantity: i.oldQuantity,
-          note: i.note,
-          expiryDates: i.expiryDates,
-        })),
-    })),
-    message: buildStockMessage({ categories, items, stockOut: out, stockIn: inToday, hideZero: settings.hideZeroInMessage }),
-  });
-});
 
 // ─────────────────────────── Product media ───────────────────────────
 
@@ -428,6 +473,7 @@ const unmergeItem = asyncHandler(async (req, res) => {
 });
 
 module.exports = {
+  manualHandlers,
   suggestDuplicates,
   mergeItems,
   unmergeItem,

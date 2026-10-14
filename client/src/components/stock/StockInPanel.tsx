@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { formatDistanceToNow } from 'date-fns';
-import { stockApi } from '../../api/stock';
+import { useLedgerApi } from '../../hooks/useStock';
 import { Skeleton, SkeletonRegion } from '../ui/Loading';
 
 /**
@@ -8,9 +8,10 @@ import { Skeleton, SkeletonRegion } from '../ui/Loading';
  * new products, and counts that went up. Newest first; refreshes itself.
  */
 export function StockInPanel() {
+  const { ledger, api } = useLedgerApi();
   const { data: movements = [], isLoading } = useQuery({
-    queryKey: ['stock', 'movements', 'in'],
-    queryFn: () => stockApi.movements(25, 'in'),
+    queryKey: [ledger.key, 'movements', 'in'],
+    queryFn: () => api.movements(25, 'in'),
     refetchInterval: 60_000,
   });
 
@@ -21,7 +22,9 @@ export function StockInPanel() {
           <span aria-hidden className="h-2 w-2 rounded-full bg-emerald-500" />
           Stock in
         </h2>
-        <span className="hidden text-[12px] text-slate-400 sm:inline">Purchases from vendors via Zoho Books, newest first</span>
+        <span className="hidden text-[12px] text-slate-400 sm:inline">
+          {ledger.kind === 'manual' ? 'New items and counts that went up, newest first' : 'Purchases from vendors via Zoho Books, newest first'}
+        </span>
       </div>
       {isLoading ? (
         <SkeletonRegion label="Loading stock in" className="divide-y divide-slate-100">

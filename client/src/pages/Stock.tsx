@@ -5,6 +5,7 @@ import clsx from 'clsx';
 import toast from 'react-hot-toast';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { stockApi } from '../api/stock';
+import { useLedger } from '../context/StockLedger';
 import {
   useDeleteStockCategory,
   useRemoveStockItem,
@@ -103,6 +104,9 @@ function matches(filter: Filter, item: StockItem) {
 }
 
 export function Stock() {
+  // Main stock (Zoho Books) or the manual stock kept by hand - same sheet, Zoho parts hidden.
+  const ledger = useLedger();
+  const manual = ledger.kind === 'manual';
   const { data, isLoading, isError } = useStock();
   const saveCount = useSaveStockCount();
 
@@ -125,7 +129,7 @@ export function Stock() {
     | null
   >(null);
 
-  const { data: zoho, isLoading: zohoLoading } = useZohoStatus();
+  const { data: zoho, isLoading: zohoLoading } = useZohoStatus(!manual);
   const queryClient = useQueryClient();
   const refreshMedia = useMutation({
     mutationFn: stockApi.refreshMedia,
@@ -137,7 +141,7 @@ export function Stock() {
     onError: () => toast.error('Could not start the photo refresh'),
   });
   // While Zoho Books is connected, linked lines take their number from Zoho only.
-  const zohoLive = !!zoho?.connected;
+  const zohoLive = !manual && !!zoho?.connected;
   const isLocked = (item: StockItem) => zohoLive && !!item.zohoItemId;
 
   // Back from Zoho's sign-in: say how it went, then tidy the URL.
@@ -239,69 +243,75 @@ export function Stock() {
       {/* ───────── Header ───────── */}
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div className="min-w-0">
-          <h1 className="text-[24px] font-semibold tracking-[-0.02em] text-slate-950">Stock</h1>
-          <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-slate-500">
-            <button
-              onClick={() => setDialog({ kind: 'automation' })}
-              className="inline-flex items-center gap-1.5 rounded font-medium text-brand-700 hover:text-brand-900"
-            >
-              <span
-                aria-hidden
-                className={clsx('h-1.5 w-1.5 rounded-full', settings.broadcast.enabled ? 'bg-emerald-500' : 'bg-slate-300')}
-              />
-              {settings.broadcast.enabled
-                ? `Daily update at ${formatTime(settings.broadcast.time)}`
-                : 'Automatic update off'}
-            </button>
-            <span aria-hidden className="text-slate-300">/</span>
-            <button
-              onClick={() => setDialog({ kind: 'zoho' })}
-              className="inline-flex items-center gap-1.5 rounded font-medium text-brand-700 hover:text-brand-900"
-            >
-              {zohoLoading || zoho?.syncing ? (
-                <Spinner className="h-3 w-3" />
-              ) : (
+          <h1 className="text-[24px] font-semibold tracking-[-0.02em] text-slate-950">{ledger.title}</h1>
+          {manual ? (
+            <p className="mt-1 text-[13px] text-slate-500">Kept by hand - not connected to Zoho Books. Add, count and stock out items here.</p>
+          ) : (
+            <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-slate-500">
+              <button
+                onClick={() => setDialog({ kind: 'automation' })}
+                className="inline-flex items-center gap-1.5 rounded font-medium text-brand-700 hover:text-brand-900"
+              >
                 <span
                   aria-hidden
-                  className={clsx(
-                    'h-1.5 w-1.5 rounded-full',
-                    !zohoLive ? 'bg-slate-300' : zoho?.lastSyncOk === false ? 'bg-red-500' : 'bg-emerald-500'
-                  )}
+                  className={clsx('h-1.5 w-1.5 rounded-full', settings.broadcast.enabled ? 'bg-emerald-500' : 'bg-slate-300')}
                 />
-              )}
-              {zohoLoading
-                ? 'Checking Zoho Books…'
-                : zoho?.syncing
-                ? 'Zoho Books · syncing…'
-                : !zohoLive
-                ? 'Connect Zoho Books'
-                : zoho?.lastSyncOk === false
-                  ? 'Zoho Books sync failing'
-                  : zoho?.lastSyncAt
-                    ? `Zoho Books · synced ${formatDistanceToNow(new Date(zoho.lastSyncAt), { addSuffix: true })}`
-                    : 'Zoho Books · first sync running'}
-            </button>
-            <span aria-hidden className="text-slate-300">/</span>
-            <button
-              onClick={() => refreshMedia.mutate()}
-              disabled={refreshMedia.isPending}
-              title="Re-read photos, videos and brochures from buyaedindia.com"
-              className="inline-flex items-center gap-1.5 rounded font-medium text-brand-700 hover:text-brand-900 disabled:opacity-60"
-            >
-              {refreshMedia.isPending && <Spinner className="h-3 w-3" />}
-              Refresh photos & brochures
-            </button>
-            <span aria-hidden className="text-slate-300">/</span>
-            <button onClick={() => setDialog({ kind: 'duplicates' })} className="rounded font-medium text-brand-700 hover:text-brand-900">
-              Find duplicates
-            </button>
-          </p>
+                {settings.broadcast.enabled
+                  ? `Daily update at ${formatTime(settings.broadcast.time)}`
+                  : 'Automatic update off'}
+              </button>
+              <span aria-hidden className="text-slate-300">/</span>
+              <button
+                onClick={() => setDialog({ kind: 'zoho' })}
+                className="inline-flex items-center gap-1.5 rounded font-medium text-brand-700 hover:text-brand-900"
+              >
+                {zohoLoading || zoho?.syncing ? (
+                  <Spinner className="h-3 w-3" />
+                ) : (
+                  <span
+                    aria-hidden
+                    className={clsx(
+                      'h-1.5 w-1.5 rounded-full',
+                      !zohoLive ? 'bg-slate-300' : zoho?.lastSyncOk === false ? 'bg-red-500' : 'bg-emerald-500'
+                    )}
+                  />
+                )}
+                {zohoLoading
+                  ? 'Checking Zoho Books…'
+                  : zoho?.syncing
+                  ? 'Zoho Books · syncing…'
+                  : !zohoLive
+                  ? 'Connect Zoho Books'
+                  : zoho?.lastSyncOk === false
+                    ? 'Zoho Books sync failing'
+                    : zoho?.lastSyncAt
+                      ? `Zoho Books · synced ${formatDistanceToNow(new Date(zoho.lastSyncAt), { addSuffix: true })}`
+                      : 'Zoho Books · first sync running'}
+              </button>
+              <span aria-hidden className="text-slate-300">/</span>
+              <button
+                onClick={() => refreshMedia.mutate()}
+                disabled={refreshMedia.isPending}
+                title="Re-read photos, videos and brochures from buyaedindia.com"
+                className="inline-flex items-center gap-1.5 rounded font-medium text-brand-700 hover:text-brand-900 disabled:opacity-60"
+              >
+                {refreshMedia.isPending && <Spinner className="h-3 w-3" />}
+                Refresh photos & brochures
+              </button>
+              <span aria-hidden className="text-slate-300">/</span>
+              <button onClick={() => setDialog({ kind: 'duplicates' })} className="rounded font-medium text-brand-700 hover:text-brand-900">
+                Find duplicates
+              </button>
+            </p>
+          )}
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <button onClick={() => setDialog({ kind: 'automation' })} className="btn-secondary inline-flex items-center gap-2">
-            <BoltIcon />
-            Automate
-          </button>
+          {!manual && (
+            <button onClick={() => setDialog({ kind: 'automation' })} className="btn-secondary inline-flex items-center gap-2">
+              <BoltIcon />
+              Automate
+            </button>
+          )}
           <button onClick={() => setDialog({ kind: 'item' })} className="btn-secondary inline-flex items-center gap-2">
             <PlusIcon />
             Add item
@@ -516,7 +526,7 @@ export function Stock() {
           onClose={() => setDialog(null)}
         />
       )}
-      {dialog?.kind === 'automation' && <StockAutomationDialog settings={settings} onClose={() => setDialog(null)} />}
+      {!manual && dialog?.kind === 'automation' && <StockAutomationDialog settings={settings} onClose={() => setDialog(null)} />}
       {dialog?.kind === 'item' && (
         <StockItemDialog
           item={dialog.item}
@@ -526,9 +536,9 @@ export function Stock() {
         />
       )}
       {dialog?.kind === 'stockOut' && <StockOutDialog item={dialog.item} onClose={() => setDialog(null)} />}
-      {dialog?.kind === 'zoho' && <ZohoBooksDialog onClose={() => setDialog(null)} />}
+      {!manual && dialog?.kind === 'zoho' && <ZohoBooksDialog onClose={() => setDialog(null)} />}
       {dialog?.kind === 'media' && <ProductMediaDialog item={dialog.item} onClose={() => setDialog(null)} />}
-      {dialog?.kind === 'duplicates' && <DuplicatesDialog onClose={() => setDialog(null)} />}
+      {!manual && dialog?.kind === 'duplicates' && <DuplicatesDialog onClose={() => setDialog(null)} />}
       {dialog?.kind === 'category' && (
         <CategoryDialog
           category={dialog.category}

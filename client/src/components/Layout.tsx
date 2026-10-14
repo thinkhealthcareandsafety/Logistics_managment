@@ -20,6 +20,7 @@ const NAV = [
   // A shipment's detail page is part of Shipments, so the tab stays lit there.
   { to: '/dashboard', label: 'Shipments', match: ['/dashboard', '/shipments'] },
   { to: '/stock', label: 'Stock', match: ['/stock'] },
+  { to: '/manual-stock', label: 'Manual stock', match: ['/manual-stock'] },
   { to: '/analytics', label: 'Analytics', match: ['/analytics'] },
 ];
 

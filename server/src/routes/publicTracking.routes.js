@@ -6,7 +6,7 @@ const {
   listPublicReviews,
 } = require('../controllers/feedback.controller');
 const { createLead } = require('../controllers/lead.controller');
-const { getPublicStock } = require('../controllers/stock.controller');
+const { getPublicStock, manualHandlers } = require('../controllers/stock.controller');
 const { courierSummary } = require('../controllers/carrier.controller');
 const { publicTrackingLimiter, feedbackLimiter, leadLimiter } = require('../middleware/rateLimiter');
 
@@ -29,5 +29,6 @@ router.get('/couriers/summary', courierSummary);
 
 // Live stock for whoever holds the secret link (pinned in the logistics WhatsApp group).
 router.get('/stock/:token', publicTrackingLimiter, getPublicStock);
+router.get('/manual-stock/:token', publicTrackingLimiter, manualHandlers.getPublicStock);
 
 module.exports = router;

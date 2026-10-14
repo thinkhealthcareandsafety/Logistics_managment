@@ -14,15 +14,6 @@ const TIME_ZONE = 'Asia/Kolkata';
 /** WhatsApp caps a text message at 4096 characters; stay clear of it. */
 const WHATSAPP_CHUNK_LIMIT = 3800;
 
-async function loadStock() {
-  const [categories, items, settings] = await Promise.all([
-    StockCategory.find().sort({ sortOrder: 1, createdAt: 1 }),
-    StockItem.find({ isArchived: false }).sort({ sortOrder: 1, createdAt: 1 }),
-    StockSettings.get(),
-  ]);
-  return { categories, items, settings };
-}
-
 // ─────────────────────────── Time helpers (India time) ───────────────────────────
 
 function istClock(date = new Date()) {
@@ -136,44 +127,6 @@ function buildStockMessage({ categories, items, stockOut = [], stockIn = [], hid
   return lines.join('\n');
 }
 
-/** Today's outgoing stock (stock-outs, shipment deductions, Zoho sales), oldest first. */
-async function stockOutToday(at = new Date()) {
-  return StockMovement.find({
-    $or: [{ reason: { $in: ['dispatch', 'shipment'] } }, { reason: 'zoho', change: { $lt: 0 } }],
-    createdAt: { $gte: startOfIstDay(at) },
-  }).sort({ createdAt: 1 });
-}
-
-/** While Zoho Books is connected, a linked line's number belongs to Zoho. */
-async function assertNotZohoManaged(items) {
-  const linked = items.filter((i) => i.zohoItemId);
-  if (linked.length && (await isZohoActive())) {
-    const names = linked.slice(0, 3).map(displayName).join(', ');
-    throw new ApiError(
-      409,
-      `${names}${linked.length > 3 ? ` and ${linked.length - 3} more` : ''} ${linked.length === 1 ? 'is' : 'are'} synced from Zoho Books - record the purchase, sale or adjustment in Zoho and it updates here`
-    );
-  }
-}
-
-/**
- * Today's incoming stock: purchases from vendors recorded in Zoho Books (bills) and
- * new products that arrived with stock. One-time corrections/links are not deliveries.
- */
-async function stockInToday(at = new Date()) {
-  return StockMovement.find({
-    reason: 'zoho',
-    change: { $gt: 0 },
-    note: { $not: /^(Corrected|Linked)/ },
-    createdAt: { $gte: startOfIstDay(at) },
-  }).sort({ createdAt: 1 });
-}
-
-async function currentMessage(at = new Date()) {
-  const [{ categories, items, settings }, stockOut, stockIn] = await Promise.all([loadStock(), stockOutToday(at), stockInToday(at)]);
-  return buildStockMessage({ categories, items, stockOut, stockIn, hideZero: settings.hideZeroInMessage, at });
-}
-
 /**
  * Splits a long update into WhatsApp-sized messages at category boundaries (blank
  * lines), so no category is ever cut in half. A single oversized category falls back
@@ -221,92 +174,156 @@ function isCount(n) {
   return Number.isInteger(n) && n >= 0;
 }
 
+// ─────────────────────────── One set of stock books ───────────────────────────
+
 /**
- * Applies a stock count: absolute quantities for any number of lines, saved together,
- * one movement per line that actually changed. Split lines send `oldQuantity` too.
- * Mirrors how the count really happens - walk the shelf, then publish once.
+ * Reading and changing one stock ledger. Two exist: the main stock, which Zoho Books
+ * keeps in step, and the manual stock the logistics head keeps by hand - separate
+ * collections, so nothing Zoho, photo search or shipments do can ever touch it.
  */
-async function applyCount({ changes, note = '', userId }) {
-  if (!Array.isArray(changes) || changes.length === 0) {
-    throw new ApiError(400, 'Nothing to save - no quantities changed');
-  }
-  for (const c of changes) {
-    if (!isCount(c.quantity) || (c.oldQuantity != null && !isCount(c.oldQuantity))) {
-      throw new ApiError(400, 'Quantities must be whole numbers, 0 or more');
-    }
-    if (c.oldQuantity != null && c.oldQuantity > c.quantity) {
-      throw new ApiError(400, 'Old stock cannot be more than the total');
-    }
+function ledgerService({ Category, Item, Movement, Settings, manual = false }) {
+  async function loadStock() {
+    const [categories, items, settings] = await Promise.all([
+      Category.find().sort({ sortOrder: 1, createdAt: 1 }),
+      Item.find({ isArchived: false }).sort({ sortOrder: 1, createdAt: 1 }),
+      Settings.get(),
+    ]);
+    return { categories, items, settings };
   }
 
-  const items = await StockItem.find({ _id: { $in: changes.map((c) => c.itemId) }, isArchived: false });
-  if (items.length !== changes.length) throw new ApiError(404, 'One or more stock items no longer exist');
-  await assertNotZohoManaged(items);
+  /** Today's outgoing stock (stock-outs, shipment deductions, Zoho sales), oldest first. */
+  async function stockOutToday(at = new Date()) {
+    return Movement.find({
+      $or: [{ reason: { $in: ['dispatch', 'shipment'] } }, { reason: 'zoho', change: { $lt: 0 } }],
+      createdAt: { $gte: startOfIstDay(at) },
+    }).sort({ createdAt: 1 });
+  }
 
-  const name = await userName(userId);
-  const movements = [];
-  const touched = [];
-  for (const item of items) {
-    const c = changes.find((x) => String(x.itemId) === String(item._id));
-    const split = item.oldQuantity != null;
-    const nextOld = split ? (c.oldQuantity ?? item.oldQuantity) : null;
-    const oldChanged = split && nextOld !== item.oldQuantity;
-    if (c.quantity === item.quantity && !oldChanged) continue;
+  /** While Zoho Books is connected, a linked line's number belongs to Zoho. */
+  async function assertNotZohoManaged(items) {
+    if (manual) return; // manual stock is never linked to Zoho
+    const linked = items.filter((i) => i.zohoItemId);
+    if (linked.length && (await isZohoActive())) {
+      const names = linked.slice(0, 3).map(displayName).join(', ');
+      throw new ApiError(
+        409,
+        `${names}${linked.length > 3 ? ` and ${linked.length - 3} more` : ''} ${linked.length === 1 ? 'is' : 'are'} synced from Zoho Books - record the purchase, sale or adjustment in Zoho and it updates here`
+      );
+    }
+  }
 
-    const detail = oldChanged
-      ? `old ${item.oldQuantity} → ${nextOld}, new ${item.quantity - item.oldQuantity} → ${c.quantity - nextOld}`
-      : '';
-    movements.push({
+  /**
+   * Today's incoming stock: purchases from vendors recorded in Zoho Books (bills) and
+   * new products that arrived with stock. One-time corrections/links are not deliveries.
+   */
+  async function stockInToday(at = new Date()) {
+    return Movement.find({
+      reason: 'zoho',
+      change: { $gt: 0 },
+      note: { $not: /^(Corrected|Linked)/ },
+      createdAt: { $gte: startOfIstDay(at) },
+    }).sort({ createdAt: 1 });
+  }
+
+  async function currentMessage(at = new Date()) {
+    const [{ categories, items, settings }, stockOut, stockIn] = await Promise.all([loadStock(), stockOutToday(at), stockInToday(at)]);
+    return buildStockMessage({ categories, items, stockOut, stockIn, hideZero: settings.hideZeroInMessage, at });
+  }
+
+  /**
+   * Applies a stock count: absolute quantities for any number of lines, saved together,
+   * one movement per line that actually changed. Split lines send `oldQuantity` too.
+   * Mirrors how the count really happens - walk the shelf, then publish once.
+   */
+  async function applyCount({ changes, note = '', userId }) {
+    if (!Array.isArray(changes) || changes.length === 0) {
+      throw new ApiError(400, 'Nothing to save - no quantities changed');
+    }
+    for (const c of changes) {
+      if (!isCount(c.quantity) || (c.oldQuantity != null && !isCount(c.oldQuantity))) {
+        throw new ApiError(400, 'Quantities must be whole numbers, 0 or more');
+      }
+      if (c.oldQuantity != null && c.oldQuantity > c.quantity) {
+        throw new ApiError(400, 'Old stock cannot be more than the total');
+      }
+    }
+
+    const items = await Item.find({ _id: { $in: changes.map((c) => c.itemId) }, isArchived: false });
+    if (items.length !== changes.length) throw new ApiError(404, 'One or more stock items no longer exist');
+    await assertNotZohoManaged(items);
+
+    const name = await userName(userId);
+    const movements = [];
+    const touched = [];
+    for (const item of items) {
+      const c = changes.find((x) => String(x.itemId) === String(item._id));
+      const split = item.oldQuantity != null;
+      const nextOld = split ? (c.oldQuantity ?? item.oldQuantity) : null;
+      const oldChanged = split && nextOld !== item.oldQuantity;
+      if (c.quantity === item.quantity && !oldChanged) continue;
+
+      const detail = oldChanged
+        ? `old ${item.oldQuantity} → ${nextOld}, new ${item.quantity - item.oldQuantity} → ${c.quantity - nextOld}`
+        : '';
+      movements.push({
+        itemId: item._id,
+        itemName: displayName(item),
+        change: c.quantity - item.quantity,
+        quantityAfter: c.quantity,
+        reason: 'count',
+        note: [detail, String(note).trim()].filter(Boolean).join(' · ').slice(0, 300),
+        userId,
+        userName: name,
+      });
+      item.quantity = c.quantity;
+      if (split) item.oldQuantity = nextOld;
+      touched.push(item);
+    }
+
+    await Promise.all(touched.map((i) => i.save()));
+    if (movements.length) await Movement.insertMany(movements);
+
+    const settings = await Settings.get();
+    settings.lastCountAt = new Date();
+    settings.lastCountBy = name;
+    await settings.save();
+
+    return { updated: movements.length };
+  }
+
+  /** "Stock out": goods leaving to a customer, recorded by hand. */
+  async function recordStockOut({ itemId, quantity, customer = '', note = '', userId }) {
+    if (!Number.isInteger(quantity) || quantity <= 0) throw new ApiError(400, 'Enter how many went out');
+    const item = await Item.findOne({ _id: itemId, isArchived: false });
+    if (!item) throw new ApiError(404, 'Stock item not found');
+    await assertNotZohoManaged([item]);
+    if (quantity > item.quantity) {
+      throw new ApiError(400, `Only ${item.quantity} ${displayName(item)} in stock - recount the line if that's wrong`);
+    }
+
+    item.takeOut(quantity);
+    await item.save();
+    const movement = await Movement.create({
       itemId: item._id,
       itemName: displayName(item),
-      change: c.quantity - item.quantity,
-      quantityAfter: c.quantity,
-      reason: 'count',
-      note: [detail, String(note).trim()].filter(Boolean).join(' · ').slice(0, 300),
+      change: -quantity,
+      quantityAfter: item.quantity,
+      reason: 'dispatch',
+      customer: String(customer).trim(),
+      note: String(note).trim().slice(0, 300),
       userId,
-      userName: name,
+      userName: await userName(userId),
     });
-    item.quantity = c.quantity;
-    if (split) item.oldQuantity = nextOld;
-    touched.push(item);
+    return { item, movement };
   }
 
-  await Promise.all(touched.map((i) => i.save()));
-  if (movements.length) await StockMovement.insertMany(movements);
-
-  const settings = await StockSettings.get();
-  settings.lastCountAt = new Date();
-  settings.lastCountBy = name;
-  await settings.save();
-
-  return { updated: movements.length };
+  return { loadStock, stockOutToday, stockInToday, currentMessage, applyCount, recordStockOut };
 }
 
-/** "Stock out": goods leaving to a customer, recorded by hand. */
-async function recordStockOut({ itemId, quantity, customer = '', note = '', userId }) {
-  if (!Number.isInteger(quantity) || quantity <= 0) throw new ApiError(400, 'Enter how many went out');
-  const item = await StockItem.findOne({ _id: itemId, isArchived: false });
-  if (!item) throw new ApiError(404, 'Stock item not found');
-  await assertNotZohoManaged([item]);
-  if (quantity > item.quantity) {
-    throw new ApiError(400, `Only ${item.quantity} ${displayName(item)} in stock - recount the line if that's wrong`);
-  }
-
-  item.takeOut(quantity);
-  await item.save();
-  const movement = await StockMovement.create({
-    itemId: item._id,
-    itemName: displayName(item),
-    change: -quantity,
-    quantityAfter: item.quantity,
-    reason: 'dispatch',
-    customer: String(customer).trim(),
-    note: String(note).trim().slice(0, 300),
-    userId,
-    userName: await userName(userId),
-  });
-  return { item, movement };
-}
+const mainLedger = ledgerService({ Category: StockCategory, Item: StockItem, Movement: StockMovement, Settings: StockSettings });
+const { loadStock, stockOutToday, stockInToday, currentMessage, applyCount, recordStockOut } = mainLedger;
+/** The hand-kept stock (not connected to Zoho Books). */
+const manualLedger = ledgerService({ ...require('../models/ManualStock'), manual: true });
 
 /**
  * Called when a shipment is booked (manual, CSV or ingest). If its product code
@@ -429,6 +446,7 @@ async function applyOldNewDefault() {
 }
 
 module.exports = {
+  manualLedger,
   applyOldNewDefault,
   loadStock,
   buildStockMessage,

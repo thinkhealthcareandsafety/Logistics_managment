@@ -68,7 +68,11 @@ async function importHistory(rows, userId) {
       const shippingDate = date(row.shippingDate);
       if (!shippingDate) throw new Error('shippingDate is missing or invalid');
       const status = STATUSES.includes(row.status) ? row.status : 'in_transit';
-      const deliveredAt = status === 'delivered' ? date(row.deliveredAt) : null;
+      let deliveredAt = status === 'delivered' ? date(row.deliveredAt) : null;
+      // A delivery "in the future" is a typo'd year - take the shipping year when that fits.
+      if (deliveredAt && deliveredAt.getTime() > Date.now() + 24 * 60 * 60 * 1000) {
+        deliveredAt = require('./tracking.service').correctedYear(deliveredAt, shippingDate);
+      }
       const booking = cleanBooking(row.booking);
       const commercial = commercialFields({
         weightKg: row.weightKg ?? null,
