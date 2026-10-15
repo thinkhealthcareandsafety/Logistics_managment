@@ -88,6 +88,15 @@ export interface Shipment {
   booking?: ShipmentBooking;
   /** When it was actually delivered (from the courier's delivered scan). */
   deliveredAt?: string | null;
+  /** Proof of delivery summary - who signed for it (photos/signature load separately). */
+  receipt?: {
+    confirmedAt: string | null;
+    receivedAt: string | null;
+    receivedBy: string;
+    relation: string;
+    condition: string;
+    via: string;
+  };
   currentLocation: string;
   checkpoints: Checkpoint[];
   exceptionFollowUp: ExceptionFollowUp;

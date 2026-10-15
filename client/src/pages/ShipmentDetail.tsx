@@ -10,6 +10,7 @@ import { ProgressRail } from '../components/ProgressRail';
 import { Timeline } from '../components/Timeline';
 import { ExceptionPanel } from '../components/ExceptionPanel';
 import { CustomerFeedbackPanel } from '../components/CustomerFeedbackPanel';
+import { DeliveryReceiptCard } from '../components/receipt/DeliveryReceiptCard';
 import { Menu, MenuDivider, MenuItem } from '../components/Menu';
 import { EditDeliveryDialog } from '../components/EditDeliveryDialog';
 import { ManualStatusDialog } from '../components/ManualStatusDialog';
@@ -259,6 +260,7 @@ export function ShipmentDetail() {
         <div className="min-w-0 space-y-6 lg:col-span-2">
           {s.status === 'exception' && <ExceptionPanel shipment={s} />}
           {s.status === 'delivered' && <CustomerFeedbackPanel shipment={s} />}
+          <DeliveryReceiptCard shipment={s} />
 
           <Card title="Tracking history" aside={`${s.checkpoints.length} scan${s.checkpoints.length === 1 ? '' : 's'}`}>
             <Timeline checkpoints={s.checkpoints} />

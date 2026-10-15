@@ -8,7 +8,8 @@ const {
 const { createLead } = require('../controllers/lead.controller');
 const { getPublicStock, manualHandlers } = require('../controllers/stock.controller');
 const { courierSummary } = require('../controllers/carrier.controller');
-const { publicTrackingLimiter, feedbackLimiter, leadLimiter } = require('../middleware/rateLimiter');
+const { publicTrackingLimiter, feedbackLimiter, leadLimiter, receiptLimiter } = require('../middleware/rateLimiter');
+const { receiptUpload, getPublicReceipt, submitPublicReceipt } = require('../controllers/receipt.controller');
 
 const router = express.Router();
 
@@ -30,5 +31,9 @@ router.get('/couriers/summary', courierSummary);
 // Live stock for whoever holds the secret link (pinned in the logistics WhatsApp group).
 router.get('/stock/:token', publicTrackingLimiter, getPublicStock);
 router.get('/manual-stock/:token', publicTrackingLimiter, manualHandlers.getPublicStock);
+
+// Delivery receipt - the secret token in the delivery slip's QR / shared link, never the AWB.
+router.get('/receipts/:token', publicTrackingLimiter, getPublicReceipt);
+router.post('/receipts/:token', receiptLimiter, receiptUpload, submitPublicReceipt);
 
 module.exports = router;

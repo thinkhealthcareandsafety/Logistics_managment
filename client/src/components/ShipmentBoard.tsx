@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import clsx from 'clsx';
 import type { Shipment, ShipmentStatus } from '../types/shipment';
 import { deliveredOn, deliverTo } from '../utils/logistics';
+import { relationLabel } from './receipt/ReceiptForm';
 
 type Column = Extract<ShipmentStatus, 'in_transit' | 'out_for_delivery' | 'delivered'>;
 
@@ -163,6 +164,11 @@ function BoardColumn({
                   {s.carrierName ? ` · ${s.carrierName}` : ''}
                   {on ? ` · ${shortDate(on)}` : ''}
                 </p>
+                {s.status === 'delivered' && s.receipt?.confirmedAt && (
+                  <p className="mt-0.5 truncate text-[11px] font-medium text-emerald-700">
+                    ✓ Received by {s.receipt.receivedBy} ({relationLabel(s.receipt.relation)})
+                  </p>
+                )}
               </Link>
             </li>
           );

@@ -56,4 +56,14 @@ const costlyLimiter = rateLimit({
   message: { message: 'Too many of these requests - please wait a while and try again.' },
 });
 
-module.exports = { apiLimiter, authLimiter, publicTrackingLimiter, feedbackLimiter, leadLimiter, costlyLimiter };
+// Delivery receipts: public and they carry photos, so few per address - enough for a
+// receiver whose upload failed to try again, not enough to flood the database.
+const receiptLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  limit: 15,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'Too many receipt submissions from this connection - please try again later.' },
+});
+
+module.exports = { apiLimiter, authLimiter, publicTrackingLimiter, feedbackLimiter, leadLimiter, costlyLimiter, receiptLimiter };

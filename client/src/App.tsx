@@ -18,6 +18,8 @@ const Analytics = page(() => import('./pages/Analytics'), 'Analytics');
 const PublicTracking = page(() => import('./pages/PublicTracking'), 'PublicTracking');
 const Profile = page(() => import('./pages/Profile'), 'Profile');
 const Feedback = page(() => import('./pages/Feedback'), 'Feedback');
+const ReceiveDelivery = page(() => import('./pages/ReceiveDelivery'), 'ReceiveDelivery');
+const DeliverySlip = page(() => import('./pages/DeliverySlip'), 'DeliverySlip');
 const Stock = page(() => import('./pages/Stock'), 'Stock');
 const PublicStock = page(() => import('./pages/PublicStock'), 'PublicStock');
 
@@ -47,6 +49,17 @@ export default function App() {
         {/* Public, no-login pages - the tracking number itself is the access token */}
         <Route path="/track/:trackingNumber" element={<PublicTracking />} />
         <Route path="/feedback/:trackingNumber" element={<Feedback />} />
+        {/* Delivery receipt - the secret token from the slip's QR / shared link; no sign-in */}
+        <Route path="/receive/:token" element={<ReceiveDelivery />} />
+        {/* Printable slip for the box - signed in, but outside the app layout so it prints clean */}
+        <Route
+          path="/shipments/:id/slip"
+          element={
+            <ProtectedRoute>
+              <DeliverySlip />
+            </ProtectedRoute>
+          }
+        />
         {/* Secret-link stock view pinned in the logistics WhatsApp group */}
         <Route path="/stock/live/:token" element={<PublicStock />} />
         <Route

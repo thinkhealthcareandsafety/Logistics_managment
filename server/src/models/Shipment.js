@@ -153,6 +153,21 @@ const shipmentSchema = new mongoose.Schema(
     checkpoints: { type: [checkpointSchema], default: [] },
 
     lastCheckedAt: { type: Date },
+    /**
+     * Proof of delivery. `receiptToken` is the secret in the delivery-slip QR / receipt
+     * link (not the AWB, which is printed on the box and guessable). `receipt` is a
+     * summary for lists; the photos and signature are in DeliveryReceipt.
+     */
+    // No default: only shipments whose link was shared have one (see the index below).
+    receiptToken: { type: String },
+    receipt: {
+      confirmedAt: { type: Date, default: null },
+      receivedAt: { type: Date, default: null },
+      receivedBy: { type: String, default: '' },
+      relation: { type: String, default: '' },
+      condition: { type: String, default: '' },
+      via: { type: String, default: '' },
+    },
     /** Last time this AWB was (re-)registered with TrackingMore - at most once a day. */
     trackingRegisterTriedAt: { type: Date, default: null },
     isArchived: { type: Boolean, default: false },
@@ -171,6 +186,9 @@ const shipmentSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+// Unique among shipments that have a receipt link; the rest have no token at all.
+shipmentSchema.index({ receiptToken: 1 }, { unique: true, partialFilterExpression: { receiptToken: { $type: 'string' } } });
 
 // Any write empties the ready-made shipment list (utils/shipmentListCache).
 const { bump } = require('../utils/shipmentListCache');

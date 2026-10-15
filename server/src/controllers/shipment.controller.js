@@ -78,7 +78,7 @@ const listShipments = asyncHandler(async (req, res) => {
 });
 
 async function buildShipmentList(query) {
-  const shipments = await Shipment.find(query, { trackingExtras: 0, trackingMoreId: 0, __v: 0 }).sort({ createdAt: -1 }).lean();
+  const shipments = await Shipment.find(query, { trackingExtras: 0, trackingMoreId: 0, receiptToken: 0, __v: 0 }).sort({ createdAt: -1 }).lean();
   for (const s of shipments) {
     const cps = s.checkpoints || [];
     if (cps.length > 3) {
