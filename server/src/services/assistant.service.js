@@ -128,6 +128,34 @@ function findMention(q, list, nameOf = (x) => x, { min = 0.6 } = {}) {
   return best;
 }
 
+/** The question with a matched name's words taken out. */
+function withoutWords(q, name) {
+  const drop = new Set(tokens(name));
+  return ` ${norm(q)
+    .split(' ')
+    .filter((w) => !drop.has(w))
+    .join(' ')} `;
+}
+
+/**
+ * Items whose name contains every word asked about ("hs1 pads" finds "Philips Heartstart
+ * HS1 Onsite Pads-M5071A"), best first - long catalogue names rarely match whole.
+ */
+function itemsMentioned(q, list, nameOf) {
+  const asked = tokens(q).filter((w) => !/^(in|left|available|units?|qty|quantity|how|much)$/.test(w));
+  if (!asked.length) return [];
+  const scored = [];
+  for (const entry of list) {
+    const nameWords = tokens(nameOf(entry));
+    const has = (w) => nameWords.some((n) => n === w || (w.length >= 3 && (n.startsWith(w) || (n.length >= 3 && w.startsWith(n)))));
+    const hit = asked.filter(has).length;
+    if (hit) scored.push({ value: entry, coverage: hit / asked.length, extra: nameWords.length - hit });
+  }
+  const best = Math.max(0, ...scored.map((s) => s.coverage));
+  if (best < 0.99 && !(asked.length >= 3 && best >= 0.66)) return [];
+  return scored.filter((s) => s.coverage === best).sort((a, b) => a.extra - b.extra).map((s) => s.value);
+}
+
 // ─────────────────────────── Shipments ───────────────────────────
 
 const SHIPMENT_FIELDS =
@@ -168,8 +196,10 @@ async function shipmentsAnswer(q, ctx) {
   const range = parseRange(q);
   const status = statusFrom(q);
   const courier = findMention(q, vocab.couriers, (c) => c.name, { min: 0.75 });
-  const customer = findMention(q, vocab.customers, undefined, { min: 0.7 });
-  const place = findMention(q, vocab.places, undefined, { min: 1 });
+  // Words that named the courier ("Shree Maruti") can't also name a client or place.
+  const rest = courier ? withoutWords(q, courier.value.name) : q;
+  const place = findMention(rest, vocab.places, undefined, { min: 1 });
+  const customer = findMention(place ? withoutWords(rest, place.value) : rest, vocab.customers, undefined, { min: 0.7 });
   const wantsList = /\b(show|list|which|what are|details|give|dikhao|names?)\b/.test(q);
 
   let all = await Shipment.find({ createdBy: userId, isArchived: false }).select(SHIPMENT_FIELDS).lean();
@@ -266,14 +296,24 @@ async function stockAnswer(q, ctx) {
     const low = items.filter((i) => i.quantity > 0 && i.lowStockAt != null && i.quantity <= i.lowStockAt);
     return { answer: `**${plural(low.length, 'item')}** ${low.length === 1 ? 'is' : 'are'} running low (at or under the reorder level).`, items: low.slice(0, 20).map((i) => ({ ...row(i), sub: `${row(i).sub} · reorder at ${i.lowStockAt}` })) };
   }
-  const item = findMention(q, items, name, { min: 0.7 });
-  const category = findMention(q, categories, (c) => c.name, { min: 0.9 });
-  if (item && (!category || item.score >= category.score)) {
-    const i = item.value;
+  const one = (i) => {
     const value = i.quantity * (i.salePrice ?? i.purchasePrice ?? 0);
     return {
       answer: `**${name(i)}**: **${i.quantity}** in ${book}${i.oldQuantity != null ? ` (${i.oldQuantity} old + ${i.quantity - i.oldQuantity} new)` : ''}${value ? `, worth ${inr(value)} at sale price` : ''}.${i.lowStockAt != null ? ` Reorder level ${i.lowStockAt}.` : ''}`,
       items: [row(i)],
+    };
+  };
+  // An item named exactly, else a category named exactly, else items containing the words asked.
+  const exact = findMention(q, items, name, { min: 1 });
+  const category = findMention(q, categories, (c) => c.name, { min: 0.9 });
+  if (exact && (!category || exact.score >= category.score)) return one(exact.value);
+  const matches = category && category.score >= 1 ? [] : itemsMentioned(q, items, name);
+  if (matches.length === 1) return one(matches[0]);
+  if (matches.length > 1) {
+    const units = matches.reduce((n, i) => n + i.quantity, 0);
+    return {
+      answer: `**${plural(matches.length, 'item')}** match - **${plural(units, 'unit')}** in ${book} between them.`,
+      items: [...matches].sort((a, b) => b.quantity - a.quantity).slice(0, 12).map(row),
     };
   }
   if (category) {
@@ -321,8 +361,8 @@ async function courierAnswer(q, ctx) {
   if (place) {
     const l = place.value;
     return {
-      answer: `For **${l.state}**, use **${l.recommended.carrierName}** - fewest problems${l.recommended.averageTransitHours != null ? `, about ${(l.recommended.averageTransitHours / 24).toFixed(1)} days` : ''}.`,
-      items: l.options.map((o) => ({ label: o.carrierName, sub: `${o.shipments} shipments · ${o.averageTransitHours != null ? `${(o.averageTransitHours / 24).toFixed(1)} days` : '-'}${o.medianFreight != null ? ` · typically ${inr(o.medianFreight)}` : ''}`, href: '/couriers' })),
+      answer: `For **${l.state}**, use **${l.recommended.carrierName}** - fewest problems${l.recommended.averageTransitHours != null ? `, ${l.recommended.averageTransitHours < 24 ? 'usually same day' : `about ${(l.recommended.averageTransitHours / 24).toFixed(1)} days`}` : ''}.`,
+      items: l.options.map((o) => ({ label: o.carrierName, sub: `${o.shipments} shipments · ${o.averageTransitHours == null ? '-' : o.averageTransitHours < 24 ? 'same day' : `${(o.averageTransitHours / 24).toFixed(1)} days`}${o.medianFreight != null ? ` · typically ${inr(o.medianFreight)}` : ''}`, href: '/couriers' })),
     };
   }
   if (/\b(cheap|cheapest|affordable|low cost|sasta|lowest)\b/.test(q) && advice.cheapest) {
@@ -477,4 +517,4 @@ async function ask(question, userId) {
   return { suggestions: [], items: [], ...result, askedAt: new Date() };
 }
 
-module.exports = { ask, parseRange, findMention, statusFrom, SUGGESTIONS };
+module.exports = { ask, parseRange, findMention, statusFrom, itemsMentioned, withoutWords, SUGGESTIONS };
