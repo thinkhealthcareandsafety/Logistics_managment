@@ -16,7 +16,6 @@ const {
   sendNow,
   getWhatsAppStatus,
   rotateShareToken,
-  suggestDuplicates,
   mergeItems,
   unmergeItem,
   importMedia,
@@ -48,7 +47,6 @@ router.post('/items/:id/stock-out', stockOut);
 router.post('/count', saveCount);
 
 router.post('/media/refresh', costlyLimiter, refreshMedia);
-router.post('/duplicates/suggest', costlyLimiter, suggestDuplicates);
 router.post('/items/:id/merge', mergeItems);
 router.post('/items/:id/unmerge', unmergeItem);
 router.post('/media/import', express.json({ limit: '5mb' }), importMedia);

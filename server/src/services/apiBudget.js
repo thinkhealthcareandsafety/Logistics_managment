@@ -14,10 +14,12 @@ const PROVIDERS = {
   gemini: { name: 'Gemini', env: 'GEMINI_DAILY_LIMIT', reserve: 15 },
   trackingmore: { name: 'TrackingMore', env: 'TRACKINGMORE_DAILY_LIMIT', reserve: 10 },
   whatsapp: { name: 'WhatsApp (Anantya)', env: 'WHATSAPP_API_DAILY_LIMIT', reserve: 0 },
+  // Free (part of Zoho Books), but Zoho caps calls a day and the stock sync needs most of them.
+  zohoInvoices: { name: 'Zoho Books invoice history (free)', env: 'ZOHO_INVOICE_READS_PER_DAY', reserve: 0, default: 100 },
 };
 const DEFAULT_LIMIT = 40;
 
-const limitOf = (provider) => Math.max(0, Number(process.env[PROVIDERS[provider].env]) || DEFAULT_LIMIT);
+const limitOf = (provider) => Math.max(0, Number(process.env[PROVIDERS[provider].env]) || PROVIDERS[provider].default || DEFAULT_LIMIT);
 const indiaDay = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
 
 /** The error a capped call fails with - shaped like a 429 from the API itself, so existing quota handling applies. */

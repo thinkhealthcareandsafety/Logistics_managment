@@ -8,6 +8,8 @@ import { WeekdayChart } from '../components/WeekdayChart';
 import { LocationChart } from '../components/LocationChart';
 import { Spinner } from '../components/ui/Loading';
 import { DownloadCsvButton } from '../components/DownloadCsvButton';
+import { CourierAdvicePanel } from '../components/analytics/CourierAdvicePanel';
+import { ReorderPredictions } from '../components/analytics/ReorderPredictions';
 import type { AnalyticsSummary, ExceptionRateByCarrier } from '../api/analytics';
 
 import { AnalyticsSkeleton } from '../components/skeletons/PageSkeletons';
@@ -126,6 +128,9 @@ export function Analytics() {
           <Summary data={data} />
         </div>
       )}
+
+      {/* From all past orders, not the date range above. */}
+      {!isLoading && <ReorderPredictions />}
     </div>
   );
 }
@@ -175,6 +180,8 @@ function Summary({ data }: { data: AnalyticsSummary }) {
           }
         />
       </div>
+
+      <CourierAdvicePanel advice={data.courierAdvice} />
 
       <CourierComparison rows={data.exceptionRateByCarrier} />
 

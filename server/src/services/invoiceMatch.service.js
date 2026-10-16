@@ -165,12 +165,15 @@ async function matchInvoices() {
       try {
         details += 1;
         full = await zoho.getInvoice(conn, inv.invoice_id);
+        // Kept for buying patterns and freight - read once, never fetched again for that.
+        await require('./invoiceCache.service').cacheInvoice(full).catch(() => {});
         await sleep(650);
       } catch {
         // list fields are enough for the number; freight may be missing
       }
-      const f = Number(full.shipping_charge);
-      if (Number.isFinite(f) && f > 0) freight += f;
+      // Shipping charge plus freight / courier / transport lines on the invoice.
+      const f = require('./invoiceCache.service').freightOf(full);
+      if (f > 0) freight += f;
       total += money(full.total ?? inv.total) || 0;
       ewb = ewb || findEwayBill(full);
     }

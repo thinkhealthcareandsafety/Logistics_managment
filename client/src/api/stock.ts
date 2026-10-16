@@ -84,8 +84,6 @@ export const stockApi = {
     disconnect: () => apiClient.delete<{ zoho: ZohoStatus }>('/integrations/zoho').then((r) => r.data.zoho),
   },
 
-  suggestDuplicates: () =>
-    apiClient.post<{ groups: { ids: string[]; names: string[]; keepName: string; reason: string; confidence: 'high' | 'medium' }[] }>('/stock/duplicates/suggest', {}, { timeout: 150_000 }).then((r) => r.data.groups),
   merge: (keepId: string, otherIds: string[]) => apiClient.post<{ item: StockItem }>(`/stock/items/${keepId}/merge`, { otherIds }).then((r) => r.data.item),
   unmerge: (id: string, zohoItemId: string) => apiClient.post<{ item: StockItem }>(`/stock/items/${id}/unmerge`, { zohoItemId }).then((r) => r.data.item),
 

@@ -19,7 +19,6 @@ import {
 import { ZohoBooksDialog } from '../components/stock/ZohoBooksDialog';
 import { ItemThumb, ProductMediaDialog } from '../components/stock/ProductMedia';
 import { StockInPanel } from '../components/stock/StockInPanel';
-import { DuplicatesDialog } from '../components/stock/DuplicatesDialog';
 import { AliasLine } from '../components/stock/AliasLine';
 import { SegmentedControl } from '../components/SegmentedControl';
 import { Menu, MenuDivider, MenuItem } from '../components/Menu';
@@ -125,7 +124,6 @@ export function Stock() {
     | { kind: 'category'; category: StockCategory }
     | { kind: 'zoho' }
     | { kind: 'media'; item: StockItem }
-    | { kind: 'duplicates' }
     | null
   >(null);
 
@@ -297,10 +295,6 @@ export function Stock() {
               >
                 {refreshMedia.isPending && <Spinner className="h-3 w-3" />}
                 Refresh photos & brochures
-              </button>
-              <span aria-hidden className="text-slate-300">/</span>
-              <button onClick={() => setDialog({ kind: 'duplicates' })} className="rounded font-medium text-brand-700 hover:text-brand-900">
-                Find duplicates
               </button>
             </p>
           )}
@@ -538,7 +532,6 @@ export function Stock() {
       {dialog?.kind === 'stockOut' && <StockOutDialog item={dialog.item} onClose={() => setDialog(null)} />}
       {!manual && dialog?.kind === 'zoho' && <ZohoBooksDialog onClose={() => setDialog(null)} />}
       {dialog?.kind === 'media' && <ProductMediaDialog item={dialog.item} onClose={() => setDialog(null)} />}
-      {!manual && dialog?.kind === 'duplicates' && <DuplicatesDialog onClose={() => setDialog(null)} />}
       {dialog?.kind === 'category' && (
         <CategoryDialog
           category={dialog.category}

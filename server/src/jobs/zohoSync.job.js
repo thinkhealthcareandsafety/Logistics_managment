@@ -24,6 +24,14 @@ function startZohoSyncJob() {
   setTimeout(async () => {
     if (await isZohoActive().catch(() => false)) syncNow({ reason: 'startup' }).catch(() => {});
   }, 5000);
+
+  // Invoice history for reorder predictions and freight: a little each night (02:30 IST),
+  // and a few minutes after start-up - the daily allowance caps it either way.
+  const readHistory = async () => {
+    if (await isZohoActive().catch(() => false)) require('../services/invoiceCache.service').backfillInvoices();
+  };
+  cron.schedule('30 2 * * *', readHistory, { timezone: 'Asia/Kolkata' });
+  setTimeout(readHistory, 10 * 60 * 1000);
 }
 
 module.exports = { startZohoSyncJob };

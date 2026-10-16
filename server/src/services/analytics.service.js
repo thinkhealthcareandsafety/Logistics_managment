@@ -139,6 +139,165 @@ function stockOutsBetween(from, to) {
   return StockMovement.find(query).select('change createdAt').lean();
 }
 
+function median(xs) {
+  const s = [...xs].sort((a, b) => a - b);
+  const m = Math.floor(s.length / 2);
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+}
+
+/** Not courier companies - compared, but never recommended. */
+const NOT_A_COURIER = /\b(self|other|hand|own)\b/i;
+const MIN_FOR_ADVICE = 5;
+
+const transitHours = (s) => {
+  const deliveredCp = [...s.checkpoints].reverse().find((cp) => cp.status === 'delivered');
+  if (!deliveredCp || !s.checkpoints.length) return null;
+  const h = (new Date(deliveredCp.checkpointTime) - new Date(s.checkpoints[0].checkpointTime)) / HOUR_MS;
+  return h >= 0 ? h : null;
+};
+const laneOf = (s) =>
+  String(s.deliveryAddress?.city || s.carrierRoute?.destinationCity || s.deliveryAddress?.state || s.carrierRoute?.destinationState || '')
+    .trim()
+    .toLowerCase();
+
+/**
+ * Speed that's fair across routes: a same-day local van and a 5-day interstate courier
+ * can't be compared on raw averages. Each trip is compared with the typical time to the
+ * same destination (city, else state) on lanes at least two couriers serve: 1 = typical,
+ * 2 = twice as fast. Per courier, the median of its trips; null with fewer than 3.
+ */
+function laneSpeedIndex(shipments) {
+  const lanes = new Map();
+  for (const s of shipments) {
+    const h = transitHours(s);
+    const lane = laneOf(s);
+    if (h == null || !lane) continue;
+    if (!lanes.has(lane)) lanes.set(lane, []);
+    lanes.get(lane).push({ code: s.carrierCode, h: Math.max(h, 6) }); // same-day counts as 6 h
+  }
+  const perCourier = new Map();
+  for (const trips of lanes.values()) {
+    if (new Set(trips.map((t) => t.code)).size < 2) continue;
+    const typical = median(trips.map((t) => t.h));
+    for (const t of trips) {
+      if (!perCourier.has(t.code)) perCourier.set(t.code, []);
+      perCourier.get(t.code).push(typical / t.h);
+    }
+  }
+  return new Map([...perCourier].map(([code, xs]) => [code, xs.length >= 3 ? { index: median(xs), trips: xs.length } : null]));
+}
+
+/**
+ * Which courier to use: each courier with enough shipments is scored on reliability
+ * (share of shipments that ever hit an exception), route-fair speed (laneSpeedIndex) and
+ * cost (median freight per shipment), each ranked against the others. Missing speed or
+ * freight data counts as middling, and says so. Also the best courier per destination
+ * state, where at least two have carried there.
+ */
+function courierAdvice(rows, shipments) {
+  const eligible = rows.filter((r) => r.total >= MIN_FOR_ADVICE && !NOT_A_COURIER.test(r.carrierName));
+  if (eligible.length === 0) return null;
+  const speedIndex = laneSpeedIndex(shipments.filter((s) => !NOT_A_COURIER.test(s.carrierName || '')));
+  for (const r of eligible) {
+    const si = speedIndex.get(r.carrierCode);
+    r.speedIndex = si ? Math.round(si.index * 100) / 100 : null;
+    r.comparableTrips = si ? si.trips : 0;
+  }
+  const scale = (value, values, lowerIsBetter) => {
+    const known = values.filter((v) => v != null);
+    if (value == null || known.length < 2) return 0.5;
+    const min = Math.min(...known);
+    const max = Math.max(...known);
+    if (max === min) return 1;
+    const t = (value - min) / (max - min);
+    return lowerIsBetter ? 1 - t : t;
+  };
+  const speeds = eligible.map((r) => r.speedIndex);
+  const troubles = eligible.map((r) => r.troubleRate);
+  const costs = eligible.map((r) => (r.freightCount >= 3 ? r.medianFreight : null));
+  const scored = eligible
+    .map((r) => {
+      const speed = scale(r.speedIndex, speeds, false);
+      const reliability = scale(r.troubleRate, troubles, true);
+      const cost = scale(r.freightCount >= 3 ? r.medianFreight : null, costs, true);
+      return {
+        carrierCode: r.carrierCode,
+        carrierName: r.carrierName,
+        shipments: r.total,
+        score: Math.round((0.4 * reliability + 0.35 * speed + 0.25 * cost) * 100),
+        speed: Math.round(speed * 100),
+        reliability: Math.round(reliability * 100),
+        cost: Math.round(cost * 100),
+        costKnown: r.freightCount >= 3,
+        speedKnown: r.speedIndex != null,
+        speedIndex: r.speedIndex,
+        comparableTrips: r.comparableTrips,
+        medianFreight: r.medianFreight,
+        // 2 = speed and cost both measured, 1 = one of them, 0 = neither.
+        evidence: (r.speedIndex != null ? 1 : 0) + (r.freightCount >= 3 ? 1 : 0),
+      };
+    })
+    // Measured beats guessed: a courier with no data can't outrank one with real numbers.
+    .sort((a, b) => b.evidence - a.evidence || b.score - a.score);
+  const pick = (list, key, lowerIsBetter) => {
+    const known = list.filter((r) => r[key] != null);
+    if (known.length < 2) return null;
+    const best = known.reduce((a, b) => ((lowerIsBetter ? b[key] < a[key] : b[key] > a[key]) ? b : a));
+    return { carrierCode: best.carrierCode, carrierName: best.carrierName, value: best[key] };
+  };
+  const withCost = eligible.filter((r) => r.freightCount >= 3);
+
+  // Per destination state: who has carried there, how fast, how often in trouble.
+  const lanes = new Map();
+  for (const s of shipments) {
+    if (NOT_A_COURIER.test(s.carrierName || '')) continue;
+    const state = s.deliveryAddress?.state || s.carrierRoute?.destinationState;
+    if (!state) continue;
+    const key = state.trim().toLowerCase();
+    const lane = lanes.get(key) || { state: state.trim(), couriers: new Map() };
+    const c = lane.couriers.get(s.carrierCode) || { carrierCode: s.carrierCode, carrierName: s.carrierName || s.carrierCode, n: 0, hours: [], troubled: 0, freights: [] };
+    c.n += 1;
+    if (s.checkpoints.some((cp) => cp.status === 'exception')) c.troubled += 1;
+    if (s.freightAmount > 0) c.freights.push(s.freightAmount);
+    const h = transitHours(s);
+    if (h != null) c.hours.push(h);
+    lane.couriers.set(s.carrierCode, c);
+    lanes.set(key, lane);
+  }
+  const byState = [...lanes.values()]
+    .map((lane) => {
+      const options = [...lane.couriers.values()]
+        .filter((c) => c.n >= 2)
+        .map((c) => ({
+          carrierCode: c.carrierCode,
+          carrierName: c.carrierName,
+          shipments: c.n,
+          averageTransitHours: c.hours.length ? c.hours.reduce((x, y) => x + y, 0) / c.hours.length : null,
+          troubleRate: c.troubled / c.n,
+          medianFreight: c.freights.length ? Math.round(median(c.freights)) : null,
+        }));
+      if (options.length < 2) return null;
+      // Fewest problems first, then fastest.
+      options.sort((a, b) => a.troubleRate - b.troubleRate || (a.averageTransitHours ?? 1e9) - (b.averageTransitHours ?? 1e9));
+      return { state: lane.state, recommended: options[0], options, shipments: options.reduce((n, o) => n + o.shipments, 0) };
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.shipments - a.shipments)
+    .slice(0, 12);
+
+  return {
+    // Only a courier with at least one measured strength is recommended.
+    recommended: scored[0].evidence > 0 ? scored[0] : null,
+    ranking: scored,
+    fastest: pick(eligible, 'speedIndex', false),
+    mostReliable: pick(eligible, 'troubleRate', true),
+    cheapest: pick(withCost, 'medianFreight', true),
+    cheapestPerKg: pick(eligible.filter((r) => r.medianFreightPerKg != null), 'medianFreightPerKg', true),
+    freightCoverage: { withFreight: rows.reduce((n, r) => n + r.freightCount, 0), shipments: rows.reduce((n, r) => n + r.total, 0) },
+    byState,
+  };
+}
+
 function endOfDay(date) {
   const d = new Date(date);
   d.setHours(23, 59, 59, 999);
@@ -208,11 +367,20 @@ async function getAnalyticsSummary({ userId, from, to }) {
         transitHoursSum: 0,
         onTimeEligible: 0,
         onTimeCount: 0,
+        // Freight (from Zoho invoices / the master sheet) and any trouble in the history.
+        freights: [],
+        perKg: [],
+        troubled: 0,
       });
     }
     const b = byCarrier.get(key);
     b.total += 1;
     if (s.status === 'exception') b.exceptions += 1;
+    if (s.checkpoints.some((cp) => cp.status === 'exception')) b.troubled += 1;
+    if (s.freightAmount > 0) {
+      b.freights.push(s.freightAmount);
+      if (s.weightKg > 0) b.perKg.push(s.freightAmount / s.weightKg);
+    }
     const deliveredCp = [...s.checkpoints].reverse().find((cp) => cp.status === 'delivered');
     if (s.status === 'delivered' && deliveredCp) {
       const start = s.checkpoints.length ? s.checkpoints[0].checkpointTime : s.shippingDate || s.createdAt;
@@ -228,11 +396,17 @@ async function getAnalyticsSummary({ userId, from, to }) {
     }
   }
   const exceptionRateByCarrier = [...byCarrier.values()]
-    .map(({ transitHoursSum, ...b }) => ({
+    .map(({ transitHoursSum, freights, perKg, ...b }) => ({
       ...b,
       rate: b.total ? b.exceptions / b.total : 0,
       averageTransitHours: b.delivered ? transitHoursSum / b.delivered : null,
       onTimeRate: b.onTimeEligible ? b.onTimeCount / b.onTimeEligible : null,
+      troubleRate: b.total ? b.troubled / b.total : 0,
+      freightCount: freights.length,
+      freightTotal: Math.round(freights.reduce((x, y) => x + y, 0)),
+      // Median, so one big consignment doesn't make a courier look expensive.
+      medianFreight: freights.length ? Math.round(median(freights)) : null,
+      medianFreightPerKg: perKg.length ? Math.round(median(perKg) * 10) / 10 : null,
     }))
     .sort((a, b) => b.total - a.total);
   const exceptionCount = shipments.filter((s) => s.status === 'exception').length;
@@ -276,6 +450,7 @@ async function getAnalyticsSummary({ userId, from, to }) {
     feedbackEligible: deliveredTotal,
     ratingBreakdown,
     exceptionRateByCarrier,
+    courierAdvice: courierAdvice(exceptionRateByCarrier, shipments),
     exceptionCount,
     exceptionRate: shipments.length ? exceptionCount / shipments.length : 0,
     weekdayBreakdown: weekdayBreakdown(shipments, await stockOutsBetween(from, to)),
@@ -284,4 +459,4 @@ async function getAnalyticsSummary({ userId, from, to }) {
   };
 }
 
-module.exports = { getAnalyticsSummary };
+module.exports = { getAnalyticsSummary, courierAdvice };

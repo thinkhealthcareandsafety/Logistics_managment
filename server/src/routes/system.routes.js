@@ -17,7 +17,14 @@ router.get(
     res.json({
       apis: apis.map((a) => ({
         ...a,
-        configured: a.provider === 'gemini' ? Boolean(env.gemini.apiKey) : a.provider === 'trackingmore' ? Boolean(env.trackingMore.apiKey) : Boolean(env.anantya.apiKey || env.gupshup.apiKey),
+        configured:
+          a.provider === 'gemini'
+            ? Boolean(env.gemini.apiKey)
+            : a.provider === 'trackingmore'
+              ? Boolean(env.trackingMore.apiKey)
+              : a.provider === 'zohoInvoices'
+                ? true
+                : Boolean(env.anantya.apiKey || env.gupshup.apiKey),
       })),
       whatsappMessages: messages,
       signupEnabled: env.signupEnabled,

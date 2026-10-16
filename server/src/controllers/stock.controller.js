@@ -453,10 +453,6 @@ const resync = async () => {
   if (await isZohoActive().catch(() => false)) await syncNow({ reason: 'merge' }).catch(() => {});
 };
 
-const suggestDuplicates = asyncHandler(async (req, res) => {
-  res.json({ groups: await dup.findDuplicates() });
-});
-
 const mergeItems = asyncHandler(async (req, res) => {
   assertId(req.params.id);
   const otherIds = (req.body.otherIds || []).filter((id) => mongoose.isValidObjectId(id));
@@ -474,7 +470,6 @@ const unmergeItem = asyncHandler(async (req, res) => {
 
 module.exports = {
   manualHandlers,
-  suggestDuplicates,
   mergeItems,
   unmergeItem,
   importMedia,
