@@ -20,7 +20,10 @@ const norm = (s) =>
     .replace(/[^a-z0-9]+/g, ' ')
     .trim();
 /** Shipment product names carry counts ("Frx Aed-2", "Gloves x3") - drop them to compare. */
-const productKey = (s) => norm(String(s || '').replace(/\s*[-x×]\s*\d+\s*$/i, ''));
+/** "Frx Aed-2", "Gloves x3", "HS1 Pad (2)" -> the product, without the count. */
+const COUNT_SUFFIX = /\s*(?:[-x×]\s*\d+|\(\s*\d+\s*\))\s*$/i;
+const productName = (s) => String(s || '').replace(COUNT_SUFFIX, '').trim();
+const productKey = (s) => norm(productName(s));
 const median = (xs) => {
   const s = [...xs].sort((a, b) => a - b);
   const m = Math.floor(s.length / 2);
@@ -57,7 +60,7 @@ async function ordersFromShipments(userId) {
       customerKey: norm(s.customerInfo.name),
       customer: s.customerInfo.name,
       itemKey: productKey(s.productDetails.name),
-      item: s.productDetails.name.replace(/\s*[-x×]\s*\d+\s*$/i, ''),
+      item: productName(s.productDetails.name),
       itemId: '',
       date: s.shippingDate || s.createdAt,
       qty: Number(s.productDetails.quantity) || 1,
