@@ -15,6 +15,7 @@ const Dashboard = page(() => import('./pages/Dashboard'), 'Dashboard');
 const ShipmentDetail = page(() => import('./pages/ShipmentDetail'), 'ShipmentDetail');
 const Settings = page(() => import('./pages/Settings'), 'Settings');
 const Analytics = page(() => import('./pages/Analytics'), 'Analytics');
+const Couriers = page(() => import('./pages/Couriers'), 'Couriers');
 const PublicTracking = page(() => import('./pages/PublicTracking'), 'PublicTracking');
 const Profile = page(() => import('./pages/Profile'), 'Profile');
 const Feedback = page(() => import('./pages/Feedback'), 'Feedback');
@@ -79,6 +80,7 @@ export default function App() {
         >
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/analytics" element={<Analytics />} />
+          <Route path="/couriers" element={<Couriers />} />
           <Route path="/stock" element={<Stock key="zoho" />} />
           {/* Kept by hand, not connected to Zoho Books - same page on its own collections. */}
           <Route

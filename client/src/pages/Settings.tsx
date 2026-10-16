@@ -182,6 +182,8 @@ export function Settings() {
           dirty ? 'translate-y-0' : 'pointer-events-none translate-y-full'
         )}
         aria-hidden={!dirty}
+        // Lets the assistant button move up out of the way while this bar shows.
+        data-bottom-bar={dirty ? 'open' : undefined}
       >
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
           <p className="text-[13px] text-slate-600">You have unsaved changes.</p>

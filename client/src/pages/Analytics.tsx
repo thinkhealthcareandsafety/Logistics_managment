@@ -1,29 +1,16 @@
-import { useState } from 'react';
 import clsx from 'clsx';
 import { useAnalytics } from '../hooks/useAnalytics';
 import { ALL_STATUSES, STATUS_LABELS, STATUS_STYLES } from '../utils/status';
 import { StarRating } from '../components/StarRating';
-import { SegmentedControl } from '../components/SegmentedControl';
 import { WeekdayChart } from '../components/WeekdayChart';
 import { LocationChart } from '../components/LocationChart';
 import { Spinner } from '../components/ui/Loading';
-import { DownloadCsvButton } from '../components/DownloadCsvButton';
-import { CourierAdvicePanel } from '../components/analytics/CourierAdvicePanel';
+import { DateRangeControl, useDateRange } from '../components/analytics/DateRange';
 import { ReorderPredictions } from '../components/analytics/ReorderPredictions';
-import type { AnalyticsSummary, ExceptionRateByCarrier } from '../api/analytics';
+import type { AnalyticsSummary } from '../api/analytics';
 
 import { AnalyticsSkeleton } from '../components/skeletons/PageSkeletons';
-const RANGE_PRESETS = [
-  { label: 'Last 7 days', days: 7 },
-  { label: 'Last 30 days', days: 30 },
-  { label: 'Last 90 days', days: 90 },
-];
 
-function isoDaysAgo(days: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() - days);
-  return d.toISOString().slice(0, 10);
-}
 
 function formatDuration(hours: number | null): string {
   if (hours === null) return '—';
@@ -36,16 +23,10 @@ function formatPercent(rate: number | null): string {
   return `${Math.round(rate * 100)}%`;
 }
 
-type RangeKey = '7' | '30' | '90' | 'all' | 'custom';
 
 export function Analytics() {
-  const [range, setRange] = useState<RangeKey>('all');
-  const [customFrom, setCustomFrom] = useState('');
-  const [customTo, setCustomTo] = useState('');
-
-  const from = range === 'custom' ? customFrom : range === 'all' ? '' : isoDaysAgo(Number(range));
-  const to = range === 'custom' ? customTo : '';
-  const { data, isLoading, isError, isPlaceholderData, refetch } = useAnalytics({ from: from || undefined, to: to || undefined });
+  const dateRange = useDateRange();
+  const { data, isLoading, isError, isPlaceholderData, refetch } = useAnalytics({ from: dateRange.from, to: dateRange.to });
 
   return (
     <div className="space-y-6">
@@ -65,44 +46,7 @@ export function Analytics() {
           </p>
         </div>
 
-        <div className="flex max-w-full flex-col items-stretch gap-2 sm:items-end">
-          <div className="-mx-4 overflow-x-auto px-4 [scrollbar-width:none] sm:mx-0 sm:px-0 [&::-webkit-scrollbar]:hidden">
-            <SegmentedControl<RangeKey>
-              label="Date range"
-              value={range}
-              onChange={setRange}
-              segments={[
-                ...RANGE_PRESETS.map((p) => ({ value: String(p.days) as RangeKey, label: p.label })),
-                { value: 'all', label: 'All time' },
-                { value: 'custom', label: 'Custom' },
-              ]}
-            />
-          </div>
-          {range === 'custom' && (
-            <div className="flex flex-wrap items-center gap-2 text-[13px] text-slate-500">
-              <label className="flex items-center gap-2">
-                <span>From</span>
-                <input
-                  type="date"
-                  value={customFrom}
-                  max={customTo || undefined}
-                  onChange={(e) => setCustomFrom(e.target.value)}
-                  className="input h-8 w-auto py-0 text-[13px]"
-                />
-              </label>
-              <label className="flex items-center gap-2">
-                <span>to</span>
-                <input
-                  type="date"
-                  value={customTo}
-                  min={customFrom || undefined}
-                  onChange={(e) => setCustomTo(e.target.value)}
-                  className="input h-8 w-auto py-0 text-[13px]"
-                />
-              </label>
-            </div>
-          )}
-        </div>
+        <DateRangeControl state={dateRange} />
       </header>
 
       {isLoading && <AnalyticsSkeleton />}
@@ -180,10 +124,6 @@ function Summary({ data }: { data: AnalyticsSummary }) {
           }
         />
       </div>
-
-      <CourierAdvicePanel advice={data.courierAdvice} />
-
-      <CourierComparison rows={data.exceptionRateByCarrier} />
 
       <WeekdayChart rows={data.weekdayBreakdown} />
 
@@ -283,87 +223,6 @@ function Summary({ data }: { data: AnalyticsSummary }) {
  * on different scales (count, days, two percentages) can't share an axis, and the
  * exact numbers are what a "which courier for this lane" decision needs.
  */
-function CourierComparison({ rows }: { rows: ExceptionRateByCarrier[] }) {
-  if (rows.length === 0) return null;
-  // "Fastest" only means something with at least two couriers that have deliveries.
-  const timed = rows.filter((r) => r.averageTransitHours != null);
-  const fastest =
-    timed.length >= 2
-      ? timed.reduce((a, b) => (b.averageTransitHours! < a.averageTransitHours! ? b : a))
-      : null;
-
-  return (
-    <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
-      <div className="flex flex-wrap items-baseline justify-between gap-2 px-5 pt-5">
-        <h2 className="text-[15px] font-semibold text-slate-950">Courier comparison</h2>
-        <div className="flex items-center gap-3">
-          <span className="text-[13px] tabular-nums text-slate-500">
-            {rows.length} courier{rows.length === 1 ? '' : 's'} in this range
-          </span>
-          {/* Plain numbers (hours, percentages) so the file sorts and sums in Excel. */}
-          <DownloadCsvButton
-            name="courier-comparison"
-            headers={['Courier', 'Shipments', 'Delivered', 'Avg transit (hours)', 'On time (%)', 'On time', 'Due-dated deliveries', 'Exceptions', 'Exception rate (%)']}
-            rows={rows.map((r) => [
-              r.carrierName,
-              r.total,
-              r.delivered,
-              r.averageTransitHours == null ? '' : Math.round(r.averageTransitHours * 10) / 10,
-              r.onTimeRate == null ? '' : Math.round(r.onTimeRate * 100),
-              r.onTimeCount,
-              r.onTimeEligible,
-              r.exceptions,
-              Math.round(r.rate * 100),
-            ])}
-          />
-        </div>
-      </div>
-      <div className="mt-3 overflow-x-auto">
-        <table className="w-full min-w-[620px] text-left text-[13px]">
-          <thead>
-            <tr className="border-y border-slate-200 bg-slate-50/70 text-[12px] text-slate-500">
-              <th scope="col" className="px-5 py-2.5 font-medium">Courier</th>
-              <th scope="col" className="px-3 py-2.5 text-right font-medium">Shipments</th>
-              <th scope="col" className="px-3 py-2.5 text-right font-medium">Delivered</th>
-              <th scope="col" className="px-3 py-2.5 text-right font-medium">Avg transit</th>
-              <th scope="col" className="px-3 py-2.5 text-right font-medium">On time</th>
-              <th scope="col" className="px-5 py-2.5 text-right font-medium">Exceptions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100 tabular-nums">
-            {rows.map((r) => (
-              <tr key={r.carrierCode}>
-                <th scope="row" className="px-5 py-3 text-left font-medium text-slate-900">
-                  {r.carrierName}
-                  {fastest && rows.length > 1 && fastest.carrierCode === r.carrierCode && (
-                    <span className="ml-2 rounded-md bg-emerald-50 px-1.5 py-0.5 text-[11px] font-medium text-emerald-700 ring-1 ring-inset ring-emerald-200">
-                      Fastest
-                    </span>
-                  )}
-                </th>
-                <td className="px-3 py-3 text-right text-slate-700">{r.total}</td>
-                <td className="px-3 py-3 text-right text-slate-700">{r.delivered}</td>
-                <td className="px-3 py-3 text-right text-slate-700">{formatDuration(r.averageTransitHours)}</td>
-                <td className="px-3 py-3 text-right text-slate-700">
-                  {r.onTimeRate == null ? '—' : `${Math.round(r.onTimeRate * 100)}%`}
-                  {r.onTimeEligible > 0 && (
-                    <span className="ml-1 text-[12px] text-slate-400">
-                      ({r.onTimeCount}/{r.onTimeEligible})
-                    </span>
-                  )}
-                </td>
-                <td className={clsx('px-5 py-3 text-right', r.exceptions ? 'font-medium text-red-600' : 'text-slate-700')}>
-                  {r.exceptions} · {Math.round(r.rate * 100)}%
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </section>
-  );
-}
-
 function Metric({
   label,
   value,

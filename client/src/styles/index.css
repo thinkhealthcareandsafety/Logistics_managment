@@ -192,3 +192,11 @@
     @apply bg-slate-300 rounded-full;
   }
 }
+
+/* A page's save bar is showing: lift the assistant above it so neither covers the other. */
+body:has([data-bottom-bar='open']) .assistant-fab {
+  bottom: 5rem;
+}
+body:has([data-bottom-bar='open']) .assistant-panel {
+  bottom: 8.5rem;
+}

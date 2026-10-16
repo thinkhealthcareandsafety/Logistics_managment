@@ -145,8 +145,8 @@ function median(xs) {
   return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
 }
 
-/** Not courier companies - compared, but never recommended. */
-const NOT_A_COURIER = /\b(self|other|hand|own)\b/i;
+/** Not courier partners (own van, bus parcels, hand delivery) - never recommended or ranked. */
+const NOT_A_COURIER = /\b(self|other|hand|own|bus|travels)\b/i;
 const MIN_FOR_ADVICE = 5;
 
 const transitHours = (s) => {
@@ -203,23 +203,18 @@ function courierAdvice(rows, shipments) {
     r.speedIndex = si ? Math.round(si.index * 100) / 100 : null;
     r.comparableTrips = si ? si.trips : 0;
   }
-  const scale = (value, values, lowerIsBetter) => {
-    const known = values.filter((v) => v != null);
-    if (value == null || known.length < 2) return 0.5;
-    const min = Math.min(...known);
-    const max = Math.max(...known);
-    if (max === min) return 1;
-    const t = (value - min) / (max - min);
-    return lowerIsBetter ? 1 - t : t;
-  };
-  const speeds = eligible.map((r) => r.speedIndex);
-  const troubles = eligible.map((r) => r.troubleRate);
-  const costs = eligible.map((r) => (r.freightCount >= 3 ? r.medianFreight : null));
+  // Absolute scales, not best-vs-worst stretching - a 3% problem rate beside a 0% one
+  // is still good, and shouldn't score like the worst courier.
+  const clamp = (x) => Math.max(0, Math.min(1, x));
+  const cheapestFreight = Math.min(...eligible.filter((r) => r.freightCount >= 3).map((r) => r.medianFreight));
   const scored = eligible
     .map((r) => {
-      const speed = scale(r.speedIndex, speeds, false);
-      const reliability = scale(r.troubleRate, troubles, true);
-      const cost = scale(r.freightCount >= 3 ? r.medianFreight : null, costs, true);
+      // Typical speed for its routes = 0.5; twice as fast = 1; half as fast = 0.25.
+      const speed = r.speedIndex == null ? 0.5 : clamp(0.5 * r.speedIndex);
+      // No problems = 1; one shipment in five hitting an exception = 0.
+      const reliability = clamp(1 - r.troubleRate / 0.2);
+      // The cheapest = 1; twice its typical freight = 0.5.
+      const cost = r.freightCount >= 3 && Number.isFinite(cheapestFreight) ? clamp(cheapestFreight / r.medianFreight) : 0.5;
       return {
         carrierCode: r.carrierCode,
         carrierName: r.carrierName,

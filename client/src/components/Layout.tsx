@@ -11,6 +11,7 @@ import { ErrorBoundary } from './ErrorBoundary';
 import { getInitials } from '../utils/avatar';
 
 import { RouteSkeleton } from './skeletons/PageSkeletons';
+import { AssistantWidget } from './assistant/AssistantWidget';
 /**
  * Primary nav is the work (shipments, stock, performance). Personal things - profile,
  * notification settings, signing out - live under the avatar, where every SaaS user
@@ -21,6 +22,7 @@ const NAV = [
   { to: '/dashboard', label: 'Shipments', match: ['/dashboard', '/shipments'] },
   { to: '/stock', label: 'Stock', match: ['/stock'] },
   { to: '/manual-stock', label: 'Manual stock', match: ['/manual-stock'] },
+  { to: '/couriers', label: 'Couriers', match: ['/couriers'] },
   { to: '/analytics', label: 'Analytics', match: ['/analytics'] },
 ];
 
@@ -123,6 +125,8 @@ export function Layout() {
           </Suspense>
         </ErrorBoundary>
       </main>
+      {/* Rule-based assistant - answers from the live data, no AI service or cost. */}
+      <AssistantWidget />
     </div>
   );
 }
