@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import clsx from 'clsx';
 
 /**
@@ -23,11 +24,35 @@ export function Menu({
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<CSSProperties | null>(null);
+
+  // Under the button (or above it, near the bottom of the screen), lined up with its edge.
+  useLayoutEffect(() => {
+    if (!open || !triggerRef.current) {
+      setPos(null);
+      return;
+    }
+    const place = () => {
+      const r = triggerRef.current!.getBoundingClientRect();
+      const below = window.innerHeight - r.bottom;
+      const vertical: CSSProperties = below < 220 && r.top > below ? { bottom: window.innerHeight - r.top + 6 } : { top: r.bottom + 6 };
+      const horizontal: CSSProperties = align === 'right' ? { right: Math.max(8, window.innerWidth - r.right) } : { left: Math.max(8, r.left) };
+      setPos({ ...vertical, ...horizontal });
+    };
+    place();
+    window.addEventListener('scroll', place, true);
+    window.addEventListener('resize', place);
+    return () => {
+      window.removeEventListener('scroll', place, true);
+      window.removeEventListener('resize', place);
+    };
+  }, [open, align]);
 
   useEffect(() => {
     if (!open) return;
     function onPointerDown(e: PointerEvent) {
-      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
+      const t = e.target as Node;
+      if (!rootRef.current?.contains(t) && !panelRef.current?.contains(t)) setOpen(false);
     }
     function onKeyDown(e: KeyboardEvent) {
       if (e.key === 'Escape') {
@@ -45,13 +70,17 @@ export function Menu({
     }
     document.addEventListener('pointerdown', onPointerDown);
     document.addEventListener('keydown', onKeyDown);
-    // Land focus on the first item so keyboard users can act straight away.
-    panelRef.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus();
     return () => {
       document.removeEventListener('pointerdown', onPointerDown);
       document.removeEventListener('keydown', onKeyDown);
     };
   }, [open]);
+
+  // Land focus on the first item once the panel is placed, so keyboard users can act straight away.
+  const placed = Boolean(pos);
+  useEffect(() => {
+    if (open && placed) panelRef.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus();
+  }, [open, placed]);
 
   return (
     <div ref={rootRef} className="relative">
@@ -66,20 +95,22 @@ export function Menu({
       >
         {trigger}
       </button>
-      {open && (
-        <div
-          ref={panelRef}
-          role="menu"
-          aria-label={label}
-          onClick={() => setOpen(false)}
-          className={clsx(
-            'absolute z-40 mt-1.5 min-w-[200px] overflow-hidden rounded-xl border border-slate-200 bg-white p-1 shadow-[0_12px_32px_-8px_rgba(15,23,42,0.18)]',
-            align === 'right' ? 'right-0' : 'left-0'
-          )}
-        >
-          {children}
-        </div>
-      )}
+      {/* On top of the page (a portal), so a card that clips its contents can't hide it. */}
+      {open &&
+        pos &&
+        createPortal(
+          <div
+            ref={panelRef}
+            role="menu"
+            aria-label={label}
+            onClick={() => setOpen(false)}
+            style={pos}
+            className="fixed z-50 min-w-[200px] overflow-hidden rounded-xl border border-slate-200 bg-white p-1 shadow-[0_12px_32px_-8px_rgba(15,23,42,0.18)]"
+          >
+            {children}
+          </div>,
+          document.body
+        )}
     </div>
   );
 }

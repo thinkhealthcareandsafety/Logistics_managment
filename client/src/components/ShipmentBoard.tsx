@@ -4,6 +4,8 @@ import clsx from 'clsx';
 import type { Shipment, ShipmentStatus } from '../types/shipment';
 import { deliveredOn, deliverTo } from '../utils/logistics';
 import { relationLabel } from './receipt/ReceiptForm';
+import { ShipmentsWhatsAppDialog } from './ShipmentsWhatsAppDialog';
+import { WhatsAppIcon } from './stock/ShareStockDialog';
 
 type Column = Extract<ShipmentStatus, 'in_transit' | 'out_for_delivery' | 'delivered'>;
 
@@ -69,8 +71,12 @@ export function ShipmentBoard({ shipments }: { shipments: Shipment[] }) {
     [byStatus.delivered, chosenMonth]
   );
 
+  // The column (or delivered month) being shared on WhatsApp.
+  const [share, setShare] = useState<{ shipments: Shipment[]; scope: string } | null>(null);
+
   return (
     <section className="rounded-xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+      {share && <ShipmentsWhatsAppDialog fixed shipments={share.shipments} scope={share.scope} onClose={() => setShare(null)} />}
       <div className="border-b border-slate-200 px-4 py-3">
         <h2 className="text-[15px] font-semibold text-slate-950">Shipment board</h2>
         <p className="mt-0.5 text-[13px] text-slate-500">Where each shipment is right now, by stage.</p>
@@ -86,6 +92,12 @@ export function ShipmentBoard({ shipments }: { shipments: Shipment[] }) {
               count={list.length}
               shipments={list}
               resetKey={col.status === 'delivered' ? chosenMonth : ''}
+              onShare={() =>
+                setShare({
+                  shipments: list,
+                  scope: col.status === 'delivered' ? `Delivered · ${chosenMonth === 'all' ? 'all months' : monthLabel(chosenMonth)}` : col.label,
+                })
+              }
               control={
                 col.status === 'delivered' && months.length > 0 ? (
                   <label className="relative">
@@ -123,6 +135,7 @@ function BoardColumn({
   shipments,
   control,
   resetKey,
+  onShare,
 }: {
   label: string;
   dot: string;
@@ -130,6 +143,8 @@ function BoardColumn({
   shipments: Shipment[];
   control: ReactNode;
   resetKey: string;
+  /** Opens this column's shipments as a WhatsApp message. */
+  onShare: () => void;
 }) {
   const [shown, setShown] = useState({ key: resetKey, n: PAGE });
   const limit = shown.key === resetKey ? shown.n : PAGE; // back to the first page when the month changes
@@ -141,7 +156,20 @@ function BoardColumn({
           {label}
           <span className="font-normal tabular-nums text-slate-500">{count}</span>
         </h3>
-        {control}
+        <div className="flex items-center gap-1.5">
+          {control}
+          <button
+            type="button"
+            onClick={onShare}
+            disabled={count === 0}
+            title={`Send ${label.toLowerCase()} on WhatsApp`}
+            aria-label={`Send ${label.toLowerCase()} shipments on WhatsApp`}
+            className="flex h-7 items-center gap-1 rounded-md border border-slate-200 bg-white px-2 text-[12px] font-medium text-[#1f9d55] transition hover:border-[#1f9d55]/40 hover:bg-[#1f9d55]/5 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <WhatsAppIcon />
+            <span className="hidden xl:inline">Share</span>
+          </button>
+        </div>
       </div>
       <ul className="max-h-[420px] flex-1 divide-y divide-slate-100 overflow-y-auto">
         {shipments.length === 0 && <li className="px-4 py-8 text-center text-[13px] text-slate-400">Nothing here</li>}
@@ -186,5 +214,30 @@ function BoardColumn({
         )}
       </ul>
     </div>
+  );
+}
+
+/** The board's shape while shipments load. */
+export function BoardSkeleton() {
+  return (
+    <section className="rounded-xl border border-slate-200 bg-white" aria-busy="true" aria-label="Loading the shipment board">
+      <div className="space-y-2 border-b border-slate-200 px-4 py-3">
+        <div className="h-4 w-36 animate-pulse rounded bg-slate-200" />
+        <div className="h-3 w-56 animate-pulse rounded bg-slate-100" />
+      </div>
+      <div className="grid grid-cols-1 divide-y divide-slate-200 md:grid-cols-3 md:divide-x md:divide-y-0">
+        {[0, 1, 2].map((c) => (
+          <div key={c} className="space-y-3 p-4">
+            <div className="h-3.5 w-28 animate-pulse rounded bg-slate-200" />
+            {[0, 1, 2].map((r) => (
+              <div key={r} className="space-y-1.5">
+                <div className="h-3.5 w-3/4 animate-pulse rounded bg-slate-100" />
+                <div className="h-3 w-1/2 animate-pulse rounded bg-slate-100" />
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }

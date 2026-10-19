@@ -22,6 +22,7 @@ const zohoRoutes = require('./routes/zoho.routes');
 const systemRoutes = require('./routes/system.routes');
 const manualStockRoutes = require('./routes/manualStock.routes');
 const assistantRoutes = require('./routes/assistant.routes');
+const shipmentBroadcastRoutes = require('./routes/shipmentBroadcast.routes');
 
 const app = express();
 // Behind the host's load balancer (Render etc.): trust its X-Forwarded-* headers so
@@ -36,6 +37,17 @@ app.use(cors({ origin: env.clientUrl, credentials: true }));
 app.use(express.json({ limit: '1mb' }));
 app.use(cookieParser());
 app.use(sanitizeInput);
+// "Who's making changes on this device" - several people share one sign-in, so stock
+// changes are credited to the name the person gave (X-Actor, URL-encoded), not the account.
+app.use((req, res, next) => {
+  try {
+    const raw = decodeURIComponent(String(req.headers['x-actor'] || ''));
+    req.actorName = raw.replace(/[^\p{L}\p{M}\p{N} .'-]/gu, '').replace(/\s+/g, ' ').trim().slice(0, 40);
+  } catch {
+    req.actorName = '';
+  }
+  next();
+});
 app.use('/api', apiLimiter);
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok', time: new Date().toISOString() }));
@@ -50,6 +62,7 @@ app.use('/api/analytics', analyticsRoutes);
 app.use('/api/stock', stockRoutes);
 app.use('/api/manual-stock', manualStockRoutes);
 app.use('/api/assistant', assistantRoutes);
+app.use('/api/shipment-broadcast', shipmentBroadcastRoutes);
 app.use('/api/geo', geoRoutes);
 app.use('/api/integrations/zoho', zohoRoutes);
 app.use('/api/system', systemRoutes);

@@ -164,7 +164,12 @@ function splitForWhatsApp(text, limit = WHATSAPP_CHUNK_LIMIT) {
 
 // ─────────────────────────── Counting and stock out ───────────────────────────
 
-async function userName(userId) {
+/**
+ * Who made a change: the name the person gave on their device (several people share
+ * one sign-in), else the account's name.
+ */
+async function userName(userId, actor = '') {
+  if (actor) return actor;
   if (!userId) return '';
   const user = await User.findById(userId).select('name');
   return user?.name || '';
@@ -235,7 +240,7 @@ function ledgerService({ Category, Item, Movement, Settings, manual = false }) {
    * one movement per line that actually changed. Split lines send `oldQuantity` too.
    * Mirrors how the count really happens - walk the shelf, then publish once.
    */
-  async function applyCount({ changes, note = '', userId }) {
+  async function applyCount({ changes, note = '', userId, actor = '' }) {
     if (!Array.isArray(changes) || changes.length === 0) {
       throw new ApiError(400, 'Nothing to save - no quantities changed');
     }
@@ -252,7 +257,7 @@ function ledgerService({ Category, Item, Movement, Settings, manual = false }) {
     if (items.length !== changes.length) throw new ApiError(404, 'One or more stock items no longer exist');
     await assertNotZohoManaged(items);
 
-    const name = await userName(userId);
+    const name = await userName(userId, actor);
     const movements = [];
     const touched = [];
     for (const item of items) {
@@ -292,7 +297,7 @@ function ledgerService({ Category, Item, Movement, Settings, manual = false }) {
   }
 
   /** "Stock out": goods leaving to a customer, recorded by hand. */
-  async function recordStockOut({ itemId, quantity, customer = '', note = '', userId }) {
+  async function recordStockOut({ itemId, quantity, customer = '', note = '', userId, actor = '' }) {
     if (!Number.isInteger(quantity) || quantity <= 0) throw new ApiError(400, 'Enter how many went out');
     const item = await Item.findOne({ _id: itemId, isArchived: false });
     if (!item) throw new ApiError(404, 'Stock item not found');
@@ -312,7 +317,7 @@ function ledgerService({ Category, Item, Movement, Settings, manual = false }) {
       customer: String(customer).trim(),
       note: String(note).trim().slice(0, 300),
       userId,
-      userName: await userName(userId),
+      userName: await userName(userId, actor),
     });
     return { item, movement };
   }

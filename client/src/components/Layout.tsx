@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { carriersQuery } from '../hooks/useCarriers';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
@@ -11,7 +11,8 @@ import { ErrorBoundary } from './ErrorBoundary';
 import { getInitials } from '../utils/avatar';
 
 import { RouteSkeleton } from './skeletons/PageSkeletons';
-import { AssistantWidget } from './assistant/AssistantWidget';
+// Its own download, after the page - it never slows the first screen.
+const AssistantWidget = lazy(() => import('./assistant/AssistantWidget').then((m) => ({ default: m.AssistantWidget })));
 /**
  * Primary nav is the work (shipments, stock, performance). Personal things - profile,
  * notification settings, signing out - live under the avatar, where every SaaS user
@@ -126,7 +127,9 @@ export function Layout() {
         </ErrorBoundary>
       </main>
       {/* Rule-based assistant - answers from the live data, no AI service or cost. */}
-      <AssistantWidget />
+      <Suspense fallback={null}>
+        <AssistantWidget />
+      </Suspense>
     </div>
   );
 }

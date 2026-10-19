@@ -6,8 +6,10 @@ const mongoose = require('mongoose');
  * shipment  - goods left automatically because a shipment was booked with the line's code
  * created   - the line was added
  * zoho      - Zoho Books' stock on hand changed (a bill adds, an invoice removes)
+ * edited    - details changed (name, size, category...) - no quantity change
+ * removed   - the line was taken off the sheet (history kept)
  */
-const MOVEMENT_REASONS = ['count', 'dispatch', 'shipment', 'created', 'zoho'];
+const MOVEMENT_REASONS = ['count', 'dispatch', 'shipment', 'created', 'zoho', 'edited', 'removed'];
 
 /**
  * Append-only log of every quantity change. The WhatsApp thread only ever shows the

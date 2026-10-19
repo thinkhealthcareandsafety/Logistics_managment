@@ -6,6 +6,7 @@ import toast from 'react-hot-toast';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { stockApi } from '../api/stock';
 import { useLedger } from '../context/StockLedger';
+import { ActorName } from '../components/stock/ActorName';
 import {
   useDeleteStockCategory,
   useRemoveStockItem,
@@ -18,7 +19,7 @@ import {
 } from '../hooks/useStock';
 import { ZohoBooksDialog } from '../components/stock/ZohoBooksDialog';
 import { ItemThumb, ProductMediaDialog } from '../components/stock/ProductMedia';
-import { StockInPanel } from '../components/stock/StockInPanel';
+import { StockRegister } from '../components/stock/StockRegister';
 import { AliasLine } from '../components/stock/AliasLine';
 import { SegmentedControl } from '../components/SegmentedControl';
 import { Menu, MenuDivider, MenuItem } from '../components/Menu';
@@ -322,6 +323,9 @@ export function Stock() {
         </div>
       </header>
 
+      {/* Whose name this device's stock changes are saved under. */}
+      <ActorName />
+
       {/* ───────── Summary ───────── */}
       <section
         aria-label="Stock summary"
@@ -477,7 +481,7 @@ export function Stock() {
         </div>
       )}
 
-      <StockInPanel />
+      <StockRegister />
 
       <RecentChanges />
 
@@ -778,7 +782,31 @@ function CategorySection({
                     />
                   )}
                   {/* Pinned top-right on phones so it never wraps onto its own line. */}
-                  <div className="absolute right-3 top-2.5 sm:static">
+                  <div className="absolute right-3 top-2.5 flex items-center sm:static">
+                  {/* Edit and remove in plain sight - not only inside the "more" menu. */}
+                  <button
+                    type="button"
+                    onClick={() => onEditItem(item)}
+                    aria-label={`Edit ${displayName(item)}`}
+                    title="Edit details"
+                    className="hidden h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 sm:flex"
+                  >
+                    <EditIcon />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (confirm(`Remove ${displayName(item)} from stock? Its history is kept.`)) removeItem.mutate(item._id);
+                    }}
+                    disabled={removing}
+                    aria-label={`Remove ${displayName(item)}`}
+                    title="Remove item"
+                    className="hidden h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition hover:bg-red-50 hover:text-red-600 disabled:opacity-50 sm:flex"
+                  >
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                      <path d="M4 7h16M10 11v6M14 11v6M5 7l1 13h12l1-13M9 7V4h6v3" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </button>
                   <Menu
                     label={`More actions for ${displayName(item)}`}
                     triggerClassName="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
@@ -1102,6 +1130,8 @@ const REASON_LABELS: Record<StockMovement['reason'], string> = {
   shipment: 'Shipment',
   created: 'Added',
   zoho: 'Zoho Books',
+  edited: 'Edited',
+  removed: 'Removed',
 };
 
 function RecentChanges() {
@@ -1111,7 +1141,7 @@ function RecentChanges() {
     <section className="rounded-xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
       <div className="flex items-baseline justify-between gap-3 border-b border-slate-200 px-4 py-3">
         <h2 className="text-[15px] font-semibold text-slate-950">Recent changes</h2>
-        <span className="hidden text-[12px] text-slate-400 sm:inline">Counts, stock outs, shipments and Zoho Books, newest first</span>
+        <span className="hidden text-[12px] text-slate-400 sm:inline">Counts, stock outs, edits and removals - with who made them, newest first</span>
       </div>
       {isLoading ? (
         <SkeletonRegion label="Loading recent changes" className="divide-y divide-slate-100">
@@ -1139,7 +1169,9 @@ function RecentChanges() {
                   m.reason === 'shipment' && 'bg-brand-50 text-brand-800',
                   m.reason === 'dispatch' && 'bg-violet-50 text-violet-700',
                   m.reason === 'count' && 'bg-slate-100 text-slate-700',
-                  m.reason === 'created' && 'bg-emerald-50 text-emerald-700'
+                  m.reason === 'created' && 'bg-emerald-50 text-emerald-700',
+                  m.reason === 'edited' && 'bg-amber-50 text-amber-800',
+                  m.reason === 'removed' && 'bg-red-50 text-red-700'
                 )}
               >
                 {REASON_LABELS[m.reason]}
@@ -1149,7 +1181,7 @@ function RecentChanges() {
                   <span className="font-medium">{m.itemName}</span>{' '}
                   {m.reason === 'created' ? (
                     <span className="text-slate-500">added with {m.quantityAfter}</span>
-                  ) : (
+                  ) : m.reason === 'edited' || m.reason === 'removed' ? null : (
                     <>
                       <span className="tabular-nums text-slate-500">
                         {m.quantityAfter - m.change} → {m.quantityAfter}
@@ -1179,8 +1211,8 @@ function RecentChanges() {
                 {m.note && <p className="mt-0.5 text-[12px] text-slate-500">{m.note}</p>}
               </div>
               <span className="shrink-0 text-right text-[12px] text-slate-400">
-                {m.userName && <span className="hidden sm:inline">{m.userName} · </span>}
-                {formatDistanceToNow(new Date(m.createdAt), { addSuffix: true })}
+                {m.userName && <span className="block font-medium text-slate-700">by {m.userName}</span>}
+                <span title={new Date(m.createdAt).toLocaleString('en-IN')}>{formatDistanceToNow(new Date(m.createdAt), { addSuffix: true })}</span>
               </span>
             </li>
           ))}

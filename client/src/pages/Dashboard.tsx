@@ -6,13 +6,14 @@ import { useInView } from '../hooks/useInView';
 import { useBulkArchiveShipments, useRefreshAllShipments, useShipments } from '../hooks/useShipments';
 import { ShipmentCard } from '../components/ShipmentCard';
 import { ShipmentTable } from '../components/ShipmentTable';
-import { ShipmentBoard } from '../components/ShipmentBoard';
+import { BoardSkeleton, ShipmentBoard } from '../components/ShipmentBoard';
 import { ShipmentSkeletonGrid, ShipmentSkeletonRows } from '../components/ShipmentSkeleton';
 import { AddShipmentDialog } from '../components/AddShipmentDialog';
 import { BulkImportDialog } from '../components/BulkImportDialog';
 import { CameraIcon } from '../components/LabelScanner';
 import { SegmentedControl } from '../components/SegmentedControl';
 import { ShipmentsWhatsAppDialog } from '../components/ShipmentsWhatsAppDialog';
+import { ShipmentAutomationDialog } from '../components/ShipmentAutomationDialog';
 import { WhatsAppIcon } from '../components/stock/ShareStockDialog';
 import { ALL_STATUSES, STATUS_LABELS, STATUS_STYLES } from '../utils/status';
 import { getUrgency, needsAttention } from '../utils/urgency';
@@ -56,6 +57,7 @@ export function Dashboard() {
   const labelInputRef = useRef<HTMLInputElement>(null);
   const [showBulkImport, setShowBulkImport] = useState(false);
   const [showWhatsApp, setShowWhatsApp] = useState(false);
+  const [showAutomation, setShowAutomation] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
   // A table has no business on a phone; below sm the cards are the only view.
   const wide = useMediaQuery('(min-width: 640px)');
@@ -303,6 +305,13 @@ export function Dashboard() {
           )}
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {/* Daily WhatsApp update - built, off until the WhatsApp key is added. */}
+          <button className="btn-secondary inline-flex items-center gap-2" onClick={() => setShowAutomation(true)}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
+              <path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z" strokeLinejoin="round" />
+            </svg>
+            Automate
+          </button>
           <button className="btn-secondary inline-flex items-center gap-2" onClick={() => setShowBulkImport(true)}>
             <UploadIcon />
             Import CSV
@@ -384,7 +393,7 @@ export function Dashboard() {
       </section>
 
       {/* ───────── Board: in transit / out for delivery / delivered ───────── */}
-      {!isLoading && <ShipmentBoard shipments={active} />}
+      {isLoading ? <BoardSkeleton /> : <ShipmentBoard shipments={active} />}
 
       {/* ───────── Shipments panel ───────── */}
       <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
@@ -663,6 +672,7 @@ export function Dashboard() {
         )}
       </section>
 
+      {showAutomation && <ShipmentAutomationDialog onClose={() => setShowAutomation(false)} />}
       {showAddDialog && (
         <AddShipmentDialog
           initialLabel={labelFile}

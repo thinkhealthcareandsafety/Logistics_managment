@@ -1,3 +1,4 @@
+import clsx from 'clsx';
 import { useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import { Modal } from './Modal';
@@ -38,11 +39,14 @@ function readSaved(): { include: Include; from: string; to: string } {
 export function ShipmentsWhatsAppDialog({
   shipments,
   scope,
+  fixed = false,
   onClose,
 }: {
   shipments: Shipment[];
   /** Describes the active filters, e.g. "Bluedart · In transit". */
   scope?: string;
+  /** Exactly these shipments (e.g. one board column / month) - no include choices shown. */
+  fixed?: boolean;
   onClose: () => void;
 }) {
   const [includeLinks, setIncludeLinks] = useState(true);
@@ -72,9 +76,10 @@ export function ShipmentsWhatsAppDialog({
       }),
     [shipments, from, to]
   );
-  const included = include === 'current' ? current : include === 'range' ? inRange : shipments;
-  const rangeLabel =
-    include === 'current'
+  const included = fixed ? shipments : include === 'current' ? current : include === 'range' ? inRange : shipments;
+  const rangeLabel = fixed
+    ? ''
+    : include === 'current'
       ? 'Current shipments + delivered today'
       : include === 'range'
         ? `Shipped ${from ? `from ${shortDay(from)}` : ''}${to ? ` to ${shortDay(to)}` : from ? ' onwards' : 'any date'}`
@@ -102,7 +107,11 @@ export function ShipmentsWhatsAppDialog({
     <Modal
       size="lg"
       title="WhatsApp message"
-      description={`${included.length} of the ${shipments.length} shipment${shipments.length === 1 ? '' : 's'} in your current view, grouped by status - issues first.`}
+      description={
+        fixed
+          ? `${included.length} shipment${included.length === 1 ? '' : 's'}${scope ? ` - ${scope}` : ''}, ready to copy or open in WhatsApp.`
+          : `${included.length} of the ${shipments.length} shipment${shipments.length === 1 ? '' : 's'} in your current view, grouped by status - issues first.`
+      }
       onClose={onClose}
       footer={
         <>
@@ -130,7 +139,7 @@ export function ShipmentsWhatsAppDialog({
         </>
       }
     >
-      <div className="mb-3 flex flex-wrap items-center gap-2">
+      <div className={clsx('mb-3 flex flex-wrap items-center gap-2', fixed && 'hidden')}>
         <div className="max-w-full overflow-x-auto">
           <SegmentedControl
             label="Shipments to include"
@@ -170,7 +179,7 @@ export function ShipmentsWhatsAppDialog({
         </div>
       </div>
       <p className="mt-3 text-[12px] text-slate-500">
-        Change the filters, courier or sort on the dashboard to change what’s included.
+        {fixed ? 'Opens your own WhatsApp - nothing is sent automatically.' : 'Change the filters, courier or sort on the dashboard to change what’s included.'}
       </p>
     </Modal>
   );

@@ -76,7 +76,7 @@ export interface StockMovement {
   itemName: string;
   change: number;
   quantityAfter: number;
-  reason: 'count' | 'dispatch' | 'shipment' | 'created' | 'zoho';
+  reason: 'count' | 'dispatch' | 'shipment' | 'created' | 'zoho' | 'edited' | 'removed';
   note: string;
   customer: string;
   trackingNumber: string;

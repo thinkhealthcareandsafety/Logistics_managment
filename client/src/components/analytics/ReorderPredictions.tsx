@@ -5,7 +5,6 @@ import clsx from 'clsx';
 import { analyticsApi, type ReorderPrediction } from '../../api/analytics';
 import { SegmentedControl } from '../SegmentedControl';
 import { DownloadCsvButton } from '../DownloadCsvButton';
-import { Spinner } from '../ui/Loading';
 
 type View = 'soon' | 'overdue' | 'all' | 'lapsed';
 
@@ -88,8 +87,14 @@ export function ReorderPredictions() {
       </div>
 
       {isLoading || !data ? (
-        <div className="p-5">
-          <Spinner />
+        <div className="mt-3 space-y-3 border-t border-slate-200 px-5 py-4" aria-busy="true" aria-label="Working out reorder predictions">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="flex gap-4">
+              <div className="h-8 flex-1 animate-pulse rounded bg-slate-100" />
+              <div className="h-8 w-28 animate-pulse rounded bg-slate-100" />
+              <div className="h-8 w-24 animate-pulse rounded bg-slate-100" />
+            </div>
+          ))}
         </div>
       ) : (
         <>

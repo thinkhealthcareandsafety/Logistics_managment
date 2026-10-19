@@ -13,6 +13,13 @@ const { isWhatsAppConfigured, whatsAppStatus } = require('../services/whatsapp.s
 const { LIST_STYLES } = require('../models/StockCategory');
 const { buildStockMessage, splitForWhatsApp, broadcastStock } = require('../services/stock.service');
 
+/** The person's own name from their device (see actorName in app.js), else the account's. */
+async function whoDidIt(req) {
+  if (req.actorName) return req.actorName;
+  const user = await User.findById(req.userId).select('name');
+  return user?.name || '';
+}
+
 function assertId(id, what = 'item') {
   if (!mongoose.isValidObjectId(id)) throw new ApiError(404, `Stock ${what} not found`);
 }
@@ -97,7 +104,9 @@ function stockHandlers({ Category, Item, Movement, Settings, ledger, manual = fa
     const filter =
       req.query.direction === 'in'
         ? { change: { $gt: 0 }, reason: { $in: ['zoho', 'count', 'created'] }, note: { $not: /^(Corrected|Linked)/ } }
-        : {};
+        : req.query.direction === 'out'
+          ? { change: { $lt: 0 }, reason: { $in: ['dispatch', 'shipment', 'zoho', 'count'] }, note: { $not: /^(Corrected|Linked)/ } }
+          : {};
     const movements = await Movement.find(filter).sort({ createdAt: -1 }).limit(limit);
     res.json({ movements });
   });
@@ -158,7 +167,6 @@ function stockHandlers({ Category, Item, Movement, Settings, ledger, manual = fa
     const last = await Item.findOne({ categoryId: fields.categoryId }).sort({ sortOrder: -1 });
     const item = await Item.create({ ...fields, quantity, oldQuantity, sortOrder: (last?.sortOrder ?? -1) + 1 });
 
-    const user = await User.findById(req.userId).select('name');
     await Movement.create({
       itemId: item._id,
       itemName: item.displayName,
@@ -166,7 +174,7 @@ function stockHandlers({ Category, Item, Movement, Settings, ledger, manual = fa
       quantityAfter: quantity,
       reason: 'created',
       userId: req.userId,
-      userName: user?.name || '',
+      userName: await whoDidIt(req),
     });
     res.status(201).json({ item });
   });
@@ -187,10 +195,31 @@ function stockHandlers({ Category, Item, Movement, Settings, ledger, manual = fa
 
     const item = await Item.findOne({ _id: req.params.id, isArchived: false });
     if (!item) throw new ApiError(404, 'Stock item not found');
+    const before = { name: item.displayName, categoryId: String(item.categoryId), note: item.note, lowStockAt: item.lowStockAt, productCode: item.productCode };
     Object.assign(item, fields);
     if (req.body.splitOldNew === true && item.oldQuantity == null) item.oldQuantity = item.quantity;
     if (req.body.splitOldNew === false) item.oldQuantity = null;
     await item.save();
+    // Logged with who did it, so the history shows renames and moves - not just counts.
+    const changed = [
+      before.name !== item.displayName && `renamed from “${before.name}”`,
+      before.categoryId !== String(item.categoryId) && 'moved to another category',
+      before.lowStockAt !== item.lowStockAt && `low-stock level ${item.lowStockAt ?? 'removed'}`,
+      before.productCode !== item.productCode && `product code ${item.productCode || 'removed'}`,
+      before.note !== item.note && 'note changed',
+    ].filter(Boolean);
+    if (changed.length) {
+      await Movement.create({
+        itemId: item._id,
+        itemName: item.displayName,
+        change: 0,
+        quantityAfter: item.quantity,
+        reason: 'edited',
+        note: changed.join(' · ').slice(0, 300),
+        userId: req.userId,
+        userName: await whoDidIt(req),
+      });
+    }
     res.json({ item });
   });
 
@@ -202,6 +231,7 @@ function stockHandlers({ Category, Item, Movement, Settings, ledger, manual = fa
       customer: req.body.customer,
       note: req.body.note,
       userId: req.userId,
+      actor: req.actorName,
     });
     res.status(201).json({ item, movement });
   });
@@ -215,6 +245,16 @@ function stockHandlers({ Category, Item, Movement, Settings, ledger, manual = fa
       { new: true }
     );
     if (!item) throw new ApiError(404, 'Stock item not found');
+    await Movement.create({
+      itemId: item._id,
+      itemName: item.displayName,
+      change: 0,
+      quantityAfter: item.quantity,
+      reason: 'removed',
+      note: `Removed from the sheet (had ${item.quantity})`,
+      userId: req.userId,
+      userName: await whoDidIt(req),
+    });
     res.status(204).send();
   });
 
@@ -227,7 +267,7 @@ function stockHandlers({ Category, Item, Movement, Settings, ledger, manual = fa
         oldQuantity: c.oldQuantity == null ? null : Number(c.oldQuantity),
       };
     });
-    const result = await applyCount({ changes, note: req.body.note, userId: req.userId });
+    const result = await applyCount({ changes, note: req.body.note, userId: req.userId, actor: req.actorName });
     const { categories, items, settings } = await loadStock();
     res.json({ ...result, categories, items, settings: settingsView(settings, manual) });
   });

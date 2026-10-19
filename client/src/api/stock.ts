@@ -28,7 +28,7 @@ export function ledgerApi(base: string) {
     message: () =>
       apiClient.get<{ text: string; parts: number; generatedAt: string }>(`${base}/message`).then((r) => r.data),
 
-    movements: (limit = 30, direction?: 'in') =>
+    movements: (limit = 30, direction?: 'in' | 'out') =>
       apiClient.get<{ movements: StockMovement[] }>(`${base}/movements`, { params: { limit, direction } }).then((r) => r.data.movements),
 
     saveCount: (changes: StockCountChange[]) =>

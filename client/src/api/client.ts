@@ -46,3 +46,33 @@ apiClient.interceptors.response.use(undefined, (error) => {
   }
   return Promise.reject(error);
 });
+
+/**
+ * "Who's making changes on this device" - several people share one sign-in, so stock
+ * changes carry the person's own name (remembered per browser) and the history credits
+ * them, not the shared account. URL-encoded so Hindi names travel safely in a header.
+ */
+const ACTOR_KEY = 'th.actor';
+
+export function getActorName(): string {
+  try {
+    return localStorage.getItem(ACTOR_KEY) || '';
+  } catch {
+    return '';
+  }
+}
+
+export function setActorName(name: string) {
+  const clean = name.replace(/\s+/g, ' ').trim().slice(0, 40);
+  try {
+    if (clean) localStorage.setItem(ACTOR_KEY, clean);
+    else localStorage.removeItem(ACTOR_KEY);
+  } catch {
+    // not remembered - still used for this visit
+  }
+  if (clean) apiClient.defaults.headers.common['X-Actor'] = encodeURIComponent(clean);
+  else delete apiClient.defaults.headers.common['X-Actor'];
+  return clean;
+}
+
+setActorName(getActorName());

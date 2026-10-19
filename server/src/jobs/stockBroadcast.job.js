@@ -9,6 +9,10 @@ const logger = require('../config/logger');
 function startStockBroadcastJob() {
   cron.schedule('* * * * *', () => {
     runScheduledBroadcast().catch((err) => logger.error(`Scheduled stock update failed: ${err.message}`));
+    // The daily shipment update - only for users who switched it on (off by default).
+    require('../services/shipmentBroadcast.service')
+      .runScheduledShipmentUpdates()
+      .catch((err) => logger.error(`Scheduled shipment update failed: ${err.message}`));
   });
   logger.info('Stock broadcast job scheduled (checks every minute)');
 }
