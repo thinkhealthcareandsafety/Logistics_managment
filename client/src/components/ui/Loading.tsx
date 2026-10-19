@@ -33,7 +33,7 @@ export function Spinner({ className, label }: { className?: string; label?: stri
 /** A grey placeholder block. Size and shape come from className (h-*, w-*, rounded-*). */
 export function Skeleton({ className, style }: { className?: string; style?: React.CSSProperties }) {
   return (
-    <div aria-hidden style={style} className={clsx('animate-pulse rounded-md bg-slate-200/70 motion-reduce:animate-none', className)} />
+    <div aria-hidden style={style} className={clsx('shimmer rounded-md', className)} />
   );
 }
 

@@ -4,6 +4,7 @@ import clsx from 'clsx';
 import { useLedgerApi } from '../../hooks/useStock';
 import { DownloadCsvButton } from '../DownloadCsvButton';
 import type { StockMovement } from '../../types/stock';
+import { oldNewText } from '../../utils/stock';
 
 const when = (d: string) => format(new Date(d), 'EEE, d MMM yyyy · h:mm a');
 
@@ -36,7 +37,7 @@ function Column({ dir }: { dir: 'in' | 'out' }) {
         </h3>
         <DownloadCsvButton
           name={`stock-${dir}${ledger.kind === 'manual' ? '-manual' : ''}`}
-          headers={['Date', 'Day', 'Time', 'Item', 'Quantity', 'What', dir === 'in' ? 'From' : 'To', 'By', 'Stock after', 'Note']}
+          headers={['Date', 'Day', 'Time', 'Item', 'Quantity', 'Old', 'New', 'What', dir === 'in' ? 'From' : 'To', 'By', 'Stock after', 'Note']}
           rows={movements.map((m) => {
             const s = sentence(m, dir);
             return [
@@ -45,6 +46,8 @@ function Column({ dir }: { dir: 'in' | 'out' }) {
               format(new Date(m.createdAt), 'HH:mm'),
               m.itemName,
               s.n,
+              m.oldChange == null ? '' : Math.abs(m.oldChange),
+              m.newChange == null ? '' : Math.abs(m.newChange),
               s.how,
               m.customer || '',
               m.userName || '',
@@ -57,7 +60,7 @@ function Column({ dir }: { dir: 'in' | 'out' }) {
       {isLoading ? (
         <div className="space-y-3 p-4" aria-busy="true">
           {[0, 1, 2].map((i) => (
-            <div key={i} className="h-9 animate-pulse rounded bg-slate-100" />
+            <div key={i} className="h-9 shimmer rounded bg-slate-100" />
           ))}
         </div>
       ) : movements.length === 0 ? (
@@ -72,6 +75,7 @@ function Column({ dir }: { dir: 'in' | 'out' }) {
                   <span className={clsx('font-semibold tabular-nums', dir === 'in' ? 'text-emerald-700' : 'text-red-700')}>{s.n}</span>{' '}
                   <span className="font-medium">{m.itemName}</span> <span className="text-slate-500">{s.how}</span>
                   {s.party && <span className="text-slate-700"> {s.party}</span>}
+                  {oldNewText(m) && <span className={clsx('font-medium', dir === 'in' ? 'text-emerald-700' : 'text-red-700')}> · {oldNewText(m)}</span>}
                   <span className="text-slate-400"> · now {m.quantityAfter}</span>
                 </p>
                 <p className="mt-0.5 text-[12px] text-slate-500">

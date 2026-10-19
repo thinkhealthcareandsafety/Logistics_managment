@@ -222,17 +222,17 @@ export function BoardSkeleton() {
   return (
     <section className="rounded-xl border border-slate-200 bg-white" aria-busy="true" aria-label="Loading the shipment board">
       <div className="space-y-2 border-b border-slate-200 px-4 py-3">
-        <div className="h-4 w-36 animate-pulse rounded bg-slate-200" />
-        <div className="h-3 w-56 animate-pulse rounded bg-slate-100" />
+        <div className="h-4 w-36 shimmer rounded bg-slate-200" />
+        <div className="h-3 w-56 shimmer rounded bg-slate-100" />
       </div>
       <div className="grid grid-cols-1 divide-y divide-slate-200 md:grid-cols-3 md:divide-x md:divide-y-0">
         {[0, 1, 2].map((c) => (
           <div key={c} className="space-y-3 p-4">
-            <div className="h-3.5 w-28 animate-pulse rounded bg-slate-200" />
+            <div className="h-3.5 w-28 shimmer rounded bg-slate-200" />
             {[0, 1, 2].map((r) => (
               <div key={r} className="space-y-1.5">
-                <div className="h-3.5 w-3/4 animate-pulse rounded bg-slate-100" />
-                <div className="h-3 w-1/2 animate-pulse rounded bg-slate-100" />
+                <div className="h-3.5 w-3/4 shimmer rounded bg-slate-100" />
+                <div className="h-3 w-1/2 shimmer rounded bg-slate-100" />
               </div>
             ))}
           </div>

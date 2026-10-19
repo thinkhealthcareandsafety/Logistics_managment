@@ -69,3 +69,12 @@ export function whatsappShareUrl(text: string): string {
   // reaches a group, since the Business API can't post into groups.
   return `https://wa.me/?text=${encodeURIComponent(text)}`;
 }
+
+/** "5 old + 8 new" - which stock a change touched, for lines split into old and new. */
+export function oldNewText(m: { oldChange?: number | null; newChange?: number | null }): string {
+  if (m.oldChange == null || m.newChange == null) return '';
+  const parts = [];
+  if (m.oldChange) parts.push(`${Math.abs(m.oldChange)} old`);
+  if (m.newChange) parts.push(`${Math.abs(m.newChange)} new`);
+  return parts.join(' + ');
+}

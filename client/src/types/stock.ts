@@ -77,6 +77,9 @@ export interface StockMovement {
   change: number;
   quantityAfter: number;
   reason: 'count' | 'dispatch' | 'shipment' | 'created' | 'zoho' | 'edited' | 'removed';
+  /** On lines split into old + new: how much of the change was old / new stock. */
+  oldChange?: number | null;
+  newChange?: number | null;
   note: string;
   customer: string;
   trackingNumber: string;

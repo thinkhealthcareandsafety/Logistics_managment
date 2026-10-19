@@ -31,6 +31,13 @@ const stockMovementSchema = new mongoose.Schema(
     shipmentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Shipment', default: null },
     trackingNumber: { type: String, default: '' },
 
+    /**
+     * For lines split into old + new: how much of `change` was old stock and how much
+     * new ("5 old + 8 new added", "3 old + 1 new out"). null on lines without the split.
+     */
+    oldChange: { type: Number, default: null },
+    newChange: { type: Number, default: null },
+
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
     userName: { type: String, default: '' },
   },
@@ -42,3 +49,14 @@ stockMovementSchema.index({ reason: 1, createdAt: -1 });
 
 module.exports = mongoose.model('StockMovement', stockMovementSchema);
 module.exports.MOVEMENT_REASONS = MOVEMENT_REASONS;
+
+/**
+ * The old / new parts of a change, from the line before and after it - the one rule
+ * every change uses. {} when the line keeps one number (no old/new split).
+ */
+module.exports.oldNewSplit = function oldNewSplit(before, after) {
+  if (before.oldQuantity == null || after.oldQuantity == null) return {};
+  const oldChange = after.oldQuantity - before.oldQuantity;
+  const newChange = after.quantity - after.oldQuantity - (before.quantity - before.oldQuantity);
+  return { oldChange, newChange };
+};

@@ -172,6 +172,8 @@ function stockHandlers({ Category, Item, Movement, Settings, ledger, manual = fa
       itemName: item.displayName,
       change: quantity,
       quantityAfter: quantity,
+      // A new line's stock: whatever was entered as old, the rest new.
+      ...(oldQuantity != null ? { oldChange: oldQuantity, newChange: quantity - oldQuantity } : {}),
       reason: 'created',
       userId: req.userId,
       userName: await whoDidIt(req),

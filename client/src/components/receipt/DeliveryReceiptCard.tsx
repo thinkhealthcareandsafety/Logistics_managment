@@ -66,7 +66,7 @@ function ReceiptImage({ shipmentId, n, alt, className }: { shipmentId: string; n
       if (revoke) URL.revokeObjectURL(revoke);
     };
   }, [shipmentId, n]);
-  if (!url) return <div className={clsx(className, 'animate-pulse bg-slate-100')} aria-label={`Loading ${alt}`} />;
+  if (!url) return <div className={clsx(className, 'shimmer bg-slate-100')} aria-label={`Loading ${alt}`} />;
   return (
     <a href={url} target="_blank" rel="noreferrer" title="Open full size">
       <img src={url} alt={alt} className={className} />
@@ -184,7 +184,7 @@ export function DeliveryReceiptCard({ shipment }: { shipment: Shipment }) {
             </p>
             <div className="flex flex-wrap gap-2">
               <Link to={`/shipments/${shipment._id}/slip`} target="_blank" className="btn-primary inline-flex h-8 items-center px-3 py-0 text-[13px]">
-                Print delivery slip (QR)
+                Print QR sticker
               </Link>
               <a
                 href={whatsappToCustomer(shipment.customerInfo?.phone, message)}

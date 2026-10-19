@@ -30,7 +30,7 @@ export function CourierLogo({ courier, size = 18 }: { courier?: Pick<Carrier, 'n
   // A grey placeholder holds the logo's spot until the image arrives, then fades out.
   return (
     <span
-      className={clsx('relative inline-block shrink-0 overflow-hidden rounded', !loaded && 'animate-pulse bg-slate-200/70')}
+      className={clsx('relative inline-block shrink-0 overflow-hidden rounded', !loaded && 'shimmer bg-slate-200/70')}
       style={{ width: size, height: size }}
     >
       <img

@@ -11,6 +11,7 @@ import { ErrorBoundary } from './ErrorBoundary';
 import { getInitials } from '../utils/avatar';
 
 import { RouteSkeleton } from './skeletons/PageSkeletons';
+import { TopProgress } from './ui/TopProgress';
 // Its own download, after the page - it never slows the first screen.
 const AssistantWidget = lazy(() => import('./assistant/AssistantWidget').then((m) => ({ default: m.AssistantWidget })));
 /**
@@ -121,7 +122,14 @@ export function Layout() {
       <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8">
         <ErrorBoundary key={pathname}>
           {/* A page opened for the first time downloads first - show its shape meanwhile. */}
-          <Suspense fallback={<RouteSkeleton />}>
+          <Suspense
+            fallback={
+              <>
+                <TopProgress force />
+                <RouteSkeleton />
+              </>
+            }
+          >
             <Outlet />
           </Suspense>
         </ErrorBoundary>

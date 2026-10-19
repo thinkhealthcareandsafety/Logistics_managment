@@ -36,6 +36,7 @@ import {
   itemExpiryState,
   listPrefix,
   stockHealth,
+  oldNewText,
 } from '../utils/stock';
 import type { ListStyle, StockCategory, StockCountChange, StockItem, StockMovement } from '../types/stock';
 import { Skeleton, SkeletonRegion, Spinner } from '../components/ui/Loading';
@@ -323,8 +324,8 @@ export function Stock() {
         </div>
       </header>
 
-      {/* Whose name this device's stock changes are saved under. */}
-      <ActorName />
+      {/* Whose name this device's changes are saved under - manual stock only (the main stock follows Zoho Books). */}
+      {manual && <ActorName />}
 
       {/* ───────── Summary ───────── */}
       <section
@@ -1180,7 +1181,10 @@ function RecentChanges() {
                 <p className="text-slate-800">
                   <span className="font-medium">{m.itemName}</span>{' '}
                   {m.reason === 'created' ? (
-                    <span className="text-slate-500">added with {m.quantityAfter}</span>
+                    <span className="text-slate-500">
+                      added with {m.quantityAfter}
+                      {oldNewText(m) && <span className="font-medium text-emerald-700"> ({oldNewText(m)})</span>}
+                    </span>
                   ) : m.reason === 'edited' || m.reason === 'removed' ? null : (
                     <>
                       <span className="tabular-nums text-slate-500">
@@ -1188,7 +1192,8 @@ function RecentChanges() {
                       </span>{' '}
                       <span className={clsx('font-semibold tabular-nums', m.change >= 0 ? 'text-emerald-600' : 'text-red-600')}>
                         ({m.change > 0 ? '+' : ''}
-                        {m.change})
+                        {m.change}
+                        {oldNewText(m) && <span className="font-medium">: {oldNewText(m)}</span>})
                       </span>
                     </>
                   )}

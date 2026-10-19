@@ -8,6 +8,7 @@ const logger = require('../config/logger');
 const env = require('../config/env');
 const { sendWhatsAppText, templateReady } = require('./whatsapp.service');
 const { isZohoActive } = require('./zohoSync.service');
+const { oldNewSplit } = require('../models/StockMovement');
 
 const TIME_ZONE = 'Asia/Kolkata';
 
@@ -275,6 +276,7 @@ function ledgerService({ Category, Item, Movement, Settings, manual = false }) {
         itemName: displayName(item),
         change: c.quantity - item.quantity,
         quantityAfter: c.quantity,
+        ...oldNewSplit(item, { quantity: c.quantity, oldQuantity: nextOld }),
         reason: 'count',
         note: [detail, String(note).trim()].filter(Boolean).join(' · ').slice(0, 300),
         userId,
@@ -306,6 +308,7 @@ function ledgerService({ Category, Item, Movement, Settings, manual = false }) {
       throw new ApiError(400, `Only ${item.quantity} ${displayName(item)} in stock - recount the line if that's wrong`);
     }
 
+    const before = { quantity: item.quantity, oldQuantity: item.oldQuantity };
     item.takeOut(quantity);
     await item.save();
     const movement = await Movement.create({
@@ -313,6 +316,7 @@ function ledgerService({ Category, Item, Movement, Settings, manual = false }) {
       itemName: displayName(item),
       change: -quantity,
       quantityAfter: item.quantity,
+      ...oldNewSplit(before, item),
       reason: 'dispatch',
       customer: String(customer).trim(),
       note: String(note).trim().slice(0, 300),
@@ -348,6 +352,7 @@ async function deductForShipment(shipment, userId) {
     if (item.zohoItemId && (await isZohoActive())) return null;
 
     const before = item.quantity;
+    const was = { quantity: item.quantity, oldQuantity: item.oldQuantity };
     const taken = item.takeOut(qty);
     await item.save();
 
@@ -356,6 +361,7 @@ async function deductForShipment(shipment, userId) {
       itemName: displayName(item),
       change: -taken,
       quantityAfter: item.quantity,
+      ...oldNewSplit(was, item),
       reason: 'shipment',
       note: taken < qty ? `Shipped ${qty} but only ${before} were in stock - recount this line` : '',
       customer: shipment.customerInfo?.name || '',

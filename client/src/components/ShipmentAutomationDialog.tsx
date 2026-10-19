@@ -96,8 +96,8 @@ export function ShipmentAutomationDialog({ onClose }: { onClose: () => void }) {
     >
       {!data ? (
         <div className="space-y-3" aria-busy="true">
-          <div className="h-10 animate-pulse rounded bg-slate-100" />
-          <div className="h-24 animate-pulse rounded bg-slate-100" />
+          <div className="h-10 shimmer rounded bg-slate-100" />
+          <div className="h-24 shimmer rounded bg-slate-100" />
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2">

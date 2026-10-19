@@ -30,7 +30,7 @@ export function ItemThumb({ item, onOpen }: { item: StockItem; onOpen: () => voi
       className={clsx(
         'relative h-10 w-10 shrink-0 overflow-hidden rounded-lg ring-1 ring-slate-200 transition',
         has ? 'cursor-pointer hover:ring-brand-400' : 'cursor-default',
-        src && !loaded && !broken && 'animate-pulse bg-slate-200/70',
+        src && !loaded && !broken && 'shimmer bg-slate-200/70',
         (!src || broken) && 'bg-slate-50'
       )}
     >

@@ -5,6 +5,7 @@ import { Layout } from './components/Layout';
 import { PageLoader } from './components/ui/Loading';
 import { Login } from './pages/Login';
 import { StockLedgerProvider } from './context/StockLedger';
+import { TopProgress } from './components/ui/TopProgress';
 
 // Each page is its own download, fetched the first time it's opened - the landing
 // page doesn't ship the dashboard, and staff don't download the marketing site.
@@ -43,7 +44,17 @@ export default function App() {
   return (
     // Public pages load full-screen; signed-in pages show their skeleton inside the
     // layout (see Layout), so the navigation never disappears between pages.
-    <Suspense fallback={<PageLoader />}>
+    <>
+    {/* The thin bar across the top during first loads and saves - every page. */}
+    <TopProgress />
+    <Suspense
+      fallback={
+        <>
+          <TopProgress force />
+          <PageLoader />
+        </>
+      }
+    >
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/login" element={<Login />} />
@@ -98,5 +109,6 @@ export default function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Suspense>
+    </>
   );
 }

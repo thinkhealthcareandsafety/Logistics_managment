@@ -466,12 +466,14 @@ async function syncOnce(conn, { reason = 'manual' } = {}) {
     const delta = target - item.quantity;
     if (delta !== 0) {
       const ref = takeRef(zid);
+      const was = { quantity: item.quantity, oldQuantity: item.oldQuantity };
       applyDelta(item, delta);
       movements.push({
         itemId: item._id,
         itemName: lineName(item),
         change: delta,
         quantityAfter: item.quantity,
+        ...StockMovement.oldNewSplit(was, item),
         reason: 'zoho',
         note: firstLink
           ? `Linked to Zoho Books “${z.name}” - quantity now follows Zoho`
