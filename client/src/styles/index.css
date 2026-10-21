@@ -197,7 +197,7 @@
 body:has([data-bottom-bar='open']) .assistant-fab {
   bottom: 5rem;
 }
-body:has([data-bottom-bar='open']) .assistant-panel {
+body:has([data-bottom-bar='open']) .assistant-panel:not(.is-max) {
   bottom: 8.5rem;
 }
 

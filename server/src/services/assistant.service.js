@@ -2,6 +2,8 @@ const mongoose = require('mongoose');
 const Shipment = require('../models/Shipment');
 const StockItem = require('../models/StockItem');
 const StockCategory = require('../models/StockCategory');
+const { toEnglish } = require('./assistant/language');
+const { stateOf, cityOf, placeIn, goesTo } = require('./assistant/places');
 
 /**
  * The in-app assistant: plain rules, no AI service, no API key, no cost. A question is
@@ -79,7 +81,7 @@ const vocabCache = new Map(); // userId -> { at, vocab }
 async function vocabulary(userId) {
   const hit = vocabCache.get(String(userId));
   if (hit && Date.now() - hit.at < VOCAB_MS) return hit.vocab;
-  const [couriers, customers, cities, states, items, categories] = await Promise.all([
+  const [couriers, customers, cities, routeCities, items, categories] = await Promise.all([
     // Aggregations don't convert ids like find() does - pass a real ObjectId.
     Shipment.aggregate([
       { $match: { createdBy: new mongoose.Types.ObjectId(String(userId)) } },
@@ -87,14 +89,15 @@ async function vocabulary(userId) {
     ]),
     Shipment.distinct('customerInfo.name', { createdBy: userId }),
     Shipment.distinct('deliveryAddress.city', { createdBy: userId }),
-    Shipment.distinct('deliveryAddress.state', { createdBy: userId }),
+    Shipment.distinct('carrierRoute.destinationCity', { createdBy: userId }),
     StockItem.find({ isArchived: false }).select('name size').lean(),
     StockCategory.find().select('name').lean(),
   ]);
   const vocab = {
     couriers: couriers.filter((c) => c._id).map((c) => ({ code: c._id, name: c.name || c._id })),
     customers: customers.filter(Boolean),
-    places: [...new Set([...cities, ...states].filter(Boolean).map((p) => p.trim()))],
+    // Cities shipped to (address or courier route) - states are known from places.js.
+    cities: [...new Set([...cities, ...routeCities].filter(Boolean).map((p) => p.trim()))],
     items: items.map((i) => ({ id: String(i._id), name: i.size ? `${i.name} ${i.size}` : i.name })),
     categories: categories.map((c) => ({ id: String(c._id), name: c.name })),
   };
@@ -182,80 +185,151 @@ function isLate(s, now = Date.now()) {
   return s.status !== 'pending' && sent && now - new Date(sent).getTime() > 7 * DAY;
 }
 
-const placeOf = (s) => [s.deliveryAddress?.city || s.carrierRoute?.destinationCity, s.deliveryAddress?.state || s.carrierRoute?.destinationState].filter(Boolean).join(', ');
+const placeOf = (s) => [cityOf(s), stateOf(s)].filter(Boolean).join(', ');
 const shipmentItem = (s) => ({
   label: `${s.customerInfo?.name || 'No customer'} - ${s.productDetails?.name || 'shipment'}`,
-  sub: [s.trackingNumber, s.carrierName, s.status === 'delivered' && s.deliveredAt ? `delivered ${fmtDate(s.deliveredAt)}` : STATUS_LABEL[s.status], s.currentLocation || placeOf(s)]
+  sub: [s.trackingNumber, s.carrierName, s.status === 'delivered' && s.deliveredAt ? `delivered ${fmtDate(s.deliveredAt)}` : STATUS_LABEL[s.status], placeOf(s) || s.currentLocation]
     .filter(Boolean)
     .join(' · '),
   href: `/shipments/${s._id}`,
 });
 
-async function shipmentsAnswer(q, ctx) {
-  const { userId, vocab } = ctx;
-  const range = parseRange(q);
+/** "by state", "statewise", "per courier"... -> what to split the answer by. */
+function groupByFrom(q) {
+  if (/\bby state\b|\bstates?\b.*\b(wise|breakdown|split)\b|\bin (each|every) state\b|\bwhich states?\b/.test(q)) return 'state';
+  if (/\bby city\b|\bcit(y|ies)\b.*\b(wise|breakdown|split)\b|\bwhich cit(y|ies)\b/.test(q)) return 'city';
+  if (/\bby courier\b|\bcourier (wise|breakdown)\b|\bwhich couriers?\b/.test(q)) return 'courier';
+  if (/\bby (client|customer)\b|\b(client|customer) (wise|breakdown)\b|\bwhich (clients|customers)\b/.test(q)) return 'customer';
+  return null;
+}
+
+/**
+ * The filters a question sets: status, date range, courier, client, place, and how to
+ * split the answer. Only what the question actually says - a follow-up merges these
+ * onto the previous question's filters.
+ */
+function shipmentFilters(q, vocab) {
+  const f = {};
   const status = statusFrom(q);
+  if (status) f.status = status;
+  const range = parseRange(q);
+  if (range) f.range = { from: range.from.toISOString(), to: range.to.toISOString(), label: range.label };
+  if (/\b(ship(ped)?|sent|dispatch(ed)?|book(ed)?|created|added)\b/.test(q)) f.sentVerb = true;
   const courier = findMention(q, vocab.couriers, (c) => c.name, { min: 0.75 });
+  if (courier) f.courier = { code: courier.value.code, name: courier.value.name };
   // Words that named the courier ("Shree Maruti") can't also name a client or place.
   const rest = courier ? withoutWords(q, courier.value.name) : q;
-  const place = findMention(rest, vocab.places, undefined, { min: 1 });
-  const customer = findMention(place ? withoutWords(rest, place.value) : rest, vocab.customers, undefined, { min: 0.7 });
-  const wantsList = /\b(show|list|which|what are|details|give|dikhao|names?)\b/.test(q);
+  const place = placeIn(rest, vocab.cities);
+  if (place) f.place = place;
+  const customer = findMention(place ? withoutWords(rest, place.name) : rest, vocab.customers, undefined, { min: 0.7 });
+  if (customer && !(place && norm(customer.value) === norm(place.name))) f.customer = customer.value;
+  const groupBy = groupByFrom(q);
+  if (groupBy) f.groupBy = groupBy;
+  return f;
+}
 
-  let all = await Shipment.find({ createdBy: userId, isArchived: false }).select(SHIPMENT_FIELDS).lean();
-  const filters = [];
-  if (courier) {
-    all = all.filter((s) => s.carrierCode === courier.value.code);
-    filters.push(`with ${courier.value.name}`);
-  }
-  if (customer) {
-    all = all.filter((s) => norm(s.customerInfo?.name) === norm(customer.value));
-    filters.push(`for ${customer.value}`);
-  }
-  if (place) {
-    const p = norm(place.value);
-    all = all.filter((s) => [s.deliveryAddress?.city, s.deliveryAddress?.state, s.carrierRoute?.destinationCity, s.carrierRoute?.destinationState].some((x) => norm(x) === p));
-    filters.push(`to ${place.value}`);
-  }
+/** Plain-words description of a set of filters: "in transit right now to Gujarat with Shree Maruti". */
+function describe(f) {
+  const parts = [];
+  if (f.courier) parts.push(`with ${f.courier.name}`);
+  if (f.customer) parts.push(`for ${f.customer}`);
+  if (f.place) parts.push(`going to ${f.place.name}`);
+  const range = f.range ? { label: f.range.label } : null;
+  if (f.status === 'delivered') parts.push(`delivered${range ? ` ${range.label}` : ''}`);
+  else if (f.status === 'late') parts.push('late or held up right now');
+  else if (f.status === 'active') parts.push('not delivered yet');
+  else if (f.status) parts.push(`${STATUS_LABEL[f.status]}${range && f.sentVerb ? ` (shipped ${range.label})` : ' right now'}`);
+  else if (range) parts.push(`shipped ${range.label}`);
+  return parts.join(' ');
+}
 
-  let list = all;
-  let what;
-  const sentVerb = /\b(ship(ped)?|sent|dispatch(ed)?|book(ed)?|created|added|bheja)\b/.test(q);
-  if (status === 'delivered') {
-    if (range) list = list.filter((s) => s.status === 'delivered' && inRange(s.deliveredAt, range));
-    else list = list.filter((s) => s.status === 'delivered');
-    what = `delivered${range ? ` ${range.label}` : ''}`;
-  } else if (status === 'late') {
-    list = list.filter((s) => isLate(s));
-    what = 'late or held up right now';
-  } else if (status === 'active') {
-    list = list.filter((s) => s.status !== 'delivered');
-    what = 'not delivered yet';
-  } else if (status) {
-    // A status is "right now" - "in transit today" means in transit at the moment.
-    list = list.filter((s) => s.status === status);
-    if (range && sentVerb) list = list.filter((s) => inRange(s.shippingDate || s.createdAt, range));
-    what = `${STATUS_LABEL[status]}${range && sentVerb ? ` (shipped ${range.label})` : ' right now'}`;
-  } else if (range) {
-    list = list.filter((s) => inRange(s.shippingDate || s.createdAt, range));
-    what = `shipped ${range.label}`;
-  } else {
-    what = 'in total';
-  }
+function applyFilters(all, f) {
+  const range = f.range ? { from: new Date(f.range.from), to: new Date(f.range.to) } : null;
+  return all.filter((s) => {
+    if (f.courier && s.carrierCode !== f.courier.code) return false;
+    if (f.customer && norm(s.customerInfo?.name) !== norm(f.customer)) return false;
+    if (f.place && !goesTo(s, f.place)) return false;
+    if (f.status === 'delivered') return s.status === 'delivered' && (!range || inRange(s.deliveredAt, range));
+    if (f.status === 'late') return isLate(s);
+    if (f.status === 'active') return s.status !== 'delivered';
+    if (f.status) {
+      if (s.status !== f.status) return false;
+      return !(range && f.sentVerb) || inRange(s.shippingDate || s.createdAt, range);
+    }
+    return !range || inRange(s.shippingDate || s.createdAt, range);
+  });
+}
 
+function breakdown(list, by) {
+  const keyOf = {
+    state: (s) => stateOf(s) || 'State not known',
+    city: (s) => cityOf(s) || 'City not known',
+    courier: (s) => s.carrierName || s.carrierCode,
+    customer: (s) => s.customerInfo?.name || 'No customer',
+  }[by];
+  const counts = {};
+  for (const s of list) {
+    const k = keyOf(s);
+    counts[k] = (counts[k] || 0) + 1;
+  }
+  return Object.entries(counts).sort((a, b) => b[1] - a[1]);
+}
+
+/**
+ * Shipments: count / list / breakdown for the filters asked. `base` is the previous
+ * question's filters when this one follows up on it ("how many of them are from
+ * Gujarat?" after "how many are in transit?").
+ */
+async function shipmentsAnswer(q, ctx, base = null) {
+  const { userId, vocab } = ctx;
+  const asked = shipmentFilters(q, vocab);
+  // A follow-up narrows or adjusts the last question; a split ("by state") is a one-off.
+  const filters = base ? { ...base, groupBy: undefined, ...asked } : asked;
+  // Splitting by state / city / courier / client covers all of them, not the one picked before.
+  const dropForSplit = { state: 'place', city: 'place', courier: 'courier', customer: 'customer' }[filters.groupBy];
+  if (dropForSplit && !asked[dropForSplit]) delete filters[dropForSplit];
+  const wantsList = /\b(show|list|which|what are|details|give|names?)\b/.test(q) && !filters.groupBy;
+
+  const all = await Shipment.find({ createdBy: userId, isArchived: false }).select(SHIPMENT_FIELDS).lean();
+  const list = applyFilters(all, filters);
   const n = list.length;
-  const lines = [`**${plural(n, 'shipment')}** ${filters.join(' ')} ${what}.`.replace(/\s+/g, ' ').replace(' .', '.')];
-  if (n > 1 && !courier) {
-    const byCourier = {};
-    for (const s of list) byCourier[s.carrierName || s.carrierCode] = (byCourier[s.carrierName || s.carrierCode] || 0) + 1;
-    const top = Object.entries(byCourier).sort((a, b) => b[1] - a[1]).slice(0, 4);
+  const lines = [];
+
+  if (base && Object.keys(asked).some((k) => k !== 'groupBy')) {
+    // Compared with the earlier set minus what this question replaces ("what about Delhi"
+    // after Maharashtra compares with all of them, not with the Maharashtra ones).
+    const earlier = { ...base, groupBy: undefined };
+    for (const k of Object.keys(asked)) delete earlier[k];
+    const before = applyFilters(all, earlier).length;
+    lines.push(
+      `Of the ${plural(before, 'shipment')} ${describe(earlier)}, **${n.toLocaleString('en-IN')}** ${n === 1 ? 'is' : 'are'} ${describe(asked) || 'a match'}.`.replace(/\s+/g, ' ')
+    );
+  } else {
+    lines.push(`**${plural(n, 'shipment')}** ${describe(filters) || 'in total'}.`.replace(/\s+/g, ' ').replace(' .', '.'));
+  }
+
+  if (filters.groupBy && n) {
+    const rows = breakdown(list, filters.groupBy);
+    lines.push(`By ${filters.groupBy}:`);
+    return {
+      answer: lines.join('\n'),
+      items: rows.slice(0, 20).map(([k, c]) => ({ label: k, sub: plural(c, 'shipment') })),
+      context: { kind: 'shipments', filters: { ...filters, groupBy: undefined } },
+    };
+  }
+  if (n > 1 && !filters.courier) {
+    const top = breakdown(list, 'courier').slice(0, 4);
     if (top.length > 1) lines.push(`By courier: ${top.map(([c, k]) => `${c} ${k}`).join(', ')}.`);
   }
-  if (status === 'late' && n) lines.push('Late = past its promised date, held up, or on the road for over a week.');
+  if (n > 1 && !filters.place) {
+    const states = breakdown(list, 'state').filter(([k]) => k !== 'State not known').slice(0, 4);
+    if (states.length > 1) lines.push(`Top states: ${states.map(([k, c]) => `${k} ${c}`).join(', ')}.`);
+  }
+  if (filters.status === 'late' && n) lines.push('Late = past its promised date, held up, or on the road for over a week.');
   const sorted = [...list].sort((a, b) => new Date(b.deliveredAt || b.shippingDate || b.createdAt) - new Date(a.deliveredAt || a.shippingDate || a.createdAt));
   const show = wantsList || n <= 8 ? sorted.slice(0, 15) : sorted.slice(0, 5);
   if (n > show.length && show.length) lines.push(`Latest ${show.length}:`);
-  return { answer: lines.join('\n'), items: show.map(shipmentItem) };
+  return { answer: lines.join('\n'), items: show.map(shipmentItem), context: { kind: 'shipments', filters } };
 }
 
 async function awbAnswer(awb, ctx) {
@@ -431,8 +505,8 @@ async function rankingAnswer(q, ctx) {
   const by = /\b(cit(y|ies)|destination|place|location|state)s?\b/.test(q) ? (/\bstates?\b/.test(q) ? 'state' : 'city') : /\b(product|item)s?\b/.test(q) ? 'product' : /\bcourier/.test(q) ? 'courier' : 'customer';
   const keyOf = {
     customer: (s) => s.customerInfo?.name,
-    city: (s) => s.deliveryAddress?.city || s.carrierRoute?.destinationCity,
-    state: (s) => s.deliveryAddress?.state || s.carrierRoute?.destinationState,
+    city: (s) => cityOf(s),
+    state: (s) => stateOf(s),
     product: (s) => s.productDetails?.name,
     courier: (s) => s.carrierName,
   }[by];
@@ -467,54 +541,74 @@ const SUGGESTIONS = [
   'How many shipments are in transit?',
   'Which shipments are late?',
   'Delivered this week',
+  'Shipments by state',
   'What is out of stock?',
   'Who is due to reorder?',
-  'Best courier for Karnataka',
-  'Freight this month',
-  'Receipts pending',
+  'Best courier',
+  'Aaj kitne deliver hue?',
 ];
 
-const HELP = `I answer from your live data - nothing is sent anywhere. Try:
+const HELP = `I answer from your live data - nothing is sent anywhere. Ask in English or Hinglish, and follow up on my last answer ("how many of them are from Gujarat?", "unme se Maharashtra ke?", "what about delivered?"). Try:
 • "How many shipments are in transit?" / "delivered today" / "shipped last week"
 • "Late shipments" · "shipments to Bengaluru" · "Shree Maruti shipments this month"
+• "Shipments by state" · "in transit by courier" · "delivered last month by city"
 • An AWB number for its status
 • "Stock of HS1 pads" · "out of stock" · "low stock" · "manual stock out of stock"
 • "Who is due to reorder?" · "overdue reorders"
 • "Best courier" · "cheapest courier" · "best courier for Karnataka"
 • "Freight this month" · "receipts pending" · "e-way bill missing"
-• "Top clients" · "top cities this year" · "average delivery time"`;
+• "Top clients this year" · "average delivery time"
+• Hinglish: "aaj kitne deliver hue", "raste mein kitne hain", "kaunsa courier sabse sasta", "HS1 pads kitne bache"`;
 
-async function answer(question, userId) {
+/** "of them", "those", "what about...", "and ..." - builds on the previous answer. */
+const FOLLOW_UP = /\b(of them|them|those|these|they|of these|of those|among them|out of them|what about|and|also|same)\b/;
+const SHIPMENT_WORDS = /\b(shipments?|orders?|parcels?|consignments?|deliver|delivered|transit|dispatch|ship|shipped|pending|late|delayed|exception|stuck|ofd|courier|sent|booked|on the way)\b/;
+const STOCK_WORDS = /\b(stock|inventory|in hand|available|left|out of stock|low stock|units of|quantity of)\b/;
+
+async function answer(question, userId, previous = null) {
   const raw = String(question || '').slice(0, 300);
-  const q = ` ${raw.toLowerCase().replace(/[’']/g, '').replace(/\s+/g, ' ')} `;
-  if (!raw.trim() || /\b(help|what can you|hello|hi|hey|namaste)\b/.test(q) && raw.trim().split(/\s+/).length <= 4) {
-    return { answer: HELP, suggestions: SUGGESTIONS };
+  const q = toEnglish(raw);
+  if (!raw.trim() || (/\b(help|what can you|hello|hi|hey|namaste|namaskar)\b/.test(q) && raw.trim().split(/\s+/).length <= 4)) {
+    return { answer: HELP, suggestions: SUGGESTIONS, context: previous };
   }
   const vocab = await vocabulary(userId);
   const ctx = { userId, vocab };
+  const lastShipments = previous?.kind === 'shipments' ? previous.filters : null;
 
   const awb = raw.match(/\b([A-Za-z]{0,3}\d{8,15})\b/);
   if (awb) return awbAnswer(awb[1], ctx);
-  if (/\b(e-?way|ewb)\b/.test(q)) return ewayAnswer(q, ctx);
-  if (/\b(receipts?|proof of delivery|pod|signed|signatures?|who received)\b/.test(q)) return receiptAnswer(q, ctx);
-  if (/\b(re-?order|next order|due to order|will order|repeat (order|client|customer)|predict)/.test(q)) return reorderAnswer(q, ctx);
-  if (/\b(freight|shipping cost|courier charges?|spent on|kharcha)\b/.test(q)) return freightAnswer(q, ctx);
-  if (/\b(best|recommend|which courier|cheapest|affordable|fastest|sasta)\b/.test(q) && /\b(courier|partner|ship with|send|use)\b/.test(q)) return courierAnswer(q, ctx);
-  if (/\b(average|avg|how long|transit time|delivery time|days to deliver)\b/.test(q)) return transitAnswer(q, ctx);
-  if (/\b(top|most|biggest|highest|best)\b/.test(q) && /\b(client|customer|cit(y|ies)|state|destination|place|product|item|courier)s?\b/.test(q)) return rankingAnswer(q, ctx);
-  if (/\b(stock|inventory|in hand|available|left|out of stock|low stock|units of|maal)\b/.test(q) && !/\bshipments?\b/.test(q)) return stockAnswer(q, ctx);
-  if (/\b(shipments?|orders?|parcels?|consignments?|deliver|transit|dispatch|ship|pending|late|delayed|exception|stuck|ofd|courier|sent|booked)\b/.test(q) || parseRange(q)) {
-    return shipmentsAnswer(q, ctx);
+  if (/\b(e-?way|ewb)\b/.test(q)) return receiptOr(ewayAnswer, q, ctx);
+  if (/\b(receipts?|proof of delivery|pod|signed|signatures?|who received)\b/.test(q)) return receiptOr(receiptAnswer, q, ctx);
+  if (/\b(re-?order|next order|due to order|will order|repeat (order|client|customer)|predict)/.test(q)) return receiptOr(reorderAnswer, q, ctx);
+  if (/\b(freight|shipping cost|courier charges?|spent on)\b/.test(q)) return receiptOr(freightAnswer, q, ctx);
+  if (/\b(best|recommend|which courier|cheapest|affordable|fastest)\b/.test(q) && /\b(courier|partner|ship with|send|use)\b/.test(q)) return receiptOr(courierAnswer, q, ctx);
+  if (/\b(average|avg|how long|transit time|delivery time|days to deliver)\b/.test(q)) return receiptOr(transitAnswer, q, ctx);
+  if (/\b(top|most|biggest|highest)\b/.test(q) && /\b(client|customer|cit(y|ies)|state|destination|place|product|item|courier)s?\b/.test(q) && !lastShipments) {
+    return receiptOr(rankingAnswer, q, ctx);
   }
+  if (STOCK_WORDS.test(q) && !SHIPMENT_WORDS.test(q)) return receiptOr(stockAnswer, q, ctx);
+
+  // Shipments - fresh, or building on the last shipments answer.
+  const asked = shipmentFilters(q, vocab);
+  const hasFilter = Object.keys(asked).length > 0;
+  const followUp = lastShipments && (FOLLOW_UP.test(q) || (!SHIPMENT_WORDS.test(q) && hasFilter));
+  if (followUp) return shipmentsAnswer(q, ctx, lastShipments);
+  if (SHIPMENT_WORDS.test(q) || hasFilter || /\bhow many\b/.test(q)) return shipmentsAnswer(q, ctx);
+
   // A bare item or client name: stock first, then shipments.
-  if (findMention(q, vocab.items, (i) => i.name, { min: 0.8 })) return stockAnswer(q, ctx);
-  if (findMention(q, vocab.customers, undefined, { min: 0.8 })) return shipmentsAnswer(q, ctx);
-  return { answer: `Sorry, I didn't catch that.\n${HELP}`, suggestions: SUGGESTIONS };
+  if (findMention(q, vocab.items, (i) => i.name, { min: 0.8 })) return receiptOr(stockAnswer, q, ctx);
+  return { answer: `Sorry, I didn't catch that.\n${HELP}`, suggestions: SUGGESTIONS, context: previous };
 }
 
-async function ask(question, userId) {
-  const result = await answer(question, userId);
+/** Other answers don't carry shipment filters forward - a later "of them" starts fresh. */
+async function receiptOr(handler, q, ctx) {
+  const result = await handler(q, ctx);
+  return { ...result, context: null };
+}
+
+async function ask(question, userId, previous = null) {
+  const result = await answer(question, userId, previous);
   return { suggestions: [], items: [], ...result, askedAt: new Date() };
 }
 
-module.exports = { ask, parseRange, findMention, statusFrom, itemsMentioned, withoutWords, SUGGESTIONS };
+module.exports = { ask, parseRange, findMention, statusFrom, itemsMentioned, withoutWords, shipmentFilters, toEnglish, SUGGESTIONS };
