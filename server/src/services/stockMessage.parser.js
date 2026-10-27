@@ -16,7 +16,8 @@
  */
 
 const DATE = /\b(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})\b/g;
-const UNITS = /\b(q|qty|pcs?|nos?|units?|packets?|pkts?|sets?|boxes|box)\b\.?/gi;
+// Unit words, not part of a name. ("SET", "Box" can be part of a product's name - kept.)
+const UNITS = /\b(q|qty|pcs?|nos?|units?|packets?|pkts?)\b\.?/gi;
 
 /** "28-11-2028" -> "2028-11-28"; null when it isn't a real date. */
 function isoDate(d, m, y) {
