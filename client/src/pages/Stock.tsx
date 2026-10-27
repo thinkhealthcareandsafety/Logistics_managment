@@ -7,6 +7,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { stockApi } from '../api/stock';
 import { useLedger } from '../context/StockLedger';
 import { ActorName } from '../components/stock/ActorName';
+import { PasteStockDialog } from '../components/stock/PasteStockDialog';
 import {
   useDeleteStockCategory,
   useRemoveStockItem,
@@ -121,6 +122,7 @@ export function Stock() {
   const [dialog, setDialog] = useState<
     | { kind: 'share'; justSaved?: boolean }
     | { kind: 'automation' }
+    | { kind: 'paste' }
     | { kind: 'item'; item?: StockItem; categoryId?: string }
     | { kind: 'stockOut'; item: StockItem }
     | { kind: 'category'; category: StockCategory }
@@ -306,6 +308,13 @@ export function Stock() {
             <button onClick={() => setDialog({ kind: 'automation' })} className="btn-secondary inline-flex items-center gap-2">
               <BoltIcon />
               Automate
+            </button>
+          )}
+          {/* Manual stock: the WhatsApp stock message in one go, instead of item by item. */}
+          {manual && (
+            <button onClick={() => setDialog({ kind: 'paste' })} className="btn-secondary inline-flex items-center gap-2">
+              <WhatsAppIcon />
+              Paste from WhatsApp
             </button>
           )}
           <button onClick={() => setDialog({ kind: 'item' })} className="btn-secondary inline-flex items-center gap-2">
@@ -527,6 +536,7 @@ export function Stock() {
           onClose={() => setDialog(null)}
         />
       )}
+      {manual && dialog?.kind === 'paste' && <PasteStockDialog onClose={() => setDialog(null)} />}
       {!manual && dialog?.kind === 'automation' && <StockAutomationDialog settings={settings} onClose={() => setDialog(null)} />}
       {dialog?.kind === 'item' && (
         <StockItemDialog
