@@ -10,7 +10,14 @@ const { manualLedger } = require('./stock.service');
  * mention are left alone. Preview first, then apply the very same plan.
  */
 
-const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+// Sizes match however they're written: "5*4", "5x4", "5 X 4".
+const norm = (s) =>
+  String(s || '')
+    .toLowerCase()
+    .replace(/(\d)\s*[x×*]\s*(?=\d)/g, '$1x')
+    .replace(/[^a-z0-9.]+/g, ' ')
+    .replace(/(^|\s)\.|\.(\s|$)/g, ' ')
+    .trim();
 const nameOf = (i) => (i.size ? `${i.name} ${i.size}` : i.name);
 
 async function plan(text) {

@@ -122,7 +122,8 @@ export function PasteStockDialog({ onClose }: { onClose: () => void }) {
             className="input font-mono text-[12px] leading-relaxed"
           />
           <p className="text-[12px] text-slate-500">
-            Each block is a category; each line is an item with its quantity - in brackets, after “:” or “-”. Expiry dates (28-11-2028), notes
+            Each block is a category; each line is an item with its quantity - in brackets, after “:” or “-”, with or without a unit (50Q,
+            295Pcs). Sizes like 5*4 stay in the name. Expiry dates (28-11-2028), notes
             like “(3 without pad)” and “(8 old + 40 new)” are picked up too. You’ll see everything before it’s saved.
           </p>
         </div>
@@ -152,7 +153,7 @@ export function PasteStockDialog({ onClose }: { onClose: () => void }) {
             <div className="rounded-lg bg-red-50 px-3 py-2 text-red-800">
               <p className="font-medium">Couldn’t read {preview.skipped.length} line{preview.skipped.length === 1 ? '' : 's'} - add these by hand if needed:</p>
               <ul className="mt-1 list-disc pl-5 text-[12px]">
-                {preview.skipped.slice(0, 10).map((l, i) => (
+                {preview.skipped.map((l, i) => (
                   <li key={i}>{l}</li>
                 ))}
               </ul>

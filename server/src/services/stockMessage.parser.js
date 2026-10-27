@@ -17,7 +17,17 @@
 
 const DATE = /\b(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})\b/g;
 // Unit words, not part of a name. ("SET", "Box" can be part of a product's name - kept.)
-const UNITS = /\b(q|qty|pcs?|nos?|units?|packets?|pkts?)\b\.?/gi;
+const UNIT_WORDS = 'q|qty|pcs?|pieces?|nos?|units?|packets?|pkts?';
+const LEADING_UNIT = new RegExp(`^\\s*(${UNIT_WORDS})\\b\\.?`, 'i');
+const TRAILING_UNIT = new RegExp(`\\s*\\b(${UNIT_WORDS})\\.?\\s*$`, 'i');
+// After a quantity, any of these is its unit: "50Q", "47 Q", "295Pcs", "2 Box", "3 sets".
+const QTY_UNIT = `(?:\\s*(?:${UNIT_WORDS}|packs?|box(?:es)?|sets?|pairs?|rolls?|bottles?|strips?|tubes?|kits?)\\.?)?`;
+const QTY_PATTERNS = [
+  new RegExp(`\\(\\s*(\\d{1,6})${QTY_UNIT}\\s*\\)`, 'i'), // "(22)", "(22 pcs)"
+  new RegExp(`[:\\-–=]\\s*\\(?\\s*(\\d{1,6})${QTY_UNIT}\\s*\\)?(?![\\w])`, 'i'), // ": 50", "-50Q", "- 0Q"
+  new RegExp(`\\s(\\d{1,6})${QTY_UNIT}\\s*$`, 'i'), // "... 44Q" at the end
+  /[:\-–=]\s*(nil|none)\s*$/i, // "- Nil" is 0
+];
 
 /** "28-11-2028" -> "2028-11-28"; null when it isn't a real date. */
 function isoDate(d, m, y) {
@@ -28,9 +38,12 @@ function isoDate(d, m, y) {
   return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
+// "*" between numbers is a size ("Crepe Bandage 5*4", "7.5*4"), not WhatsApp bold - kept.
 const clean = (s) =>
   String(s || '')
+    .replace(/(\d)\s*\*\s*(?=\d)/g, '$1\u0000')
     .replace(/[*_~]/g, '')
+    .replace(/\u0000/g, '*')
     .replace(/\u00a0/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
@@ -65,22 +78,29 @@ function parseItem(raw) {
     line = line.replace(plusSum[0], ` (${plusSum[3]}) `);
   }
 
-  // The quantity: in brackets, or after ":" / "-" / "–", or a number at the very end.
-  const qtyPatterns = [/\(\s*(\d{1,6})\s*\)/, /[:\-–=]\s*\(?\s*(\d{1,6})\s*\)?(?![\w])/, /\s(\d{1,6})\s*$/];
+  // The quantity: in brackets, or after ":" / "-" / "–", or a number at the very end -
+  // with or without a unit straight after it ("50Q", "295Pcs").
   let match = null;
-  for (const re of qtyPatterns) {
+  for (const re of QTY_PATTERNS) {
     match = line.match(re);
     if (match) break;
   }
   if (!match) return null;
-  const quantity = Number(match[1]);
+  const quantity = /^\d+$/.test(match[1]) ? Number(match[1]) : 0;
   const at = line.indexOf(match[0]);
   let name = line.slice(0, at);
   let rest = line.slice(at + match[0].length);
 
-  name = clean(name.replace(UNITS, ' ').replace(/[:\-–=(]+\s*$/, ''));
+  name = clean(
+    name
+      .replace(/[:\-–=(]+\s*$/, '')
+      .replace(TRAILING_UNIT, '')
+      .replace(/[:\-–=(]+\s*$/, '')
+      .replace(/\(\s+/g, '(')
+      .replace(/\s+\)/g, ')')
+  );
   // Anything left - "(3 without pad)", "Used for training" - is a note.
-  const note = clean(rest.replace(/[()]/g, ' ').replace(UNITS, ' ').replace(/^[-:,]+/, ''));
+  const note = clean(rest.replace(/[()]/g, ' ').replace(LEADING_UNIT, ' ').replace(/^[\s\-:,]+/, ''));
   if (!name || name.length > 120) return null;
   if (oldQuantity != null && oldQuantity > quantity) oldQuantity = quantity;
   return { name, quantity, oldQuantity, expiryDates, note: note.slice(0, 200) };
