@@ -23,6 +23,18 @@ function customerLinks(shipment) {
   };
 }
 
+/**
+ * The delivery-receipt link to put in the "Delivered" thank-you - only while that's
+ * switched on and nobody has confirmed the receipt yet. Rides in the same message, so
+ * it never adds a send.
+ */
+async function deliveredReceiptUrl(shipment) {
+  const StockSettings = require('../models/StockSettings');
+  const settings = await StockSettings.findOne({ key: 'default' }).select('receiptInDeliveredMessage').lean();
+  if (!settings?.receiptInDeliveredMessage || shipment.receipt?.confirmedAt) return null;
+  return require('./receipt.service').receiptLink(shipment);
+}
+
 /** Which ways of reaching a customer are actually connected on this server. */
 function deliveryChannels() {
   return { email: isEmailConfigured(), whatsapp: isWhatsAppConfigured() };
@@ -49,9 +61,10 @@ async function notifyCustomerDelivered(shipment) {
   }
 
   const { trackingUrl, feedbackUrl } = customerLinks(shipment);
+  const receiptUrl = await deliveredReceiptUrl(shipment);
   const results = await Promise.allSettled([
-    email ? sendDeliveryFeedbackEmail({ to: email, shipment, trackingUrl, feedbackUrl }) : null,
-    phone ? sendWhatsAppDeliveryMessage({ to: phone, shipment, trackingUrl, feedbackUrl }) : null,
+    email ? sendDeliveryFeedbackEmail({ to: email, shipment, trackingUrl, feedbackUrl, receiptUrl }) : null,
+    phone ? sendWhatsAppDeliveryMessage({ to: phone, shipment, trackingUrl, feedbackUrl, receiptUrl }) : null,
   ]);
 
   // Only stamp the shipment if something actually went out. If email and WhatsApp are

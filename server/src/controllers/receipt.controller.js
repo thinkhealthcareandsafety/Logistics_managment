@@ -2,6 +2,7 @@ const multer = require('multer');
 const Shipment = require('../models/Shipment');
 const DeliveryReceipt = require('../models/DeliveryReceipt');
 const User = require('../models/User');
+const StockSettings = require('../models/StockSettings');
 const ApiError = require('../utils/ApiError');
 const asyncHandler = require('../utils/asyncHandler');
 const { receiptLink, parseReceipt, saveReceipt, resetReceipt, receiptView, MAX_PHOTOS } = require('../services/receipt.service');
@@ -97,4 +98,28 @@ const deleteReceipt = asyncHandler(async (req, res) => {
   res.status(204).send();
 });
 
-module.exports = { receiptUpload, getPublicReceipt, submitPublicReceipt, getReceipt, getReceiptImage, recordReceipt, deleteReceipt };
+/** Whether the "Delivered" thank-you carries the receipt link, and whether WhatsApp is paused. */
+async function receiptSettingsView() {
+  const settings = await StockSettings.get();
+  return { inDeliveredMessage: settings.receiptInDeliveredMessage === true, whatsappPaused: settings.whatsappPaused !== false };
+}
+
+const getReceiptSettings = asyncHandler(async (req, res) => res.json(await receiptSettingsView()));
+
+const updateReceiptSettings = asyncHandler(async (req, res) => {
+  if (typeof req.body.inDeliveredMessage !== 'boolean') throw new ApiError(400, 'inDeliveredMessage must be true or false');
+  await StockSettings.updateOne({ key: 'default' }, { $set: { receiptInDeliveredMessage: req.body.inDeliveredMessage } }, { upsert: true });
+  res.json(await receiptSettingsView());
+});
+
+module.exports = {
+  receiptUpload,
+  getPublicReceipt,
+  submitPublicReceipt,
+  getReceipt,
+  getReceiptImage,
+  recordReceipt,
+  deleteReceipt,
+  getReceiptSettings,
+  updateReceiptSettings,
+};

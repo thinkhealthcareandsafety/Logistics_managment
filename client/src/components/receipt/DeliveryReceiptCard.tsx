@@ -75,6 +75,52 @@ function ReceiptImage({ shipmentId, n, alt, className }: { shipmentId: string; n
 }
 
 /**
+ * One switch for every shipment: whether the automatic "Delivered" thank-you also
+ * carries the receipt link. Same single message - never an extra one. Off by default.
+ */
+function InDeliveredMessageSwitch() {
+  const queryClient = useQueryClient();
+  const { data } = useQuery({
+    queryKey: ['receipt-settings'],
+    queryFn: () => apiClient.get<{ inDeliveredMessage: boolean; whatsappPaused: boolean }>('/shipments/receipt-settings').then((r) => r.data),
+  });
+  const toggle = useMutation({
+    mutationFn: (on: boolean) => apiClient.patch('/shipments/receipt-settings', { inDeliveredMessage: on }).then((r) => r.data),
+    onSuccess: (d) => {
+      queryClient.setQueryData(['receipt-settings'], d);
+      toast.success(d.inDeliveredMessage ? 'Receipt link will ride in the Delivered message' : 'Receipt link removed from the Delivered message');
+    },
+    onError: (err) => toast.error(errorMessage(err, 'Could not change the setting')),
+  });
+  if (!data) return null;
+  const on = data.inDeliveredMessage;
+  return (
+    <div className="flex items-start gap-3 rounded-lg border border-slate-200 bg-slate-50/70 px-3 py-2.5">
+      <button
+        type="button"
+        role="switch"
+        aria-checked={on}
+        aria-label="Add the receipt link to the Delivered message"
+        disabled={toggle.isPending}
+        onClick={() => toggle.mutate(!on)}
+        className={clsx('relative mt-0.5 h-5 w-9 shrink-0 rounded-full transition disabled:opacity-60', on ? 'bg-brand-600' : 'bg-slate-300')}
+      >
+        <span className={clsx('absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all', on ? 'left-[18px]' : 'left-0.5')} />
+      </button>
+      <div className="text-[12px] leading-relaxed">
+        <p className="font-medium text-slate-800">Add this link to the automatic “Delivered” message</p>
+        <p className="text-slate-500">
+          {on
+            ? 'On - the thank-you + feedback message also asks the client to confirm receipt. Still one message, no extra cost.'
+            : 'Off - clients get nothing new. Turn on to ask for the receipt in the same thank-you + feedback message.'}
+          {data.whatsappPaused && ' WhatsApp is paused, so nothing goes out on WhatsApp either way.'}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/**
  * Proof of delivery on the shipment page: who received it, their photo and signature -
  * or, until then, the ways to get it: the delivery slip with its QR (in the box), the
  * link to send from your own WhatsApp, or recording it here from what the client sent.
@@ -215,6 +261,7 @@ export function DeliveryReceiptCard({ shipment }: { shipment: Shipment }) {
               Client busy or offline? There’s no deadline - they can do it later, or send you a photo and signature any way they like and you record it
               here.
             </p>
+            <InDeliveredMessageSwitch />
           </div>
         )}
       </div>

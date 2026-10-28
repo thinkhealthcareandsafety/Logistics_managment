@@ -68,7 +68,7 @@ function buildStatusEmail({ shipment, checkpoint, trackingUrl }) {
  * The customer-facing delivery message: thanks, a feedback link, and the tracking
  * link so they can still see the full journey after the fact.
  */
-function buildDeliveryFeedbackEmail({ shipment, trackingUrl, feedbackUrl }) {
+function buildDeliveryFeedbackEmail({ shipment, trackingUrl, feedbackUrl, receiptUrl = null }) {
   const name = shipment.customerInfo?.name;
   const product = shipment.productDetails?.name;
   const subject = `Delivered: ${shipment.trackingNumber} — how did we do?`;
@@ -83,6 +83,14 @@ function buildDeliveryFeedbackEmail({ shipment, trackingUrl, feedbackUrl }) {
           <tr><td style="padding:6px 0; color:#6b7280;">Tracking number</td><td style="font-family:monospace;">${esc(shipment.trackingNumber)}</td></tr>
           ${product ? `<tr><td style="padding:6px 0; color:#6b7280;">Item</td><td>${esc(product)}</td></tr>` : ''}
         </table>
+        ${
+          receiptUrl
+            ? `<p style="font-size:15px; color:#111827; margin:20px 0 12px;">
+          Please confirm you received it - who collected it, a photo and a signature. Anyone at your office can do it.
+        </p>
+        <p style="margin:0 0 8px;">${button(receiptUrl, 'Confirm delivery received', '#0f4c5c')}</p>`
+            : ''
+        }
         <p style="font-size:15px; color:#111827; margin:20px 0 12px;">
           Please take a moment to tell us how it went — it takes under a minute.
         </p>
@@ -112,8 +120,8 @@ function sendStatusChangeEmail({ to, shipment, checkpoint, trackingUrl }) {
   return send({ to, ...buildStatusEmail({ shipment, checkpoint, trackingUrl }) });
 }
 
-function sendDeliveryFeedbackEmail({ to, shipment, trackingUrl, feedbackUrl }) {
-  return send({ to, ...buildDeliveryFeedbackEmail({ shipment, trackingUrl, feedbackUrl }) });
+function sendDeliveryFeedbackEmail({ to, shipment, trackingUrl, feedbackUrl, receiptUrl }) {
+  return send({ to, ...buildDeliveryFeedbackEmail({ shipment, trackingUrl, feedbackUrl, receiptUrl }) });
 }
 
 function isEmailConfigured() {

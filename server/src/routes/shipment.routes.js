@@ -1,7 +1,15 @@
 const express = require('express');
 const { costlyLimiter } = require('../middleware/rateLimiter');
 const rateLimit = require('express-rate-limit');
-const { receiptUpload, getReceipt, getReceiptImage, recordReceipt, deleteReceipt } = require('../controllers/receipt.controller');
+const {
+  receiptUpload,
+  getReceipt,
+  getReceiptImage,
+  recordReceipt,
+  deleteReceipt,
+  getReceiptSettings,
+  updateReceiptSettings,
+} = require('../controllers/receipt.controller');
 
 // Invoices come from Zoho Books (free, but Zoho caps calls a day): plenty for people,
 // not enough for a script to pull every invoice out.
@@ -55,6 +63,8 @@ router.post('/extract', costlyLimiter, labelUpload.single('file'), extractFromLa
 router.post('/refresh-all', costlyLimiter, refreshAllShipments);
 router.patch('/bulk', bulkUpdateShipments);
 
+router.get('/receipt-settings', getReceiptSettings);
+router.patch('/receipt-settings', updateReceiptSettings);
 router.get('/:id/receipt', getReceipt);
 router.get('/:id/receipt/image', getReceiptImage);
 router.post('/:id/receipt', costlyLimiter, receiptUpload, recordReceipt);

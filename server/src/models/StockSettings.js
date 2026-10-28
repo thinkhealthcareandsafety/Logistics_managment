@@ -33,6 +33,12 @@ const stockSettingsSchema = new mongoose.Schema(
      * on with PATCH /api/stock/settings { whatsappPaused: false }. Paused by default.
      */
     whatsappPaused: { type: Boolean, default: true },
+    /**
+     * Adds the delivery-receipt link to the "Delivered" thank-you (WhatsApp + email) -
+     * the same one message, no extra one. Off until switched on from a shipment's
+     * Delivery receipt card.
+     */
+    receiptInDeliveredMessage: { type: Boolean, default: false },
 
     /** Set once every existing line has been switched to old + new tracking. */
     oldNewDefaultAt: { type: Date, default: null },

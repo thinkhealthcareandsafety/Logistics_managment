@@ -52,7 +52,7 @@ function buildStatusText({ shipment, checkpoint, trackingUrl }) {
   return lines.join('\n');
 }
 
-function buildDeliveryText({ shipment, trackingUrl, feedbackUrl }) {
+function buildDeliveryText({ shipment, trackingUrl, feedbackUrl, receiptUrl }) {
   const name = shipment.customerInfo?.name;
   return [
     `*ThinkHealth Logistics*`,
@@ -60,6 +60,9 @@ function buildDeliveryText({ shipment, trackingUrl, feedbackUrl }) {
     '',
     `*Thank you for choosing ThinkHealth.* Your order ${shipment.trackingNumber} has been delivered.`,
     '',
+    ...(receiptUrl
+      ? ['Please confirm you received it - who collected it, a photo and a signature (anyone at your office can do it):', receiptUrl, '']
+      : []),
     'Please tell us how we did — it takes under a minute:',
     feedbackUrl,
     '',
@@ -109,6 +112,9 @@ const KNOWN_TEMPLATES = {
     { name: 'neworderupdate0001', fields: ['name', 'awb'] },
     { name: 'orderupdate1', fields: ['name', 'awb'] },
   ],
+  // The thank-you with the receipt link too. Until Meta approves it, the plain
+  // `delivery` template goes out (without the receipt link) - never a second message.
+  deliveryReceipt: [{ name: 'delivery_feedback_receipt', fields: ['name', 'awb', 'receiptUrl', 'feedbackUrl'] }],
   stock: [{ name: 'stock_update', fields: ['date', 'summary', 'link'] }],
   booked: [
     { name: 'shipment_utility', fields: ['name', 'date', 'shipmentId', 'awb', 'courier', 'link'] },
@@ -146,7 +152,11 @@ async function anantyaSend({ to, text, template, context }) {
   let tpl = null;
   if (template) {
     try {
-      tpl = await anantyaTemplate(template.kind);
+      // `kinds` lists fallbacks, best first; the first approved one is used.
+      for (const kind of template.kinds || [template.kind]) {
+        tpl = await anantyaTemplate(kind);
+        if (tpl) break;
+      }
     } catch (err) {
       logger.warn(`${context}: couldn't read Anantya templates (${err.response?.status || err.message}) - sending as text`);
     }
@@ -234,12 +244,16 @@ function sendWhatsAppStatusMessage({ to, shipment, checkpoint, trackingUrl }) {
 }
 
 /** Delivery thank-you: customer name, AWB and feedback link. */
-function sendWhatsAppDeliveryMessage({ to, shipment, trackingUrl, feedbackUrl }) {
+function sendWhatsAppDeliveryMessage({ to, shipment, trackingUrl, feedbackUrl, receiptUrl = null }) {
   const name = shipment.customerInfo?.name || 'there';
   return sendWhatsApp({
     to,
-    text: buildDeliveryText({ shipment, trackingUrl, feedbackUrl }),
-    template: { kind: 'delivery', values: { name, awb: shipment.trackingNumber, feedbackUrl, link: trackingUrl }, contactName: shipment.customerInfo?.name },
+    text: buildDeliveryText({ shipment, trackingUrl, feedbackUrl, receiptUrl }),
+    template: {
+      kinds: receiptUrl ? ['deliveryReceipt', 'delivery'] : ['delivery'],
+      values: { name, awb: shipment.trackingNumber, feedbackUrl, receiptUrl, link: trackingUrl },
+      contactName: shipment.customerInfo?.name,
+    },
     context: 'sendWhatsAppDeliveryMessage',
   });
 }
