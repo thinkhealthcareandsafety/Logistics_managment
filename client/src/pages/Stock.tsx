@@ -422,11 +422,29 @@ export function Stock() {
           </label>
         </div>
 
-        {/* Jump list - thirteen categories is too long to scroll blind. */}
-        {shownCategories.length > 3 && (
-          <nav aria-label="Jump to category" className="-mx-4 overflow-x-auto px-4 [scrollbar-width:none] sm:mx-0 sm:px-0 [&::-webkit-scrollbar]:hidden">
-            <div className="flex gap-1.5">
-              {shownCategories.map((c) => (
+        {/* Jump list - thirteen categories is too long to scroll blind; the register and
+            recent changes sit below all of them, so they get a shortcut first. */}
+        <nav aria-label="Jump to section" className="-mx-4 overflow-x-auto px-4 [scrollbar-width:none] sm:mx-0 sm:px-0 [&::-webkit-scrollbar]:hidden">
+          <div className="flex gap-1.5">
+            {[
+              { id: 'stock-register', label: 'Stock register' },
+              { id: 'stock-recent', label: 'Recent changes' },
+            ].map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => document.getElementById(s.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-brand-50 px-2.5 py-1 text-[12px] font-medium text-brand-800 ring-1 ring-inset ring-brand-200 transition hover:bg-brand-100"
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden>
+                  <path d="M12 5v14M6 13l6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                {s.label}
+              </button>
+            ))}
+            {shownCategories.length > 3 && <span aria-hidden className="mx-0.5 w-px shrink-0 self-stretch bg-slate-200" />}
+            {shownCategories.length > 3 &&
+              shownCategories.map((c) => (
                 <button
                   key={c._id}
                   type="button"
@@ -438,9 +456,8 @@ export function Stock() {
                   {c.name}
                 </button>
               ))}
-            </div>
-          </nav>
-        )}
+          </div>
+        </nav>
       </div>
 
       {/* ───────── Stock sheet ───────── */}
@@ -492,9 +509,13 @@ export function Stock() {
         </div>
       )}
 
-      <StockRegister />
+      <div id="stock-register" className="scroll-mt-20">
+        <StockRegister />
+      </div>
 
-      <RecentChanges />
+      <div id="stock-recent" className="scroll-mt-20">
+        <RecentChanges />
+      </div>
 
       {/* ───────── Save bar ───────── */}
       <div
