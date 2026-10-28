@@ -21,8 +21,11 @@ const newToken = () => crypto.randomBytes(18).toString('base64url');
 /** The receipt link for a shipment, creating its secret token the first time. */
 async function receiptLink(shipment) {
   if (!shipment.receiptToken) {
-    shipment.receiptToken = newToken();
-    await Shipment.updateOne({ _id: shipment._id }, { $set: { receiptToken: shipment.receiptToken } });
+    // Only if there's still none - two pages asking at once must not end up with two
+    // different links, one of which no longer works.
+    await Shipment.updateOne({ _id: shipment._id, receiptToken: null }, { $set: { receiptToken: newToken() } });
+    const saved = await Shipment.findById(shipment._id).select('receiptToken').lean();
+    shipment.receiptToken = saved.receiptToken;
   }
   return `${env.clientUrl}/receive/${shipment.receiptToken}`;
 }

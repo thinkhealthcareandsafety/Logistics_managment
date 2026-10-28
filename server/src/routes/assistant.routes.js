@@ -1,5 +1,6 @@
 const express = require('express');
 const rateLimit = require('express-rate-limit');
+const { clientKey } = require('../middleware/rateLimiter');
 const { requireAuth } = require('../middleware/auth.middleware');
 const asyncHandler = require('../utils/asyncHandler');
 const ApiError = require('../utils/ApiError');
@@ -10,7 +11,7 @@ const { ask, SUGGESTIONS } = require('../services/assistant.service');
 const router = express.Router();
 router.use(requireAuth);
 
-const askLimiter = rateLimit({ windowMs: 60 * 1000, limit: 30, standardHeaders: true, legacyHeaders: false, message: { message: 'Too many questions at once - wait a moment.' } });
+const askLimiter = rateLimit({ keyGenerator: clientKey, windowMs: 60 * 1000, limit: 30, standardHeaders: true, legacyHeaders: false, message: { message: 'Too many questions at once - wait a moment.' } });
 const MAX_MESSAGES = 200;
 
 function deviceOf(req) {

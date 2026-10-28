@@ -66,11 +66,17 @@ async function toFormData(s: Queued) {
  */
 export function ReceiveDelivery() {
   const { token = '' } = useParams<{ token: string }>();
-  const { data, isLoading, isError } = useQuery({
+  const { data, isLoading, error } = useQuery({
     queryKey: ['public-receipt', token],
     queryFn: () => apiClient.get<PublicReceipt>(`/public/receipts/${token}`).then((r) => r.data),
-    retry: 1,
+    // A wrong link stays wrong; anything else (busy, slow network) is worth retrying.
+    retry: (n, err) => (err as { response?: { status?: number } })?.response?.status !== 404 && n < 3,
+    retryDelay: (n) => 1500 * (n + 1),
+    // Loaded once is enough - a failed background re-check must never replace the form.
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
   });
+  const errorStatus = (error as { response?: { status?: number } } | null)?.response?.status;
   const [queued, setQueued] = useState<Queued | null>(() => load<Queued>(queueKey(token)));
   const [done, setDone] = useState<PublicReceipt['confirmed']>(null);
   const [sending, setSending] = useState(false);
@@ -187,12 +193,24 @@ export function ReceiveDelivery() {
             <p className="mt-1 text-[13px] text-amber-800">इंटरनेट आते ही यह अपने-आप भेज दिया जाएगा।</p>
             <p className="mt-3 text-[12px] text-amber-700">{sending ? 'Sending…' : 'Waiting for internet…'}</p>
           </section>
-        ) : isError || !data ? (
+        ) : !data ? (
           <section className="rounded-xl border border-slate-200 bg-white p-5 text-center">
-            <h1 className="text-[16px] font-semibold text-slate-900">This receipt link isn’t working</h1>
-            <p className="mt-1 text-[14px] text-slate-600">
-              Check the internet and open it again. If it still fails, the link may have been replaced - ask ThinkHealth for the new one.
-            </p>
+            {errorStatus === 404 ? (
+              <>
+                <h1 className="text-[16px] font-semibold text-slate-900">This receipt link has been replaced</h1>
+                <p className="mt-1 text-[14px] text-slate-600">Please ask ThinkHealth for the new link.</p>
+              </>
+            ) : (
+              <>
+                <h1 className="text-[16px] font-semibold text-slate-900">Couldn’t open the receipt just now</h1>
+                <p className="mt-1 text-[14px] text-slate-600">
+                  {errorStatus === 429 ? 'Too many tries in a short time - wait a few minutes,' : 'Check the internet,'} then try again.
+                </p>
+                <button type="button" onClick={() => window.location.reload()} className="btn-primary mt-4 h-9 px-4 py-0 text-[13px]">
+                  Try again
+                </button>
+              </>
+            )}
           </section>
         ) : (
           <>

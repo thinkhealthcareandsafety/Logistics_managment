@@ -1,5 +1,5 @@
 const express = require('express');
-const { costlyLimiter } = require('../middleware/rateLimiter');
+const { costlyLimiter, clientKey } = require('../middleware/rateLimiter');
 const rateLimit = require('express-rate-limit');
 const {
   receiptUpload,
@@ -15,6 +15,7 @@ const {
 // Invoices come from Zoho Books (free, but Zoho caps calls a day): plenty for people,
 // not enough for a script to pull every invoice out.
 const invoiceLimiter = rateLimit({
+  keyGenerator: clientKey,
   windowMs: 60 * 60 * 1000,
   limit: 60,
   standardHeaders: true,
