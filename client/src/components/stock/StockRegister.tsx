@@ -1,6 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
-import { format } from 'date-fns';
+import { format, startOfDay, subDays } from 'date-fns';
 import clsx from 'clsx';
+import toast from 'react-hot-toast';
+import { Menu, MenuDivider, MenuItem } from '../Menu';
+import { WhatsAppIcon } from './ShareStockDialog';
 import { useLedgerApi } from '../../hooks/useStock';
 import { DownloadCsvButton } from '../DownloadCsvButton';
 import type { StockMovement } from '../../types/stock';
@@ -19,6 +22,86 @@ function sentence(m: StockMovement, dir: 'in' | 'out') {
   return { n, how, party: m.customer ? `to ${m.customer}` : '' };
 }
 
+type Period = 'today' | 'week' | 'all';
+const PERIOD_LABEL: Record<Period, string> = { today: 'today', week: 'last 7 days', all: 'all listed' };
+
+/**
+ * The column as a WhatsApp message - grouped by day, numbered, *bold* headings - for
+ * pasting into a group by hand. Nothing is sent from the app.
+ */
+function whatsappText(movements: StockMovement[], dir: 'in' | 'out', period: Period, manual: boolean) {
+  const since = period === 'today' ? startOfDay(new Date()) : period === 'week' ? subDays(startOfDay(new Date()), 6) : null;
+  const list = movements.filter((m) => !since || new Date(m.createdAt) >= since);
+  const title = `*${dir === 'in' ? 'STOCK IN' : 'STOCK OUT'}*${manual ? ' (manual stock)' : ''} - ${PERIOD_LABEL[period]}`;
+  if (!list.length) return { text: '', count: 0 };
+
+  const lines = [title];
+  let day = '';
+  let n = 0;
+  // Oldest first reads like a diary.
+  for (const m of [...list].reverse()) {
+    const d = format(new Date(m.createdAt), 'EEE, d MMM yyyy');
+    if (d !== day) {
+      day = d;
+      n = 0;
+      lines.push('', `*${d}*`);
+    }
+    const s = sentence(m, dir);
+    const split = oldNewText(m);
+    const detail = [s.party, split && `(${split})`, `now ${m.quantityAfter}`, m.userName && `by ${m.userName}`].filter(Boolean).join(' · ');
+    n += 1;
+    lines.push(`${n}. ${m.itemName} - ${s.n}${detail ? ` · ${detail}` : ''}`);
+    if (m.note) lines.push(`    _${m.note}_`);
+  }
+  const units = list.reduce((sum, m) => sum + Math.abs(m.change), 0);
+  lines.push('', `Total: ${list.length} entr${list.length === 1 ? 'y' : 'ies'}, ${units} unit${units === 1 ? '' : 's'} ${dir === 'in' ? 'in' : 'out'}`);
+  return { text: lines.join('\n'), count: list.length };
+}
+
+function WhatsAppCopy({ movements, dir, manual }: { movements: StockMovement[]; dir: 'in' | 'out'; manual: boolean }) {
+  const build = (period: Period) => {
+    const r = whatsappText(movements, dir, period, manual);
+    if (!r.count) toast(`Nothing ${dir === 'in' ? 'came in' : 'went out'} ${PERIOD_LABEL[period] === 'all listed' ? 'yet' : PERIOD_LABEL[period]}`);
+    return r.text;
+  };
+  const copy = (period: Period) => {
+    const text = build(period);
+    if (!text) return;
+    navigator.clipboard.writeText(text).then(
+      () => toast.success('Copied - paste it in WhatsApp'),
+      () => toast.error('Could not copy')
+    );
+  };
+  const open = (period: Period) => {
+    const text = build(period);
+    if (text) window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
+  };
+  return (
+    <Menu
+      label={`Copy ${dir === 'in' ? 'stock in' : 'stock out'} for WhatsApp`}
+      triggerClassName="inline-flex h-8 items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 text-[13px] font-medium text-emerald-800 transition hover:bg-emerald-100"
+      trigger={
+        <>
+          <WhatsAppIcon size={14} />
+          WhatsApp
+        </>
+      }
+    >
+      {(['today', 'week', 'all'] as const).map((p) => (
+        <MenuItem key={`c-${p}`} onSelect={() => copy(p)}>
+          Copy {PERIOD_LABEL[p]}
+        </MenuItem>
+      ))}
+      <MenuDivider />
+      {(['today', 'week'] as const).map((p) => (
+        <MenuItem key={`o-${p}`} onSelect={() => open(p)} icon={<WhatsAppIcon size={14} />}>
+          Open in WhatsApp · {PERIOD_LABEL[p]}
+        </MenuItem>
+      ))}
+    </Menu>
+  );
+}
+
 function Column({ dir }: { dir: 'in' | 'out' }) {
   const { ledger, api } = useLedgerApi();
   const { data: movements = [], isLoading } = useQuery({
@@ -35,6 +118,8 @@ function Column({ dir }: { dir: 'in' | 'out' }) {
           {dir === 'in' ? 'Stock in' : 'Stock out'}
           <span className="font-normal tabular-nums text-slate-500">{movements.length}</span>
         </h3>
+        <div className="flex items-center gap-1.5">
+        <WhatsAppCopy movements={movements} dir={dir} manual={ledger.kind === 'manual'} />
         <DownloadCsvButton
           name={`stock-${dir}${ledger.kind === 'manual' ? '-manual' : ''}`}
           headers={['Date', 'Day', 'Time', 'Item', 'Quantity', 'Old', 'New', 'What', dir === 'in' ? 'From' : 'To', 'By', 'Stock after', 'Note']}
@@ -56,6 +141,7 @@ function Column({ dir }: { dir: 'in' | 'out' }) {
             ];
           })}
         />
+        </div>
       </div>
       {isLoading ? (
         <div className="space-y-3 p-4" aria-busy="true">
