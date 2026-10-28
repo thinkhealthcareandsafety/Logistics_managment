@@ -162,11 +162,12 @@ export function Stock() {
 
   const changes: StockCountChange[] = items
     .filter((i) => isChanged(i, drafts))
-    .map((i) =>
-      i.oldQuantity != null
-        ? { itemId: i._id, quantity: draftTotal(i, drafts), oldQuantity: draftOld(i, drafts) }
-        : { itemId: i._id, quantity: draftTotal(i, drafts) }
-    );
+    .map((i) => {
+      const note = drafts[`${i._id}:note`]?.trim() || undefined;
+      return i.oldQuantity != null
+        ? { itemId: i._id, quantity: draftTotal(i, drafts), oldQuantity: draftOld(i, drafts), note }
+        : { itemId: i._id, quantity: draftTotal(i, drafts), note };
+    });
   const dirty = changes.length > 0;
 
   // Losing a half-done count to a stray tab close is the fastest way to lose trust.
@@ -851,6 +852,14 @@ function CategorySection({
                 </div>
               </div>
 
+              {changed && qty !== item.quantity && (
+                <ChangeNote
+                  out={qty < item.quantity}
+                  value={drafts[`${item._id}:note`] ?? ''}
+                  onChange={(v) => onDraft(`${item._id}:note`, v)}
+                  label={displayName(item)}
+                />
+              )}
               {!!item.zohoAliases?.length && (
                 <div className={clsx(indent, 'sm:pl-[52px]')}>
                   <AliasLine item={item} />
@@ -864,6 +873,47 @@ function CategorySection({
         })}
       </ul>
     </section>
+  );
+}
+
+const OUT_REASONS = ['Sent to client', 'Damaged', 'Used for demo / training', 'Given as replacement'];
+const IN_REASONS = ['Received from supplier', 'Returned by client', 'Count correction'];
+
+/**
+ * Why a line went down (or up) - saved with the count, so the history and the stock
+ * register say "−5 · Sent to client" rather than just "−5".
+ */
+function ChangeNote({ out, value, onChange, label }: { out: boolean; value: string; onChange: (v: string) => void; label: string }) {
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-1.5 sm:pl-[52px]">
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value.slice(0, 200))}
+        placeholder={out ? 'Reason it’s going out (optional) - client, place, damaged…' : 'Where it came from (optional)'}
+        aria-label={`${out ? 'Reason for stock going out' : 'Reason for stock coming in'} - ${label}`}
+        className={clsx(
+          'h-8 w-full min-w-0 rounded-lg border bg-white px-2.5 text-[13px] text-slate-800 outline-none transition placeholder:text-slate-400 focus:ring-2 sm:w-80',
+          out ? 'border-red-200 focus:border-red-300 focus:ring-red-100' : 'border-emerald-200 focus:border-emerald-300 focus:ring-emerald-100'
+        )}
+      />
+      {(out ? OUT_REASONS : IN_REASONS).map((r) => (
+        <button
+          key={r}
+          type="button"
+          onClick={() => onChange(value && !value.includes(r) ? `${value}, ${r}` : r)}
+          className={clsx(
+            'h-7 rounded-full px-2.5 text-[12px] font-medium ring-1 ring-inset transition',
+            value.includes(r)
+              ? out
+                ? 'bg-red-50 text-red-700 ring-red-200'
+                : 'bg-emerald-50 text-emerald-700 ring-emerald-200'
+              : 'bg-white text-slate-600 ring-slate-200 hover:bg-slate-50'
+          )}
+        >
+          {r}
+        </button>
+      ))}
+    </div>
   );
 }
 

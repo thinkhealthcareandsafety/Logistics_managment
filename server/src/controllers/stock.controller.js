@@ -267,6 +267,7 @@ function stockHandlers({ Category, Item, Movement, Settings, ledger, manual = fa
         itemId: c.itemId,
         quantity: Number(c.quantity),
         oldQuantity: c.oldQuantity == null ? null : Number(c.oldQuantity),
+        note: typeof c.note === 'string' ? c.note.trim().slice(0, 200) : '',
       };
     });
     const result = await applyCount({ changes, note: req.body.note, userId: req.userId, actor: req.actorName });

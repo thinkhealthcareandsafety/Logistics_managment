@@ -130,6 +130,8 @@ export interface StockCountChange {
   itemId: string;
   quantity: number;
   oldQuantity?: number;
+  /** Why this line changed - "Sent to Mumbai client", "Damaged". */
+  note?: string;
 }
 
 export interface StockItemInput {

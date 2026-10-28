@@ -278,7 +278,8 @@ function ledgerService({ Category, Item, Movement, Settings, manual = false }) {
         quantityAfter: c.quantity,
         ...oldNewSplit(item, { quantity: c.quantity, oldQuantity: nextOld }),
         reason: 'count',
-        note: [detail, String(note).trim()].filter(Boolean).join(' · ').slice(0, 300),
+        // The line's own reason ("Sent to client") first, then the split detail.
+        note: [String(c.note || '').trim(), detail, String(note).trim()].filter(Boolean).join(' · ').slice(0, 300),
         userId,
         userName: name,
       });
