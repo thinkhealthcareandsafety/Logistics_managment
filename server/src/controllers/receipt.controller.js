@@ -98,6 +98,25 @@ const deleteReceipt = asyncHandler(async (req, res) => {
   res.status(204).send();
 });
 
+/**
+ * What the client would get when this shipment is delivered, with the receipt link in
+ * it - built by the same code that sends it. Nothing is sent.
+ */
+const getDeliveredPreview = asyncHandler(async (req, res) => {
+  const { customerLinks } = require('../services/customerNotification.service');
+  const { buildDeliveryText } = require('../services/whatsapp.service');
+  const { buildDeliveryFeedbackEmail } = require('../services/email.service');
+  const shipment = await ownShipment(req);
+  const { trackingUrl, feedbackUrl } = customerLinks(shipment);
+  const receiptUrl = await receiptLink(shipment);
+  res.json({
+    receiptUrl,
+    feedbackUrl,
+    whatsapp: buildDeliveryText({ shipment, trackingUrl, feedbackUrl, receiptUrl }),
+    email: buildDeliveryFeedbackEmail({ shipment, trackingUrl, feedbackUrl, receiptUrl }),
+  });
+});
+
 /** Whether the "Delivered" thank-you carries the receipt link, and whether WhatsApp is paused. */
 async function receiptSettingsView() {
   const settings = await StockSettings.get();
@@ -122,4 +141,5 @@ module.exports = {
   deleteReceipt,
   getReceiptSettings,
   updateReceiptSettings,
+  getDeliveredPreview,
 };

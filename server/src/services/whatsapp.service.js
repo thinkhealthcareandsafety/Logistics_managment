@@ -344,6 +344,7 @@ async function whatsAppStatus() {
 }
 
 module.exports = {
+  buildDeliveryText,
   sendWhatsAppBookedMessage,
   sendWhatsAppCustomerStatus,
   sendWhatsAppStatusMessage,

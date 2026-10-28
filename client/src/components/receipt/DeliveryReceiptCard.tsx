@@ -78,8 +78,9 @@ function ReceiptImage({ shipmentId, n, alt, className }: { shipmentId: string; n
  * One switch for every shipment: whether the automatic "Delivered" thank-you also
  * carries the receipt link. Same single message - never an extra one. Off by default.
  */
-function InDeliveredMessageSwitch() {
+function InDeliveredMessageSwitch({ shipmentId }: { shipmentId: string }) {
   const queryClient = useQueryClient();
+  const [previewing, setPreviewing] = useState(false);
   const { data } = useQuery({
     queryKey: ['receipt-settings'],
     queryFn: () => apiClient.get<{ inDeliveredMessage: boolean; whatsappPaused: boolean }>('/shipments/receipt-settings').then((r) => r.data),
@@ -115,8 +116,88 @@ function InDeliveredMessageSwitch() {
             : 'Off - clients get nothing new. Turn on to ask for the receipt in the same thank-you + feedback message.'}
           {data.whatsappPaused && ' WhatsApp is paused, so nothing goes out on WhatsApp either way.'}
         </p>
+        <button type="button" onClick={() => setPreviewing(true)} className="mt-1 font-medium text-brand-700 hover:text-brand-900">
+          Preview what the client gets →
+        </button>
       </div>
+      {previewing && <DeliveredPreview shipmentId={shipmentId} onClose={() => setPreviewing(false)} />}
     </div>
+  );
+}
+
+/** WhatsApp's *bold* and bare links, on escaped text. */
+function whatsappHtml(text: string) {
+  const esc = text.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+  return esc
+    .replace(/\*([^*\n]+)\*/g, '<strong>$1</strong>')
+    .replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noreferrer" style="color:#027eb5;word-break:break-all">$1</a>');
+}
+
+/** The "Delivered" WhatsApp and email exactly as the server would build them. Sends nothing. */
+function DeliveredPreview({ shipmentId, onClose }: { shipmentId: string; onClose: () => void }) {
+  const [tab, setTab] = useState<'whatsapp' | 'email'>('whatsapp');
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ['delivered-preview', shipmentId],
+    queryFn: () =>
+      apiClient
+        .get<{ receiptUrl: string; feedbackUrl: string; whatsapp: string; email: { subject: string; html: string } }>(
+          `/shipments/${shipmentId}/receipt/delivered-preview`
+        )
+        .then((r) => r.data),
+  });
+  return (
+    <Modal size="lg" title="What the client gets on delivery" description="Preview only - nothing is sent." onClose={onClose}>
+      {isLoading ? (
+        <Spinner />
+      ) : isError || !data ? (
+        <p className="text-[13px] text-red-700">Could not build the preview.</p>
+      ) : (
+        <div className="space-y-4 text-[13px]">
+          <div className="flex gap-1 rounded-lg bg-slate-100 p-1">
+            {(['whatsapp', 'email'] as const).map((t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => setTab(t)}
+                className={clsx('flex-1 rounded-md px-3 py-1.5 font-medium transition', tab === t ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500')}
+              >
+                {t === 'whatsapp' ? 'WhatsApp' : 'Email'}
+              </button>
+            ))}
+          </div>
+
+          {tab === 'whatsapp' ? (
+            <div className="rounded-xl bg-[#efeae2] p-4">
+              <div
+                className="max-w-[420px] whitespace-pre-wrap rounded-lg rounded-tl-none bg-white px-3 py-2 text-[14px] leading-snug text-[#111b21] shadow-sm"
+                dangerouslySetInnerHTML={{ __html: whatsappHtml(data.whatsapp) }}
+              />
+              <p className="mt-2 text-[11px] text-slate-500">
+                Until Meta approves the new template, WhatsApp sends your current approved thank-you instead (without the receipt line).
+              </p>
+            </div>
+          ) : (
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <p className="mb-3 text-[12px] text-slate-500">
+                Subject: <span className="font-medium text-slate-800">{data.email.subject}</span>
+              </p>
+              <div className="rounded-lg bg-white p-2" dangerouslySetInnerHTML={{ __html: data.email.html }} />
+            </div>
+          )}
+
+          <p className="text-[12px] text-slate-500">
+            Want to see the pages the links open?{' '}
+            <a href={data.receiptUrl} target="_blank" rel="noreferrer" className="font-medium text-brand-700 hover:text-brand-900">
+              Receipt form
+            </a>{' '}
+            (look only - submitting it records a real receipt) ·{' '}
+            <a href={data.feedbackUrl} target="_blank" rel="noreferrer" className="font-medium text-brand-700 hover:text-brand-900">
+              Feedback form
+            </a>
+          </p>
+        </div>
+      )}
+    </Modal>
   );
 }
 
@@ -261,7 +342,7 @@ export function DeliveryReceiptCard({ shipment }: { shipment: Shipment }) {
               Client busy or offline? There’s no deadline - they can do it later, or send you a photo and signature any way they like and you record it
               here.
             </p>
-            <InDeliveredMessageSwitch />
+            <InDeliveredMessageSwitch shipmentId={shipment._id} />
           </div>
         )}
       </div>

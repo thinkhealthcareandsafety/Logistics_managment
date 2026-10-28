@@ -9,6 +9,7 @@ const {
   deleteReceipt,
   getReceiptSettings,
   updateReceiptSettings,
+  getDeliveredPreview,
 } = require('../controllers/receipt.controller');
 
 // Invoices come from Zoho Books (free, but Zoho caps calls a day): plenty for people,
@@ -67,6 +68,7 @@ router.get('/receipt-settings', getReceiptSettings);
 router.patch('/receipt-settings', updateReceiptSettings);
 router.get('/:id/receipt', getReceipt);
 router.get('/:id/receipt/image', getReceiptImage);
+router.get('/:id/receipt/delivered-preview', getDeliveredPreview);
 router.post('/:id/receipt', costlyLimiter, receiptUpload, recordReceipt);
 router.delete('/:id/receipt', deleteReceipt);
 router.get('/:id/invoice.pdf', invoiceLimiter, getInvoicePdf);

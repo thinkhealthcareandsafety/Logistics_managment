@@ -128,4 +128,4 @@ function isEmailConfigured() {
   return Boolean(env.smtp.host);
 }
 
-module.exports = { sendStatusChangeEmail, sendDeliveryFeedbackEmail, isEmailConfigured };
+module.exports = { sendStatusChangeEmail, sendDeliveryFeedbackEmail, buildDeliveryFeedbackEmail, isEmailConfigured };
