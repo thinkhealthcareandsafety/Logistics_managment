@@ -88,6 +88,16 @@ export function Login() {
             </button>
           </div>
 
+          {/* Public sign-up is off - while signed in, the way to add someone is the Team list. */}
+          {mode === 'register' && user && (
+            <Link
+              to="/profile#team"
+              className="mb-4 block rounded-lg bg-amber-50 px-3 py-2.5 text-[13px] text-amber-900 ring-1 ring-amber-200 hover:bg-amber-100"
+            >
+              Adding a colleague? Use <span className="font-semibold">Profile → Team → Add a colleague →</span>
+            </Link>
+          )}
+
           <form onSubmit={handleSubmit} className="space-y-4">
             {mode === 'register' && (
               <Field label="Full name" htmlFor="name">
@@ -120,7 +130,7 @@ export function Login() {
             <Field
               label="Password"
               htmlFor="password"
-              hint={mode === 'register' ? 'At least 8 characters.' : undefined}
+              hint={mode === 'register' ? 'At least 10 characters, with letters and numbers.' : undefined}
             >
               <div className="relative">
                 <input

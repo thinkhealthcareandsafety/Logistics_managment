@@ -1,5 +1,5 @@
 const express = require('express');
-const { register, login, logout, me, changePassword, logoutEverywhere } = require('../controllers/auth.controller');
+const { register, login, logout, me, changePassword, logoutEverywhere, listTeam, addTeammate } = require('../controllers/auth.controller');
 const { requireAuth } = require('../middleware/auth.middleware');
 const { authLimiter } = require('../middleware/rateLimiter');
 
@@ -11,5 +11,7 @@ router.post('/logout', requireAuth, logout);
 router.get('/me', requireAuth, me);
 router.post('/password', authLimiter, requireAuth, changePassword);
 router.post('/logout-everywhere', requireAuth, logoutEverywhere);
+router.get('/team', requireAuth, listTeam);
+router.post('/team', authLimiter, requireAuth, addTeammate);
 
 module.exports = router;

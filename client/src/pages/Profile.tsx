@@ -1,10 +1,11 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { Spinner } from '../components/ui/Loading';
 import { format } from 'date-fns';
 import { useAuth } from '../context/AuthContext';
-import { authApi } from '../api/auth';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { authApi, type Teammate } from '../api/auth';
 import type { User } from '../types/user';
 import { getInitials } from '../utils/avatar';
 
@@ -79,6 +80,8 @@ export function Profile() {
         changedAt={user.passwordChangedAt}
         onChanged={(token, next) => replaceSession(token, next)}
       />
+
+      <Team myId={user.id} />
 
       <section className="grid grid-cols-1 gap-4 border-t border-slate-200 pt-8 lg:grid-cols-3 lg:gap-10">
         <div>
@@ -176,6 +179,154 @@ function ChangePassword({ changedAt, onChanged }: { changedAt?: string | null; o
           {saving ? 'Changing…' : 'Change password'}
         </button>
       </form>
+    </section>
+  );
+}
+
+/** Who has an account, and "Add a colleague" - the way in while public sign-up is off. */
+function Team({ myId }: { myId: string }) {
+  const queryClient = useQueryClient();
+  const { data: team, isLoading } = useQuery({ queryKey: ['team'], queryFn: authApi.team });
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [added, setAdded] = useState<{ name: string; email: string; password: string } | null>(null);
+  const sectionRef = useRef<HTMLElement>(null);
+
+  // Arrived from the sign-in page's "Adding a colleague?" link: straight to the form.
+  useEffect(() => {
+    if (window.location.hash !== '#team') return;
+    setOpen(true);
+    sectionRef.current?.scrollIntoView({ block: 'start' });
+  }, []);
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    setError('');
+    if (!email.trim().toLowerCase().endsWith('@thinkhealth.in')) return setError('Use their @thinkhealth.in work email');
+    if (password.length < 10 || !/[a-z]/i.test(password) || !/\d/.test(password)) {
+      return setError('Use at least 10 characters, with both letters and numbers');
+    }
+    setSaving(true);
+    try {
+      const user = await authApi.addTeammate({ name: name.trim(), email: email.trim(), password });
+      queryClient.setQueryData<Teammate[]>(['team'], (old) => [...(old || []), user]);
+      setAdded({ name: user.name, email: user.email, password });
+      setName('');
+      setEmail('');
+      setPassword('');
+      setOpen(false);
+      toast.success(`${user.name} can sign in now`);
+    } catch (err) {
+      setError(errorMessage(err, 'Could not add the colleague'));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <section ref={sectionRef} id="team" className="grid scroll-mt-20 grid-cols-1 gap-4 border-t border-slate-200 pt-8 lg:grid-cols-3 lg:gap-10">
+      <div>
+        <h2 className="text-[15px] font-semibold text-slate-950">Team</h2>
+        <p className="mt-1 text-[13px] leading-relaxed text-slate-500">
+          Everyone who can sign in. Add a colleague with their work email and a starting password - they can change it on
+          their own Profile page.
+        </p>
+      </div>
+      <div className="space-y-3 lg:col-span-2">
+        <ul className="divide-y divide-slate-100 rounded-xl border border-slate-200 bg-white text-[13px] shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+          {isLoading && <li className="px-5 py-3 text-slate-400">Loading…</li>}
+          {team?.map((m) => (
+            <li key={m.id} className="flex items-center gap-3 px-5 py-3">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-100 text-[11px] font-bold text-brand-900">
+                {getInitials(m.name)}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate font-medium text-slate-900">
+                  {m.name}
+                  {m.id === myId && <span className="ml-1.5 font-normal text-slate-400">(you)</span>}
+                </span>
+                <span className="block truncate text-slate-500">{m.email}</span>
+              </span>
+              <span className="shrink-0 text-right text-[12px] text-slate-400">
+                {m.lastLoginAt ? `Last in ${format(new Date(m.lastLoginAt), 'd MMM')}` : 'Not signed in yet'}
+              </span>
+            </li>
+          ))}
+        </ul>
+
+        {added && (
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-[13px] text-emerald-900">
+            <p className="font-semibold">{added.name} is added. Send them:</p>
+            <p className="mt-1 break-all font-mono text-[12px]">
+              {window.location.origin}/login · {added.email} · {added.password}
+            </p>
+            <div className="mt-2 flex gap-3">
+              <button
+                type="button"
+                className="font-semibold text-emerald-800 hover:underline"
+                onClick={() => {
+                  navigator.clipboard
+                    ?.writeText(
+                      `Your ThinkHealth Logistics account is ready.\nSign in: ${window.location.origin}/login\nEmail: ${added.email}\nPassword: ${added.password}\nPlease change the password from Profile after signing in.`
+                    )
+                    .then(() => toast.success('Copied'), () => toast.error('Could not copy'));
+                }}
+              >
+                Copy sign-in details
+              </button>
+              <button type="button" className="text-emerald-700 hover:underline" onClick={() => setAdded(null)}>
+                Done
+              </button>
+            </div>
+          </div>
+        )}
+
+        {open ? (
+          <form onSubmit={submit} className="space-y-3 rounded-xl border border-slate-200 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+            <div>
+              <label htmlFor="tm-name" className="mb-1 block text-[13px] font-medium text-slate-700">
+                Full name
+              </label>
+              <input id="tm-name" required value={name} onChange={(e) => setName(e.target.value)} className="input" maxLength={100} autoComplete="off" />
+            </div>
+            <div>
+              <label htmlFor="tm-email" className="mb-1 block text-[13px] font-medium text-slate-700">
+                Work email
+              </label>
+              <input id="tm-email" required type="email" placeholder="name@thinkhealth.in" value={email} onChange={(e) => setEmail(e.target.value)} className="input" autoComplete="off" />
+            </div>
+            <div>
+              <label htmlFor="tm-password" className="mb-1 block text-[13px] font-medium text-slate-700">
+                Starting password
+              </label>
+              <input id="tm-password" required type="text" value={password} onChange={(e) => setPassword(e.target.value)} className="input font-mono" maxLength={128} autoComplete="new-password" />
+              <p className="mt-1 text-[12px] text-slate-500">At least 10 characters with letters and numbers. You'll see it once to send to them.</p>
+            </div>
+            {error && (
+              <p role="alert" className="text-[13px] text-red-600">
+                {error}
+              </p>
+            )}
+            <div className="flex gap-2">
+              <button type="submit" disabled={saving} aria-busy={saving} className="btn-primary inline-flex items-center gap-2">
+                {saving && <Spinner />}
+                {saving ? 'Adding…' : 'Add colleague'}
+              </button>
+              <button type="button" className="btn-secondary" onClick={() => { setOpen(false); setError(''); }}>
+                Cancel
+              </button>
+            </div>
+          </form>
+        ) : (
+          <button type="button" className="btn-secondary" onClick={() => { setOpen(true); setAdded(null); }}>
+            + Add a colleague
+          </button>
+        )}
+      </div>
     </section>
   );
 }

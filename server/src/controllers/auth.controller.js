@@ -46,16 +46,12 @@ function checkPassword(password, email = '') {
 
 const str = (v) => (typeof v === 'string' ? v : '');
 
-const register = asyncHandler(async (req, res) => {
-  // Accounts open the shared stock, invoices and customer details - sign-up stays shut
-  // unless the server explicitly allows it (SIGNUP_ENABLED=true) for a new colleague.
-  if (!env.signupEnabled) {
-    throw new ApiError(403, 'New accounts are switched off. Ask your administrator to add you.');
-  }
-  const name = str(req.body.name).trim();
-  const email = str(req.body.email).trim().toLowerCase();
-  const password = str(req.body.password);
-  const company = str(req.body.company).trim();
+/** Checks and creates a staff account - shared by sign-up and "Add a colleague". */
+async function createAccount(body) {
+  const name = str(body.name).trim();
+  const email = str(body.email).trim().toLowerCase();
+  const password = str(body.password);
+  const company = str(body.company).trim();
   if (!name || !email || !password) {
     throw new ApiError(400, 'name, email and password are required');
   }
@@ -65,20 +61,29 @@ const register = asyncHandler(async (req, res) => {
   if (!env.signupAllowedDomains.includes(domain)) {
     throw new ApiError(
       403,
-      `Accounts are for ThinkHealth staff only. Sign up with your ${env.signupAllowedDomains
-        .map((d) => `@${d}`)
-        .join(' or ')} work email.`
+      `Accounts are for ThinkHealth staff only. Use a ${env.signupAllowedDomains.map((d) => `@${d}`).join(' or ')} work email.`
     );
   }
 
-  const existing = await User.findOne({ email });
-  if (existing) {
+  if (await User.findOne({ email })) {
     throw new ApiError(409, 'An account with this email already exists');
   }
 
   const passwordHash = await bcrypt.hash(password, 12);
-  const user = await User.create({ name: name.slice(0, 100), email, passwordHash, company: company.slice(0, 100) || undefined });
-  logger.info(`New account created: ${email} from ${req.ip}`);
+  return User.create({ name: name.slice(0, 100), email, passwordHash, company: company.slice(0, 100) || undefined });
+}
+
+const register = asyncHandler(async (req, res) => {
+  // Accounts open the shared stock, invoices and customer details - sign-up stays shut
+  // unless the server explicitly allows it (SIGNUP_ENABLED=true) for a new colleague.
+  if (!env.signupEnabled) {
+    throw new ApiError(
+      403,
+      'New accounts are added by a teammate: someone already signed in opens Profile → Team → Add a colleague.'
+    );
+  }
+  const user = await createAccount(req.body);
+  logger.info(`New account created: ${user.email} from ${req.ip}`);
 
   const token = issueToken(user);
   setAuthCookie(res, token);
@@ -177,4 +182,23 @@ const logoutEverywhere = asyncHandler(async (req, res) => {
   res.json({ token, user: user.toSafeJSON() });
 });
 
-module.exports = { register, login, logout, me, changePassword, logoutEverywhere, checkPassword };
+/** Everyone with an account - the Team list on the Profile page. */
+const listTeam = asyncHandler(async (req, res) => {
+  const users = await User.find({}, 'name email createdAt lastLoginAt').sort({ createdAt: 1 }).lean();
+  res.json({
+    team: users.map((u) => ({ id: u._id, name: u.name, email: u.email, createdAt: u.createdAt, lastLoginAt: u.lastLoginAt })),
+  });
+});
+
+/**
+ * A signed-in teammate adds a colleague - public sign-up stays off. The colleague signs
+ * in with the password they're given and changes it on their Profile page.
+ */
+const addTeammate = asyncHandler(async (req, res) => {
+  const by = await User.findById(req.userId, 'email');
+  const user = await createAccount(req.body);
+  logger.info(`Account ${user.email} added by ${by?.email || req.userId} from ${req.ip}`);
+  res.status(201).json({ user: { id: user._id, name: user.name, email: user.email, createdAt: user.createdAt, lastLoginAt: null } });
+});
+
+module.exports = { register, login, logout, me, changePassword, logoutEverywhere, checkPassword, listTeam, addTeammate };

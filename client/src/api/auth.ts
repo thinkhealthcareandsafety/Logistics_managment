@@ -22,7 +22,21 @@ export const authApi = {
     apiClient.post<AuthResponse>('/auth/password', data).then((r) => r.data),
 
   logoutEverywhere: () => apiClient.post<AuthResponse>('/auth/logout-everywhere').then((r) => r.data),
+
+  team: () => apiClient.get<{ team: Teammate[] }>('/auth/team').then((r) => r.data.team),
+
+  /** A signed-in teammate adds a colleague (public sign-up is off). */
+  addTeammate: (data: { name: string; email: string; password: string }) =>
+    apiClient.post<{ user: Teammate }>('/auth/team', data).then((r) => r.data.user),
 };
+
+export interface Teammate {
+  id: string;
+  name: string;
+  email: string;
+  createdAt: string;
+  lastLoginAt: string | null;
+}
 
 export interface ApiUsage {
   provider: 'gemini' | 'trackingmore' | 'whatsapp';
