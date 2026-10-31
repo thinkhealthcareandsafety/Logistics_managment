@@ -17,6 +17,7 @@ async function main() {
   }
   await require('./services/stock.service').applyOldNewDefault().catch((err) => logger.error(`Old/new switch-over failed: ${err.message}`));
   await backfillDeliveredAt().catch((err) => logger.error(`Delivered-date backfill failed: ${err.message}`));
+  await require('./scripts/renameAccount').renameDemoAccount().catch((err) => logger.error(`Account rename failed: ${err.message}`));
 
   const httpServer = http.createServer(app);
   initSocket(httpServer);

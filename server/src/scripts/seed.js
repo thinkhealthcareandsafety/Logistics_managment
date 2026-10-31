@@ -93,7 +93,7 @@ async function seedData() {
   if (!user) {
     const passwordHash = await bcrypt.hash('Demo@12345', 12);
     user = await User.create({
-      name: 'Demo Ops Manager',
+      name: 'Logistics Manager - Aarti',
       email: DEMO_EMAIL,
       passwordHash,
       company: 'ThinkHealth',

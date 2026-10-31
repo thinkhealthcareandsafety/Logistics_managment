@@ -9,6 +9,7 @@ import { NotificationBell } from './NotificationBell';
 import { Menu, MenuDivider, MenuItem } from './Menu';
 import { ErrorBoundary } from './ErrorBoundary';
 import { getInitials } from '../utils/avatar';
+import { BrandLockup } from './ui/BrandMark';
 
 import { RouteSkeleton } from './skeletons/PageSkeletons';
 import { TopProgress } from './ui/TopProgress';
@@ -60,11 +61,12 @@ export function Layout() {
       <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/90 backdrop-blur">
         <div className="mx-auto flex h-14 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6">
           <div className="flex items-center gap-8">
-            <Link to="/dashboard" className="flex items-center gap-2.5 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-brand-500">
-              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-900 text-[13px] font-bold text-white">
-                TH
-              </span>
-              <span className="hidden text-[14px] font-semibold text-slate-900 sm:block">ThinkHealth Logistics</span>
+            <Link
+              to="/login"
+              title="Go to the sign-in page"
+              className="rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+            >
+              <BrandLockup hideTextOnPhone />
             </Link>
             <nav aria-label="Main" className="hidden h-14 items-stretch gap-6 sm:flex">
               {nav.map((item) => (

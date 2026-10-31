@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import clsx from 'clsx';
+import { BrandMark } from '../ui/BrandMark';
 
 /** Flat jump links to sections that exist on the page. No dropdowns - it's one page. */
 const LINKS = [
@@ -34,9 +35,7 @@ export function MarketingNav() {
     >
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-6 px-5 sm:px-8">
         <Link to="/" className="flex shrink-0 items-center gap-2.5">
-          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-brand-900 text-[11px] font-bold text-white">
-            TH
-          </span>
+          <BrandMark size={30} />
           <span className="font-display text-[16px] font-semibold tracking-[-0.01em] text-slate-950">ThinkHealth</span>
         </Link>
 

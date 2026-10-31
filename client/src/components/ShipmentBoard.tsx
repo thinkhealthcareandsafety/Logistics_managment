@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import clsx from 'clsx';
 import type { Shipment, ShipmentStatus } from '../types/shipment';
@@ -6,6 +6,7 @@ import { deliveredOn, deliverTo } from '../utils/logistics';
 import { relationLabel } from './receipt/ReceiptForm';
 import { ShipmentsWhatsAppDialog } from './ShipmentsWhatsAppDialog';
 import { WhatsAppIcon } from './stock/ShareStockDialog';
+import { Pagination } from './ui/Pagination';
 
 type Column = Extract<ShipmentStatus, 'in_transit' | 'out_for_delivery' | 'delivered'>;
 
@@ -15,8 +16,8 @@ const COLUMNS: { status: Column; label: string; dot: string }[] = [
   { status: 'delivered', label: 'Delivered', dot: 'bg-emerald-500' },
 ];
 
-/** How many cards a column draws before "Show more" - the delivered pile runs to hundreds. */
-const PAGE = 40;
+/** Cards per page in a column - the delivered pile runs to hundreds. */
+const PAGE = 25;
 
 const titleCase = (v: string) => v.toLowerCase().replace(/\b[a-z]/g, (c) => c.toUpperCase());
 /** "YYYY-MM" in India time. */
@@ -146,8 +147,15 @@ function BoardColumn({
   /** Opens this column's shipments as a WhatsApp message. */
   onShare: () => void;
 }) {
-  const [shown, setShown] = useState({ key: resetKey, n: PAGE });
-  const limit = shown.key === resetKey ? shown.n : PAGE; // back to the first page when the month changes
+  const [paged, setPaged] = useState({ key: resetKey, page: 1 });
+  const pageCount = Math.max(1, Math.ceil(shipments.length / PAGE));
+  // Back to page 1 when the month changes; never past the last page.
+  const page = paged.key === resetKey ? Math.min(paged.page, pageCount) : 1;
+  const listRef = useRef<HTMLUListElement>(null);
+  const goTo = (p: number) => {
+    setPaged({ key: resetKey, page: p });
+    listRef.current?.scrollTo({ top: 0 });
+  };
   return (
     <div className="flex min-w-0 flex-col">
       <div className="flex items-center justify-between gap-2 bg-slate-50/70 px-4 py-2.5">
@@ -171,9 +179,9 @@ function BoardColumn({
           </button>
         </div>
       </div>
-      <ul className="max-h-[420px] flex-1 divide-y divide-slate-100 overflow-y-auto">
+      <ul ref={listRef} className="max-h-[420px] flex-1 divide-y divide-slate-100 overflow-y-auto">
         {shipments.length === 0 && <li className="px-4 py-8 text-center text-[13px] text-slate-400">Nothing here</li>}
-        {shipments.slice(0, limit).map((s) => {
+        {shipments.slice((page - 1) * PAGE, page * PAGE).map((s) => {
           const where = locationOf(s);
           const on = s.status === 'delivered' ? deliveredOn(s) : null;
           return (
@@ -201,18 +209,12 @@ function BoardColumn({
             </li>
           );
         })}
-        {shipments.length > limit && (
-          <li className="px-4 py-2">
-            <button
-              type="button"
-              onClick={() => setShown({ key: resetKey, n: limit + PAGE })}
-              className="text-[12px] font-medium text-brand-700 hover:text-brand-900"
-            >
-              Show {Math.min(PAGE, shipments.length - limit)} more of {shipments.length - limit}
-            </button>
-          </li>
-        )}
       </ul>
+      {shipments.length > PAGE && (
+        <div className="border-t border-slate-100 px-4 py-2">
+          <Pagination compact page={page} pageSize={PAGE} total={shipments.length} onPage={goTo} label={`${label} pages`} />
+        </div>
+      )}
     </div>
   );
 }

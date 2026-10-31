@@ -6,6 +6,7 @@ import toast from 'react-hot-toast';
 import { stockApi } from '../api/stock';
 import { useLedger } from '../context/StockLedger';
 import { Skeleton, SkeletonRegion } from '../components/ui/Loading';
+import { BrandMark } from '../components/ui/BrandMark';
 import { expiryState, formatExpiry, listPrefix, whatsappShareUrl } from '../utils/stock';
 
 /**
@@ -28,7 +29,7 @@ export function PublicStock() {
       <header className="sticky top-0 z-10 border-b border-slate-200 bg-white/90 backdrop-blur">
         <div className="mx-auto flex max-w-2xl items-center justify-between gap-3 px-4 py-3">
           <div className="flex items-center gap-2.5">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-900 text-[13px] font-bold text-white">TH</span>
+            <BrandMark size={32} />
             <span className="leading-tight">
               <span className="block text-[14px] font-semibold text-slate-900">Stock available</span>
               <span className="block text-[11px] text-slate-500">ThinkHealth Logistics · internal</span>

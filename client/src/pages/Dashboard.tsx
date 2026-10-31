@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { formatDistanceToNow } from 'date-fns';
 import clsx from 'clsx';
 import { useCarriers } from '../hooks/useCarriers';
-import { useInView } from '../hooks/useInView';
+import { Pagination } from '../components/ui/Pagination';
 import { useBulkArchiveShipments, useRefreshAllShipments, useShipments } from '../hooks/useShipments';
 import { ShipmentCard } from '../components/ShipmentCard';
 import { ShipmentTable } from '../components/ShipmentTable';
@@ -33,7 +33,7 @@ const SORT_LABELS: Record<Sort, string> = {
 };
 
 const VIEW_STORAGE_KEY = 'th.dashboard.view';
-const ROWS_PER_BATCH = 60;
+const PAGE_SIZE = 50;
 
 const toolbarButton =
   'inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 text-[13px] font-medium text-slate-700 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600';
@@ -214,15 +214,20 @@ export function Dashboard() {
     });
   }, [all, archived, attentionOnly, status, search, sort]);
 
-  // Hundreds of rows take a moment to draw, so the first screenful goes up at once and
-  // the rest follows as you scroll. Select-all, export and counts still use every row.
-  const [shownCount, setShownCount] = useState(ROWS_PER_BATCH);
-  useEffect(() => setShownCount(ROWS_PER_BATCH), [scope, status, attentionOnly, courier, search, sort]);
-  const [moreRef, nearEnd] = useInView<HTMLDivElement>({ rootMargin: '1200px 0px' });
-  useEffect(() => {
-    if (nearEnd && shownCount < visible.length) setShownCount((n) => n + ROWS_PER_BATCH * 2);
-  }, [nearEnd, shownCount, visible.length]);
-  const shown = visible.length > shownCount ? visible.slice(0, shownCount) : visible;
+  // Fifty to a page - 1–50, 51–100… - rather than one endless scroll. Any change to what's
+  // listed goes back to page 1. Select-all, export and counts still use every row.
+  const [page, setPage] = useState(1);
+  useEffect(() => setPage(1), [scope, status, attentionOnly, courier, search, sort]);
+  const pageCount = Math.max(1, Math.ceil(visible.length / PAGE_SIZE));
+  const currentPage = Math.min(page, pageCount);
+  const shown = visible.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const listTopRef = useRef<HTMLElement>(null);
+  function goToPage(p: number) {
+    setPage(p);
+    // Back to the top of the list, not the top of the page.
+    const top = listTopRef.current?.getBoundingClientRect().top;
+    if (top !== undefined && top < 0) listTopRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
 
   // Spelled out in the WhatsApp message so the reader knows it's a filtered view.
   const viewScope = [
@@ -396,7 +401,7 @@ export function Dashboard() {
       {isLoading ? <BoardSkeleton /> : <ShipmentBoard shipments={active} />}
 
       {/* ───────── Shipments panel ───────── */}
-      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+      <section ref={listTopRef} className="scroll-mt-20 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
         {/* Panel header: what you're looking at, then how it splits by stage. */}
         <div className="flex flex-col gap-3 border-b border-slate-200 px-4 pb-3 pt-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-center justify-between gap-3 lg:justify-start">
@@ -656,18 +661,16 @@ export function Dashboard() {
           </div>
         )}
 
-        {/* Draws the next batch of rows when scrolled near; always mounted so it's observed. */}
-        <div ref={moreRef} aria-hidden />
-
-        {/* Footer */}
+        {/* Footer: which rows these are, and the pages. */}
         {!listLoading && visible.length > 0 && (
-          <div className="flex items-center justify-between gap-4 border-t border-slate-200 px-4 py-2.5 text-[12px] text-slate-500">
-            <span className="tabular-nums">
-              {visible.length === all.length
-                ? `${all.length} shipment${all.length === 1 ? '' : 's'}`
-                : `Showing ${visible.length} of ${all.length}`}
-            </span>
-            <span>Sorted by {sort === 'eta' ? 'soonest ETA' : SORT_LABELS[sort].toLowerCase()}</span>
+          <div className="space-y-2 border-t border-slate-200 px-4 py-2.5">
+            <Pagination page={currentPage} pageSize={PAGE_SIZE} total={visible.length} onPage={goToPage} label="Shipment pages" />
+            <p className="flex flex-wrap justify-between gap-2 text-[12px] text-slate-500">
+              <span className="tabular-nums">
+                {visible.length === all.length ? `${all.length} shipment${all.length === 1 ? '' : 's'} in all` : `${visible.length} of ${all.length} match`}
+              </span>
+              <span>Sorted by {sort === 'eta' ? 'soonest ETA' : SORT_LABELS[sort].toLowerCase()}</span>
+            </p>
           </div>
         )}
       </section>

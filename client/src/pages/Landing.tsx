@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import clsx from 'clsx';
+import { BrandMark } from '../components/ui/BrandMark';
 import { MarketingNav } from '../components/marketing/MarketingNav';
 import { TrackLookup } from '../components/marketing/TrackLookup';
 import { ShipmentSimulator } from '../components/marketing/ShipmentSimulator';
@@ -261,9 +262,7 @@ export function Landing() {
       <footer>
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-5 py-10 text-[13px] text-slate-500 sm:px-8">
           <span className="flex items-center gap-2.5">
-            <span className="flex h-6 w-6 items-center justify-center rounded-md bg-brand-900 text-[10px] font-bold text-white">
-              TH
-            </span>
+            <BrandMark size={24} />
             ThinkHealth Logistics
           </span>
           <span className="tabular-nums">© {new Date().getFullYear()}</span>

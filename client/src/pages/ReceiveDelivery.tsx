@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { apiClient } from '../api/client';
 import { Skeleton, SkeletonRegion } from '../components/ui/Loading';
+import { BrandMark } from '../components/ui/BrandMark';
 import { EMPTY_DRAFT, ReceiptForm, relationLabel, type ReceiptDraft, type ReceiptSubmission } from '../components/receipt/ReceiptForm';
 import { blobToDataUrl, dataUrlToBlob } from '../utils/image';
 
@@ -159,7 +160,7 @@ export function ReceiveDelivery() {
     <div className="min-h-screen bg-slate-50">
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-xl items-center gap-2.5 px-4 py-3">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-900 text-[13px] font-bold text-white">TH</span>
+          <BrandMark size={32} />
           <div>
             <p className="text-[14px] font-semibold text-slate-900">Delivery receipt</p>
             <p className="text-[12px] text-slate-500">ThinkHealth · डिलीवरी की पुष्टि</p>

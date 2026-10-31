@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
 import { Spinner } from '../components/ui/Loading';
+import { BrandMark } from '../components/ui/BrandMark';
 
 export function Login() {
   const [searchParams] = useSearchParams();
@@ -15,7 +16,7 @@ export function Login() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { login, register } = useAuth();
+  const { login, register, user } = useAuth();
   const navigate = useNavigate();
 
   async function handleSubmit(e: FormEvent) {
@@ -44,14 +45,26 @@ export function Login() {
 
       <div className="relative w-full max-w-sm">
         <Link to="/" className="mb-8 flex flex-col items-center gap-3 text-center">
-          <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-brand-900 text-lg font-bold text-white">
-            TH
-          </span>
+          <BrandMark size={52} className="drop-shadow-sm" />
           <span>
             <span className="block text-xl font-semibold text-slate-900">ThinkHealth Logistics</span>
             <span className="mt-1 block text-sm text-slate-500">Shipment tracking dashboard</span>
           </span>
         </Link>
+
+        {/* Reached from the app's logo while still signed in - one click back in. */}
+        {user && (
+          <Link
+            to="/dashboard"
+            className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-brand-200 bg-brand-50 px-4 py-3 text-[13px] transition hover:bg-brand-100"
+          >
+            <span className="min-w-0">
+              <span className="block text-slate-500">Signed in as</span>
+              <span className="block truncate font-semibold text-slate-900">{user.name}</span>
+            </span>
+            <span className="shrink-0 font-semibold text-brand-800">Continue to dashboard →</span>
+          </Link>
+        )}
 
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-lift">
           <div className="mb-5 flex rounded-xl bg-slate-100 p-1 text-sm font-medium">

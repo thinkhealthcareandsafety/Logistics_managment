@@ -1,4 +1,5 @@
 import clsx from 'clsx';
+import { BrandMark } from './BrandMark';
 
 /**
  * The app's loading vocabulary, used everywhere so waiting looks the same on every
@@ -51,7 +52,7 @@ export function SkeletonRegion({ label, className, children }: { label: string; 
 export function PageLoader({ label = 'Loading' }: { label?: string }) {
   return (
     <div role="status" aria-live="polite" className="flex min-h-screen flex-col items-center justify-center gap-4 bg-white">
-      <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-brand-900 text-base font-bold text-white">TH</span>
+      <BrandMark size={44} />
       <span className="flex items-center gap-2 text-[13px] text-slate-500">
         <Spinner className="h-3.5 w-3.5 text-brand-700" />
         {label}…
