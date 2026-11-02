@@ -32,4 +32,27 @@ router.get(
   })
 );
 
+/** TrackingMore credits used and left in the plan, with the latest ones spent. */
+router.get(
+  '/tracking-credits',
+  asyncHandler(async (req, res) => {
+    res.json(await require('../services/trackingCredits.service').status({ recent: 20 }));
+  })
+);
+
+/** The plan: credits in it, when the count starts, monthly refill, used so far, hourly auto-register. */
+router.patch(
+  '/tracking-credits',
+  asyncHandler(async (req, res) => {
+    const user = await require('../models/User').findById(req.userId, 'name').lean();
+    const { allowance, periodStart, resetsMonthly, usedSoFar, autoRegister } = req.body || {};
+    res.json(
+      await require('../services/trackingCredits.service').updateSettings(
+        { allowance, periodStart, resetsMonthly, usedSoFar, autoRegister },
+        user?.name
+      )
+    );
+  })
+);
+
 module.exports = router;

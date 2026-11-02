@@ -63,15 +63,24 @@ async function request(config, { background = false } = {}) {
  * `extra` carries the fields some couriers require (e.g. `tracking_postal_code` for
  * ~80 international couriers) - only non-empty values are sent.
  */
-function createTracking({ trackingNumber, carrierCode, extra = {} }) {
+async function createTracking({ trackingNumber, carrierCode, extra = {}, credit = {} }) {
+  if (!env.trackingMore.apiKey) throw new ApiError(503, 'Courier tracking is off - no TRACKINGMORE_API_KEY on the server');
   const fields = Object.fromEntries(Object.entries(extra).filter(([, v]) => v));
-  return request({
-    method: 'post',
-    url: '/trackings/create',
-    // TrackingMore's actual v4 field is `courier_code`, confirmed against a live
-    // request/response in their dashboard's API debugging console - not `carrier_code`.
-    data: { tracking_number: trackingNumber, courier_code: carrierCode, ...fields },
-  });
+  // Each registration costs a TrackingMore credit: take one first (or refuse), and hand
+  // it back if TrackingMore didn't register the number (already there, or an error).
+  const release = await require('./trackingCredits.service').take({ trackingNumber, carrierCode, ...credit });
+  try {
+    return await request({
+      method: 'post',
+      url: '/trackings/create',
+      // TrackingMore's actual v4 field is `courier_code`, confirmed against a live
+      // request/response in their dashboard's API debugging console - not `carrier_code`.
+      data: { tracking_number: trackingNumber, courier_code: carrierCode, ...fields },
+    });
+  } catch (err) {
+    await release();
+    throw err;
+  }
 }
 
 /** Fetches the latest tracking result (status + checkpoints) for one shipment. */

@@ -31,10 +31,14 @@ export function useShipment(id: string | undefined) {
 export function useCreateShipment() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (data: CreateShipmentInput) => shipmentsApi.create(data),
+    mutationFn: (data: CreateShipmentInput) => shipmentsApi.create(data).then((r) => {
+      if (r.warning) toast.error(r.warning, { duration: 10000 });
+      return r.shipment;
+    }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['shipments'] });
-      toast.success('Shipment added and tracking started');
+      queryClient.invalidateQueries({ queryKey: ['tracking-credits'] });
+      toast.success('Shipment added');
     },
     onError: (err: any) => {
       toast.error(err?.response?.data?.message || 'Failed to add shipment');
@@ -108,7 +112,9 @@ export function useBulkImportShipments() {
     mutationFn: (file: File) => shipmentsApi.bulkImport(file),
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['shipments'] });
+      queryClient.invalidateQueries({ queryKey: ['tracking-credits'] });
       if (result.imported > 0) toast.success(`Imported ${result.imported} shipment(s)`);
+      if (result.untracked) toast.error(`${result.untracked} saved but not tracked - no TrackingMore credits left`, { duration: 10000 });
       if (result.failed.length > 0) toast.error(`${result.failed.length} row(s) failed - see details`);
     },
     onError: (err: any) => {

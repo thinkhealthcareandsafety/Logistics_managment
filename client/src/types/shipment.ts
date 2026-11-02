@@ -176,6 +176,8 @@ export interface LabelDraft {
 
 export interface BulkImportResult {
   imported: number;
+  /** Saved but not registered with TrackingMore - its credits ran out. */
+  untracked?: number;
   failed: { row: number; trackingNumber: string; error: string }[];
   totalRows: number;
   expectedColumns: string[];

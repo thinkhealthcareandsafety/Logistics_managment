@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { useBulkImportShipments } from '../hooks/useShipments';
 import type { BulkImportResult } from '../types/shipment';
 import { Spinner } from './ui/Loading';
+import { CreditCostNote } from './TrackingCredits';
 
 const SAMPLE_CSV = `tracking_number,carrier_code,product_name,sku,quantity,category,customer_name,customer_email,customer_phone,customer_address,delivery_city,delivery_state,delivery_pincode,weight_kg,freight,shipping_date,estimated_delivery
 26043200316922,shreemaruticourier,N95 Respirator Masks,PPE-N95-050,20,PPE,Apollo Diagnostics,procurement@apollodx.example,+91 98765 43210,"12, Residency Road",Bengaluru,Karnataka,560025,6.5,420,2026-09-20,2026-09-25
@@ -22,6 +23,8 @@ export function BulkImportDialog({ onClose }: { onClose: () => void }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [result, setResult] = useState<BulkImportResult | null>(null);
+  // Rows in the chosen file - each new AWB in it uses a TrackingMore credit.
+  const [rowCount, setRowCount] = useState(0);
   const bulkImport = useBulkImportShipments();
 
   async function handleImport() {
@@ -57,7 +60,14 @@ export function BulkImportDialog({ onClose }: { onClose: () => void }) {
           type="file"
           accept=".csv,text/csv"
           onChange={(e) => {
-            setSelectedFile(e.target.files?.[0] || null);
+            const file = e.target.files?.[0] || null;
+            setSelectedFile(file);
+            setRowCount(0);
+            file
+              ?.text()
+              .then((text) => setRowCount(Math.max(0, text.split(/?
+/).filter((l) => l.trim()).length - 1)))
+              .catch(() => {});
             setResult(null);
           }}
           className="input"
@@ -66,6 +76,9 @@ export function BulkImportDialog({ onClose }: { onClose: () => void }) {
         {result && (
           <div className="mt-4 space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
             <p className="font-medium text-emerald-700">{result.imported} of {result.totalRows} row(s) imported.</p>
+            {!!result.untracked && (
+              <p className="font-medium text-red-700">{result.untracked} saved but not tracked - no TrackingMore credits left.</p>
+            )}
             {result.failed.length > 0 && (
               <div>
                 <p className="font-medium text-red-600">{result.failed.length} row(s) failed:</p>
@@ -78,6 +91,12 @@ export function BulkImportDialog({ onClose }: { onClose: () => void }) {
                 </ul>
               </div>
             )}
+          </div>
+        )}
+
+        {!result && (
+          <div className="mt-3">
+            <CreditCostNote count={rowCount || undefined} />
           </div>
         )}
 

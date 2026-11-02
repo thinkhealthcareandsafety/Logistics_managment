@@ -17,8 +17,9 @@ export const shipmentsApi = {
 
   get: (id: string) => apiClient.get<{ shipment: Shipment }>(`/shipments/${id}`).then((r) => r.data.shipment),
 
+  /** `warning` is set when it was saved but not tracked (no TrackingMore credits left). */
   create: (data: CreateShipmentInput) =>
-    apiClient.post<{ shipment: Shipment }>('/shipments', data).then((r) => r.data.shipment),
+    apiClient.post<{ shipment: Shipment; warning?: string }>('/shipments', data).then((r) => r.data),
 
   update: (id: string, data: ShipmentUpdate) =>
     apiClient.patch<{ shipment: Shipment }>(`/shipments/${id}`, data).then((r) => r.data.shipment),

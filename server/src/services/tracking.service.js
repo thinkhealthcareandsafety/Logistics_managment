@@ -1,4 +1,5 @@
 const Shipment = require('../models/Shipment');
+const User = require('../models/User');
 const { getAdapterForCarrier } = require('../adapters');
 const { emitShipmentUpdate } = require('../sockets');
 const { notifyStatusChange } = require('./notification.service');
@@ -19,17 +20,29 @@ async function registerShipment(payload, userId) {
   await deductForShipment(shipment, userId);
 
   const adapter = getAdapterForCarrier(shipment.carrierCode);
-  const { externalId } = await adapter.createTracking(shipment);
-  if (externalId) {
-    shipment.trackingMoreId = externalId;
-    await shipment.save();
+  const byName = userId ? (await User.findById(userId, 'name').lean())?.name || '' : '';
+  let registered = true;
+  try {
+    const { externalId } = await adapter.createTracking(shipment, { byName });
+    if (externalId) {
+      shipment.trackingMoreId = externalId;
+      await shipment.save();
+    }
+  } catch (err) {
+    // No TrackingMore credits left: the shipment is still saved, just not tracked yet.
+    if (!err.isCredit) throw err;
+    registered = false;
+    shipment.$locals.trackingWarning = err.message;
+    logger.warn(`${shipment.trackingNumber} saved but not registered: ${err.message}`);
   }
 
   // Best-effort initial fetch so the shipment doesn't sit empty until the next cron tick.
-  try {
-    await refreshShipment(shipment);
-  } catch (err) {
-    logger.warn(`Initial refresh failed for ${shipment.trackingNumber}: ${err.message}`);
+  if (registered) {
+    try {
+      await refreshShipment(shipment);
+    } catch (err) {
+      logger.warn(`Initial refresh failed for ${shipment.trackingNumber}: ${err.message}`);
+    }
   }
 
   // The customer hears it's booked, with the AWB, courier and live tracking link.
@@ -216,8 +229,11 @@ async function refreshBatch(shipments, { background = true } = {}) {
       const tried = shipment.trackingRegisterTriedAt;
       if (tried && Date.now() - new Date(tried).getTime() < REGISTER_RETRY_MS) continue;
       await Shipment.updateOne({ _id: shipment._id }, { $set: { trackingRegisterTriedAt: new Date() } });
-      await adapter.createTracking(shipment);
+      await adapter.createTracking(shipment, { background });
     } catch (err) {
+      // Registering costs a TrackingMore credit - the hourly check only does it when
+      // switched on, and never takes the last few. Not a failure, just a stop.
+      if (err.isCredit) break;
       failed += 1;
       logger.warn(`Refresh failed for ${shipment.trackingNumber}: ${err.message}`);
       if (err.isBudget) break; // today's limit is used up - the rest wait for tomorrow

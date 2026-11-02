@@ -221,7 +221,7 @@ async function backfillDeliveryDates(userId) {
               setDelivered(shipment, shipment.shippingDate, 'hand delivery, same day');
               backfill.sameDay += 1;
             } else if (!NOT_TRACKABLE.includes(shipment.carrierCode) && /\d{6,}/.test(shipment.trackingNumber)) {
-              const { checkpoints, route } = await getAdapterForCarrier(shipment.carrierCode).refreshTracking(shipment);
+              const { checkpoints, route } = await getAdapterForCarrier(shipment.carrierCode).refreshTracking(shipment, { source: 'delivery-dates' });
               const scan = [...checkpoints].reverse().find((c) => c.status === 'delivered');
               const at = scan?.checkpointTime || route?.deliveredAt;
               if (route && Object.entries(route).some(([k, v]) => k !== 'weightKg' && v)) {

@@ -76,16 +76,18 @@ const batchKey = (trackingNumber, courierCode) => `${String(trackingNumber).trim
  * @type {import('./trackingAdapter.interface').TrackingAdapter}
  */
 const trackingMoreAdapter = {
-  async createTracking(shipment) {
+  async createTracking(shipment, { background = false, byName = '' } = {}) {
     try {
       const result = await trackingMoreClient.createTracking({
         trackingNumber: shipment.trackingNumber,
         carrierCode: shipment.carrierCode,
         extra: await requiredExtras(shipment),
+        credit: { shipmentId: shipment._id, byName, background, source: background ? 'background' : 'new-shipment' },
       });
       return { externalId: result?.data?.id || '' };
     } catch (err) {
-      if (err.isBudget) throw err; // today's TrackingMore limit - not an "already exists"
+      // Today's call limit, or no TrackingMore credits left - not an "already exists".
+      if (err.isBudget || err.isCredit) throw err;
       // TrackingMore returns a 4009-style "already exists" error if it's already tracked
       // (e.g. re-adding a shipment) - that's fine, refreshTracking will still work.
       logger.warn(`createTracking: ${err.message} (continuing, tracking may already exist)`);
@@ -114,7 +116,7 @@ const trackingMoreAdapter = {
     return out;
   },
 
-  async refreshTracking(shipment) {
+  async refreshTracking(shipment, { source = 'refresh' } = {}) {
     let result;
     try {
       result = await trackingMoreClient.getTracking({
@@ -134,6 +136,7 @@ const trackingMoreAdapter = {
         trackingNumber: shipment.trackingNumber,
         carrierCode: shipment.carrierCode,
         extra: await requiredExtras(shipment),
+        credit: { shipmentId: shipment._id, source },
       });
       result = await trackingMoreClient.getTracking({
         trackingNumber: shipment.trackingNumber,

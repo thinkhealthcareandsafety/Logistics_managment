@@ -54,4 +54,10 @@ function emitNotification(userId, notification) {
   io.to(userRoom(userId)).emit('notification:new', notification);
 }
 
-module.exports = { initSocket, emitShipmentUpdate, emitNotification };
+/** Pushes something every signed-in screen shows (e.g. TrackingMore credits left). */
+function emitAll(event, payload) {
+  if (!io) return;
+  io.emit(event, payload);
+}
+
+module.exports = { initSocket, emitShipmentUpdate, emitNotification, emitAll };

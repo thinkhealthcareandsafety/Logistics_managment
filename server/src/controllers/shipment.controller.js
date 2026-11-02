@@ -41,7 +41,8 @@ const createShipment = asyncHandler(async (req, res) => {
     req.userId
   );
 
-  res.status(201).json({ shipment });
+  // Saved but not tracked: no TrackingMore credits were left.
+  res.status(201).json({ shipment, warning: shipment.$locals.trackingWarning || undefined });
 });
 
 const listShipments = asyncHandler(async (req, res) => {
@@ -326,6 +327,7 @@ const bulkImportShipments = asyncHandler(async (req, res) => {
 
   const failed = [];
   let imported = 0;
+  let untracked = 0;
 
   // Sequential on purpose - a few AWB units/week means there's no throughput need to
   // parallelize, and it keeps us polite to TrackingMore's rate limits per row.
@@ -336,7 +338,7 @@ const bulkImportShipments = asyncHandler(async (req, res) => {
       if (!row.tracking_number) {
         throw new Error('tracking_number is required');
       }
-      await registerShipment(
+      const created = await registerShipment(
         {
           trackingNumber: row.tracking_number,
           // Optional column; an unknown code fails just this row, with the reason.
@@ -369,12 +371,13 @@ const bulkImportShipments = asyncHandler(async (req, res) => {
         req.userId
       );
       imported += 1;
+      if (created.$locals.trackingWarning) untracked += 1;
     } catch (err) {
       failed.push({ row: rowNumber, trackingNumber: row.tracking_number || '(missing)', error: err.message });
     }
   }
 
-  res.status(207).json({ imported, failed, totalRows: rows.length, expectedColumns: CSV_COLUMNS });
+  res.status(207).json({ imported, untracked, failed, totalRows: rows.length, expectedColumns: CSV_COLUMNS });
 });
 
 /** Back-fill from the logistics master sheet (JSON rows, up to 200 per call). */

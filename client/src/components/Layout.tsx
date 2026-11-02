@@ -10,6 +10,7 @@ import { Menu, MenuDivider, MenuItem } from './Menu';
 import { ErrorBoundary } from './ErrorBoundary';
 import { getInitials } from '../utils/avatar';
 import { BrandLockup } from './ui/BrandMark';
+import { CreditsPill } from './TrackingCredits';
 
 import { RouteSkeleton } from './skeletons/PageSkeletons';
 import { TopProgress } from './ui/TopProgress';
@@ -78,6 +79,7 @@ export function Layout() {
           </div>
 
           <div className="flex items-center gap-1.5">
+            <CreditsPill />
             <NotificationBell />
             <Menu
               label="Account"

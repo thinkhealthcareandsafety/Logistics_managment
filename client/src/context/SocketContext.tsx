@@ -33,6 +33,11 @@ export function SocketProvider({ children }: { children: ReactNode }) {
       queryClient.invalidateQueries({ queryKey: ['analytics'] });
     });
 
+    // A TrackingMore credit was spent (or the plan changed) - every header updates at once.
+    socket.on('credits:updated', () => {
+      queryClient.invalidateQueries({ queryKey: ['tracking-credits'] });
+    });
+
     socket.on('notification:new', (notification: AppNotification) => {
       queryClient.invalidateQueries({ queryKey: ['notifications'] });
       // Stock arrived: refresh the sheet so the new count shows straight away.

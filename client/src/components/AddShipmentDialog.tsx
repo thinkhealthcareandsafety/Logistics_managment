@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import clsx from 'clsx';
 import { useCreateShipment } from '../hooks/useShipments';
+import { CreditCostNote } from './TrackingCredits';
 import { FormField, Modal } from './Modal';
 import { AddressFields, EMPTY_ADDRESS } from './AddressFields';
 import { CourierPicker } from './CourierPicker';
@@ -215,6 +216,9 @@ export function AddShipmentDialog({ onClose, initialLabel }: { onClose: () => vo
       onClose={onClose}
       footer={
         <>
+          <span className="mr-auto min-w-0">
+            <CreditCostNote />
+          </span>
           <button type="button" onClick={onClose} className="btn-secondary h-9 px-3 py-0 text-[13px]">
             Cancel
           </button>
