@@ -65,8 +65,7 @@ export function BulkImportDialog({ onClose }: { onClose: () => void }) {
             setRowCount(0);
             file
               ?.text()
-              .then((text) => setRowCount(Math.max(0, text.split(/?
-/).filter((l) => l.trim()).length - 1)))
+              .then((text) => setRowCount(Math.max(0, text.split(/\r?\n/).filter((l) => l.trim()).length - 1)))
               .catch(() => {});
             setResult(null);
           }}
