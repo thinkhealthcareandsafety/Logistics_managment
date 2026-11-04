@@ -219,7 +219,8 @@ function ApiUsageSection() {
         <Spinner />
       ) : (
         <ul className="space-y-4">
-          {data.apis.map((a) => {
+          {/* Gemini is hidden from this list for now - it still runs, under the same limit. */}
+          {data.apis.filter((a) => a.provider !== 'gemini').map((a) => {
             const pct = Math.min(100, Math.round((a.used / Math.max(1, a.limit)) * 100));
             return (
               <li key={a.provider}>
