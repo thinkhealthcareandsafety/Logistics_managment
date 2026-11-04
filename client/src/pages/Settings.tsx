@@ -219,14 +219,14 @@ function ApiUsageSection() {
         <Spinner />
       ) : (
         <ul className="space-y-4">
-          {/* Gemini is hidden from this list for now - it still runs, under the same limit. */}
-          {data.apis.filter((a) => a.provider !== 'gemini').map((a) => {
+          {data.apis.map((a) => {
             const pct = Math.min(100, Math.round((a.used / Math.max(1, a.limit)) * 100));
             return (
               <li key={a.provider}>
                 <div className="flex items-baseline justify-between gap-3 text-[13px]">
                   <span className="font-medium text-slate-800">
                     {a.name}
+                    {a.provider === 'gemini' && <span className="ml-1 font-normal text-slate-500">(label scanning)</span>}
                     {!a.configured && <span className="ml-2 text-[12px] font-normal text-slate-400">no key set</span>}
                   </span>
                   <span className="tabular-nums text-slate-600">
