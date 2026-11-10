@@ -12,7 +12,9 @@ const logger = require('../config/logger');
  */
 const PROVIDERS = {
   gemini: { name: 'Gemini', env: 'GEMINI_DAILY_LIMIT', reserve: 15 },
-  trackingmore: { name: 'TrackingMore', env: 'TRACKINGMORE_DAILY_LIMIT', reserve: 10 },
+  // Lookups cost no credits (only registering a new AWB does, and those are capped by
+  // the plan's credits - services/trackingCredits.service), so this is only a safety net.
+  trackingmore: { name: 'TrackingMore', env: 'TRACKINGMORE_DAILY_LIMIT', reserve: 50, default: 400 },
   whatsapp: { name: 'WhatsApp (Anantya)', env: 'WHATSAPP_API_DAILY_LIMIT', reserve: 0 },
   // Free (part of Zoho Books), but Zoho caps calls a day and the stock sync needs most of them.
   zohoInvoices: { name: 'Zoho Books invoice history (free)', env: 'ZOHO_INVOICE_READS_PER_DAY', reserve: 0, default: 100 },
