@@ -7,6 +7,7 @@ const { notifyCustomerDelivered, notifyCustomerBooked, notifyCustomerStage } = r
 const logger = require('../config/logger');
 const { deductForShipment } = require('./stock.service');
 const { syncDeliveredAt } = require('../utils/deliveredAt');
+const { PROGRESS } = require('../utils/statusMap');
 
 /** Creates a shipment record and registers it with the appropriate tracking adapter. */
 async function registerShipment(payload, userId) {
@@ -56,6 +57,22 @@ async function registerShipment(payload, userId) {
 }
 
 /**
+ * A shipment still on "pending" moves to the furthest stage the courier reports - its
+ * latest scan, or TrackingMore's verdict on the whole shipment. Only ever forward from
+ * pending, so a status set by hand (or an exception) is never overridden. Returns
+ * whether it moved.
+ */
+function promoteStatus(shipment, candidates) {
+  if (shipment.status !== 'pending') return false;
+  const best = candidates
+    .filter((s) => s && PROGRESS[s] > 0)
+    .sort((a, b) => PROGRESS[b] - PROGRESS[a])[0];
+  if (!best) return false;
+  shipment.status = best;
+  return true;
+}
+
+/**
  * Stores the courier's own view of the route (destination city/state etc.) and fills
  * gaps the booking left - never overwrites what someone entered by hand.
  */
@@ -75,15 +92,17 @@ function applyCarrierRoute(shipment, route) {
 async function refreshShipment(shipment, { silent = false, prefetched = null } = {}) {
   const adapter = getAdapterForCarrier(shipment.carrierCode);
   // `prefetched`: this shipment's result from a batched lookup (no extra API call).
-  const { checkpoints, route } = prefetched || (await adapter.refreshTracking(shipment));
+  const { checkpoints, route, overall } = prefetched || (await adapter.refreshTracking(shipment));
 
   shipment.lastCheckedAt = new Date();
   applyCarrierRoute(shipment, route);
   const previousStatus = shipment.status;
 
   if (checkpoints.length === 0) {
+    const promoted = promoteStatus(shipment, [overall]);
     syncDeliveredAt(shipment);
     await shipment.save();
+    if (promoted) emitShipmentUpdate(shipment.createdBy.toString(), shipment);
     return { shipment, newCheckpoints: [] };
   }
 
@@ -101,6 +120,10 @@ async function refreshShipment(shipment, { silent = false, prefetched = null } =
     shipment.status = latest.status;
     shipment.currentLocation = latest.location || shipment.currentLocation;
   }
+  // Still "pending" though the courier says it's moving (no new scans needed for this).
+  const freshest = checkpoints[checkpoints.length - 1];
+  const promoted = promoteStatus(shipment, [freshest.status, overall]);
+  if (promoted && !shipment.currentLocation) shipment.currentLocation = freshest.location || '';
   // Every status update carries the delivered date with it (and also catches a
   // delivered shipment whose date was never filled in).
   const deliveredChanged = syncDeliveredAt(shipment);
@@ -124,7 +147,7 @@ async function refreshShipment(shipment, { silent = false, prefetched = null } =
 
   await shipment.save();
 
-  if (newCheckpoints.length > 0 || deliveredChanged) {
+  if (newCheckpoints.length > 0 || deliveredChanged || promoted) {
     emitShipmentUpdate(shipment.createdBy.toString(), shipment);
   }
   if (!silent && newCheckpoints.length > 0) {
@@ -219,7 +242,9 @@ async function refreshBatch(shipments, { background = true } = {}) {
   let refreshed = 0;
   let failed = 0;
   for (const shipment of shipments) {
-    const prefetched = results.get(adapter.batchKey(shipment.trackingNumber, shipment.carrierCode));
+    const prefetched =
+      results.get(adapter.batchKey(shipment.trackingNumber, shipment.carrierCode)) ||
+      results.get(adapter.batchKey(shipment.trackingNumber, '*'));
     try {
       if (prefetched) {
         await refreshShipment(shipment, { prefetched });
@@ -242,4 +267,41 @@ async function refreshBatch(shipments, { background = true } = {}) {
   return { refreshed, failed };
 }
 
-module.exports = { registerShipment, refreshShipment, refreshBatch, backfillDeliveredAt, correctedYear };
+/**
+ * Fixes a courier or AWB picked by mistake. The old courier's scans and route are
+ * cleared (hand-entered updates stay until the new courier's scans replace them), and
+ * the shipment is registered again under the right courier - 1 TrackingMore credit.
+ * Returns { shipment, warning }.
+ */
+async function changeCourier(shipment, { carrierCode, carrierName, trackingNumber }, userId) {
+  shipment.carrierCode = carrierCode;
+  shipment.carrierName = carrierName;
+  shipment.trackingNumber = trackingNumber;
+  shipment.checkpoints = shipment.checkpoints.filter((c) => c.source !== 'trackingmore');
+  const last = shipment.checkpoints[shipment.checkpoints.length - 1];
+  shipment.status = last?.status || 'pending';
+  shipment.currentLocation = last?.location || '';
+  shipment.carrierRoute = {};
+  shipment.trackingMoreId = '';
+  shipment.trackingRegisterTriedAt = null;
+  shipment.lastCheckedAt = null;
+  syncDeliveredAt(shipment);
+  await shipment.save();
+
+  const byName = userId ? (await User.findById(userId, 'name').lean())?.name || '' : '';
+  let warning;
+  try {
+    const { externalId } = await getAdapterForCarrier(carrierCode).createTracking(shipment, { byName });
+    if (externalId) shipment.trackingMoreId = externalId;
+    await shipment.save();
+    await refreshShipment(shipment).catch((err) => logger.warn(`Refresh after courier change failed for ${trackingNumber}: ${err.message}`));
+  } catch (err) {
+    if (!err.isCredit && !err.isBudget) throw err;
+    warning = `Saved, but not tracked yet: ${err.message}`;
+  }
+  logger.info(`Courier/AWB changed to ${carrierName} ${trackingNumber} on shipment ${shipment._id} by ${byName || userId}`);
+  emitShipmentUpdate(shipment.createdBy.toString(), shipment);
+  return { shipment, warning };
+}
+
+module.exports = { registerShipment, refreshShipment, refreshBatch, backfillDeliveredAt, correctedYear, changeCourier };

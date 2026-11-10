@@ -36,7 +36,18 @@ function mapTrackingMoreStatus(rawStatus, rawSubstatus = '', description = '') {
   }
 
   const normalized = (rawStatus || '').toLowerCase();
-  return TRACKINGMORE_STATUS_MAP[normalized] || 'pending';
+  const mapped = TRACKINGMORE_STATUS_MAP[normalized] || 'pending';
+  // Smaller couriers (e.g. Mark Express) send scans with no per-scan status, or one
+  // stuck on "pending" - the words still say the parcel is moving.
+  if (mapped === 'pending' && MOVING.test(text)) return 'in_transit';
+  return mapped;
 }
 
-module.exports = { STATUSES, mapTrackingMoreStatus };
+/** Scan wording that means the parcel has left the sender (not "pickup scheduled" / "booked"). */
+const MOVING =
+  /\b(in[\s-]?transit|dispatched|departed|arrived|reached|forwarded|picked[\s-]?up|pickup (done|completed|successful)|connected (to|at)|received at|bagged|out from)\b/;
+
+/** How far along each status is - a shipment never moves back from what the courier has confirmed. */
+const PROGRESS = { pending: 0, in_transit: 1, out_for_delivery: 2, delivered: 3 };
+
+module.exports = { STATUSES, mapTrackingMoreStatus, PROGRESS };

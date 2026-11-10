@@ -13,6 +13,7 @@ import { CustomerFeedbackPanel } from '../components/CustomerFeedbackPanel';
 import { DeliveryReceiptCard } from '../components/receipt/DeliveryReceiptCard';
 import { Menu, MenuDivider, MenuItem } from '../components/Menu';
 import { EditDeliveryDialog } from '../components/EditDeliveryDialog';
+import { ChangeCourierDialog } from '../components/ChangeCourierDialog';
 import { ManualStatusDialog } from '../components/ManualStatusDialog';
 import { CourierLogo } from '../components/CourierPicker';
 import { useCarriers } from '../hooks/useCarriers';
@@ -42,6 +43,7 @@ export function ShipmentDetail() {
   const del = useDeleteShipment();
   const [editingDelivery, setEditingDelivery] = useState(false);
   const [statusDialog, setStatusDialog] = useState(false);
+  const [changingCourier, setChangingCourier] = useState(false);
 
   if (isLoading) return <DetailSkeleton />;
   if (!shipment) {
@@ -116,7 +118,7 @@ export function ShipmentDetail() {
                 </>
               )}
             </p>
-            <CourierLine shipment={s} />
+            <CourierLine shipment={s} onChange={() => setChangingCourier(true)} />
           </div>
 
           <div className="flex shrink-0 items-center gap-2">
@@ -162,6 +164,9 @@ export function ShipmentDetail() {
               </MenuItem>
               <MenuItem onSelect={() => setEditingDelivery(true)} icon={<EditIcon />}>
                 Edit shipment details
+              </MenuItem>
+              <MenuItem onSelect={() => setChangingCourier(true)} icon={<EditIcon />}>
+                Change courier or AWB
               </MenuItem>
               <MenuItem onSelect={() => setStatusDialog(true)} icon={<CheckIcon />}>
                 Update status by hand
@@ -305,14 +310,24 @@ export function ShipmentDetail() {
         </div>
       </div>
 
-      {editingDelivery && <EditDeliveryDialog shipment={s} onClose={() => setEditingDelivery(false)} />}
+      {editingDelivery && (
+        <EditDeliveryDialog
+          shipment={s}
+          onClose={() => setEditingDelivery(false)}
+          onChangeCourier={() => {
+            setEditingDelivery(false);
+            setChangingCourier(true);
+          }}
+        />
+      )}
+      {changingCourier && <ChangeCourierDialog shipment={s} onClose={() => setChangingCourier(false)} />}
       {statusDialog && <ManualStatusDialog shipment={s} onClose={() => setStatusDialog(false)} />}
     </div>
   );
 }
 
 /** Which courier, with the contact details TrackingMore lists for it - for chasing. */
-function CourierLine({ shipment }: { shipment: Shipment }) {
+function CourierLine({ shipment, onChange }: { shipment: Shipment; onChange: () => void }) {
   const { byCode } = useCarriers();
   const courier = byCode.get(shipment.carrierCode);
   const phone = courier?.phone?.split(/[,;/]/)[0]?.trim();
@@ -322,6 +337,9 @@ function CourierLine({ shipment }: { shipment: Shipment }) {
         <CourierLogo courier={courier ?? { name: shipment.carrierName, logo: '' }} size={16} />
         {shipment.carrierName || shipment.carrierCode}
       </span>
+      <button type="button" onClick={onChange} className="font-medium text-brand-700 hover:text-brand-900 hover:underline">
+        Change
+      </button>
       {phone && (
         <>
           <span aria-hidden className="text-slate-300">·</span>

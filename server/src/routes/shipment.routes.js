@@ -28,6 +28,7 @@ const {
   listShipments,
   getShipment,
   updateShipment,
+  changeShipmentCourier,
   deleteShipment,
   refreshShipmentNow,
   getInvoicePdf,
@@ -76,6 +77,7 @@ router.get('/:id/invoice.pdf', invoiceLimiter, getInvoicePdf);
 router.get('/:id/invoice-link', invoiceLimiter, getInvoiceLink);
 router.get('/:id', getShipment);
 router.patch('/:id', updateShipment);
+router.post('/:id/courier', costlyLimiter, changeShipmentCourier);
 router.delete('/:id', deleteShipment);
 router.post('/:id/refresh', costlyLimiter, refreshShipmentNow);
 router.post('/:id/notes', addExceptionNote);

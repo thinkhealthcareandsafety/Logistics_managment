@@ -1,7 +1,7 @@
 const { parse } = require('csv-parse/sync');
 const Shipment = require('../models/Shipment');
 const User = require('../models/User');
-const { registerShipment, refreshShipment } = require('../services/tracking.service');
+const { registerShipment, refreshShipment, changeCourier } = require('../services/tracking.service');
 const { notifyCustomerDelivered } = require('../services/customerNotification.service');
 const { resolveCarrier } = require('../services/courierCatalog.service');
 const { extractShipmentFromDocument } = require('../services/labelExtraction.service');
@@ -168,6 +168,30 @@ const updateShipment = asyncHandler(async (req, res) => {
   }
   await shipment.save();
   res.json({ shipment });
+});
+
+/** Wrong courier or AWB picked when adding: correct it and track it again (1 TrackingMore credit). */
+const changeShipmentCourier = asyncHandler(async (req, res) => {
+  const shipment = await Shipment.findOne({ _id: req.params.id, createdBy: req.userId });
+  if (!shipment) throw new ApiError(404, 'Shipment not found');
+
+  const trackingNumber = String(req.body.trackingNumber ?? shipment.trackingNumber).trim();
+  if (!trackingNumber) throw new ApiError(400, 'Enter the AWB / tracking number');
+  if (trackingNumber.length > 60) throw new ApiError(400, 'That tracking number is too long');
+  const carrier = await resolveCarrier(req.body.carrierCode || shipment.carrierCode);
+  if (carrier.carrierCode === shipment.carrierCode && trackingNumber === shipment.trackingNumber) {
+    throw new ApiError(400, 'Nothing changed - pick a different courier or AWB');
+  }
+  const duplicate = await Shipment.exists({
+    _id: { $ne: shipment._id },
+    createdBy: req.userId,
+    trackingNumber,
+    carrierCode: carrier.carrierCode,
+  });
+  if (duplicate) throw new ApiError(409, `${trackingNumber} is already being tracked with ${carrier.carrierName}`);
+
+  const { shipment: updated, warning } = await changeCourier(shipment, { ...carrier, trackingNumber }, req.userId);
+  res.json({ shipment: updated, warning });
 });
 
 /** Fills in delivery dates the sheet left blank - from the courier where it can. */
@@ -539,6 +563,7 @@ module.exports = {
   warmShipmentLists,
   getShipment,
   updateShipment,
+  changeShipmentCourier,
   deleteShipment,
   refreshShipmentNow,
   refreshAllShipments,

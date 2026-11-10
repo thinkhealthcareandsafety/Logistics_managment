@@ -1,6 +1,7 @@
 const trackingMoreClient = require('../services/trackingmore.client');
 const { findCourier } = require('../services/courierCatalog.service');
 const { normalizeTrackingMoreCheckpoints } = require('../utils/normalizeCheckpoints');
+const { mapTrackingMoreStatus } = require('../utils/statusMap');
 const logger = require('../config/logger');
 
 /** TrackingMore sends places in capitals ("DELHI") - show them the way people write them. */
@@ -64,6 +65,18 @@ function isNotRegistered(err) {
   return text.includes('no exists') || text.includes('not exist') || text.includes('create a tracking');
 }
 
+/**
+ * One tracking's scans and route, plus TrackingMore's own verdict on the whole
+ * shipment (`overall`) - some couriers' scans carry no status of their own, so the
+ * shipment would otherwise sit on "pending" while it's actually moving.
+ */
+function toResult(tracking) {
+  const overall = tracking.delivery_status
+    ? mapTrackingMoreStatus(tracking.delivery_status, tracking.substatus, tracking.latest_event || '')
+    : null;
+  return { checkpoints: normalizeTrackingMoreCheckpoints(tracking), route: extractRoute(tracking), overall };
+}
+
 /** How refreshMany's results are looked up: tracking number + courier. */
 const batchKey = (trackingNumber, courierCode) => `${String(trackingNumber).trim().toUpperCase()}|${String(courierCode || '').toLowerCase()}`;
 
@@ -107,10 +120,12 @@ const trackingMoreAdapter = {
       const result = await trackingMoreClient.getTrackings(numbers.slice(i, i + trackingMoreClient.BATCH_SIZE));
       const list = Array.isArray(result?.data) ? result.data : result?.data ? [result.data] : [];
       for (const tracking of list) {
-        out.set(batchKey(tracking.tracking_number, tracking.courier_code), {
-          checkpoints: normalizeTrackingMoreCheckpoints(tracking),
-          route: extractRoute(tracking),
-        });
+        const result = toResult(tracking);
+        out.set(batchKey(tracking.tracking_number, tracking.courier_code), result);
+        // Also by AWB alone: TrackingMore can answer under a different spelling of the
+        // courier code, and that shipment must not be skipped hour after hour.
+        const byNumber = batchKey(tracking.tracking_number, '*');
+        out.set(byNumber, out.has(byNumber) ? null : result); // null = two couriers, ambiguous
       }
     }
     return out;
@@ -147,9 +162,9 @@ const trackingMoreAdapter = {
     // object for some single-number/id lookups - handle both shapes defensively.
     const tracking = Array.isArray(result?.data) ? result.data[0] : result?.data;
     if (!tracking) {
-      return { checkpoints: [], route: null };
+      return { checkpoints: [], route: null, overall: null };
     }
-    return { checkpoints: normalizeTrackingMoreCheckpoints(tracking), route: extractRoute(tracking) };
+    return toResult(tracking);
   },
 };
 

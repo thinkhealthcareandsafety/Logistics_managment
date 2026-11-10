@@ -26,6 +26,10 @@ export const shipmentsApi = {
 
   remove: (id: string) => apiClient.delete(`/shipments/${id}`),
 
+  /** Wrong courier or AWB picked when adding - re-tracks it (1 TrackingMore credit). */
+  changeCourier: (id: string, data: { carrierCode: string; trackingNumber: string }) =>
+    apiClient.post<{ shipment: Shipment; warning?: string }>(`/shipments/${id}/courier`, data).then((r) => r.data),
+
   refresh: (id: string) =>
     apiClient.post<{ shipment: Shipment }>(`/shipments/${id}/refresh`).then((r) => r.data.shipment),
 

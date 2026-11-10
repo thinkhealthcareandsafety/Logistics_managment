@@ -10,7 +10,16 @@ import { Spinner } from './ui/Loading';
 const toNumberOrNull = (v: string) => (v.trim() === '' ? null : Number(v));
 
 /** Weight, freight and the client's delivery address - all optional, all editable later. */
-export function EditDeliveryDialog({ shipment, onClose }: { shipment: Shipment; onClose: () => void }) {
+export function EditDeliveryDialog({
+  shipment,
+  onClose,
+  onChangeCourier,
+}: {
+  shipment: Shipment;
+  onClose: () => void;
+  /** Opens "Change courier or AWB" - those re-track the shipment, so they have their own window. */
+  onChangeCourier?: () => void;
+}) {
   const update = useUpdateShipment();
   const [weight, setWeight] = useState(shipment.weightKg != null ? String(shipment.weightKg) : '');
   const [freight, setFreight] = useState(shipment.freightAmount != null ? String(shipment.freightAmount) : '');
@@ -108,6 +117,17 @@ export function EditDeliveryDialog({ shipment, onClose }: { shipment: Shipment; 
       }
     >
       <form id="edit-delivery-form" onSubmit={submit} className="space-y-5">
+        {onChangeCourier && (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-slate-50 px-3 py-2.5 text-[13px]">
+            <span className="min-w-0 text-slate-600">
+              Courier &amp; AWB: <span className="font-semibold text-slate-900">{shipment.carrierName}</span> ·{' '}
+              <span className="tabular-nums">{shipment.trackingNumber}</span>
+            </span>
+            <button type="button" onClick={onChangeCourier} className="font-semibold text-brand-700 hover:text-brand-900 hover:underline">
+              Change courier or AWB →
+            </button>
+          </div>
+        )}
         <fieldset className="space-y-3">
           <legend className="text-[13px] font-semibold text-slate-900">Customer</legend>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
