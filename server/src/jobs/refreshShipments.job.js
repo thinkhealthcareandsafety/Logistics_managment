@@ -15,6 +15,10 @@ const TERMINAL_STATUSES = ['delivered'];
  * (services/apiBudget.js) with room left for new shipments and manual refreshes.
  */
 const POLL_EVERY_MS = 55 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
+/** Background calls kept for the once-a-day courier list refresh. */
+const SPARE_CALLS = 2;
+const { BATCH_SIZE } = require('../services/trackingmore.client');
 let lastPollAt = 0;
 
 async function runRefreshCycle() {
@@ -33,6 +37,17 @@ async function runRefreshCycle() {
     status: { $nin: TERMINAL_STATUSES },
   });
   if (dueShipments.length === 0) return;
+
+  // Paced to the day's background allowance: with many active shipments a poll costs
+  // several calls, and hourly polls would use the whole day up by the afternoon -
+  // leaving no calls for the rest of the day's polls or the courier list.
+  const budget = require('../services/apiBudget');
+  const callsPerPoll = Math.ceil(dueShipments.length / BATCH_SIZE);
+  const pollsPerDay = Math.max(1, Math.floor(Math.max(1, budget.backgroundAllowance('trackingmore') - SPARE_CALLS) / callsPerPoll));
+  const everyMs = Math.max(POLL_EVERY_MS, DAY_MS / pollsPerDay);
+  if (Date.now() - lastPollAt < everyMs) return;
+  const leftForBackground = (await budget.remaining('trackingmore')) - budget.PROVIDERS.trackingmore.reserve;
+  if (leftForBackground < callsPerPoll) return; // not enough left today for a whole poll
   lastPollAt = Date.now();
 
   logger.info(`Refresh cycle: checking ${dueShipments.length} shipment(s)`);

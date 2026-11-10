@@ -1,0 +1,434 @@
+[
+ {
+  "courier_code": "airwings-india",
+  "courier_name": "Airwings India",
+  "courier_country_iso2": "IN",
+  "courier_url": "http://www.airwingsindia.com/tracking.aspx",
+  "courier_phone": "+91-22-40051717",
+  "tracking_required_fields": []
+ },
+ {
+  "courier_code": "amazon-in",
+  "courier_name": "amazon-in",
+  "courier_country_iso2": "IN",
+  "courier_url": "https://track.amazon.in/tracking/******",
+  "courier_phone": "",
+  "tracking_required_fields": []
+ },
+ {
+  "courier_code": "atlantic",
+  "courier_name": "Atlantic International Express",
+  "courier_country_iso2": "IN",
+  "courier_url": "https://atlanticcourier.net/",
+  "courier_phone": "+91 8899 117 117",
+  "tracking_required_fields": []
+ },
+ {
+  "courier_code": "bluedart",
+  "courier_name": "Bluedart",
+  "courier_country_iso2": "IN",
+  "courier_url": "https://www.bluedart.com/web/guest/tracking",
+  "courier_phone": "1860 233 1234",
+  "tracking_required_fields": []
+ },
+ {
+  "courier_code": "bombax",
+  "courier_name": "bombax",
+  "courier_country_iso2": "IN",
+  "courier_url": "https://bombax.in/?ConsignmentNo=******",
+  "courier_phone": "+91 9555 684 684",
+  "tracking_required_fields": []
+ },
+ {
+  "courier_code": "bombino-express",
+  "courier_name": "Bombino Express",
+  "courier_country_iso2": "IN",
+  "courier_url": "https://bombinoexp.in/track.aspx?AwbNo=******",
+  "courier_phone": "",
+  "tracking_required_fields": []
+ },
+ {
+  "courier_code": "delcart-in",
+  "courier_name": "Delcart",
+  "courier_country_iso2": "IN",
+  "courier_url": "http://www.delcart.in/tracking_details_3.php",
+  "courier_phone": "+1 (800) 3000-2622",
+  "tracking_required_fields": []
+ },
+ {
+  "courier_code": "delhivery",
+  "courier_name": "Delhivery",
+  "courier_country_iso2": "IN",
+  "courier_url": "https://www.delhivery.com/",
+  "courier_phone": "+91 (124) 6719500",
+  "tracking_required_fields": []
+ },
+ {
+  "courier_code": "dotzot",
+  "courier_name": "Dotzot",
+  "courier_country_iso2": "IN",
+  "courier_url": "http://dotzot.in/index-web.html",
+  "courier_phone": "+91 33004444",
+  "tracking_required_fields": []
+ },
+ {
+  "courier_code": "dtdc",
+  "courier_name": "DTDC",
+  "courier_country_iso2": "IN",
+  "courier_url": "https://www.dtdc.com/track-your-shipment/?awb=******",
+  "courier_phone": "3300444",
+  "tracking_required_fields": []
+ },
+ {
+  "courier_code": "dtdc-plus",
+  "courier_name": "dtdc plus",
+  "courier_country_iso2": "IN",
+  "courier_url": "http://dtdc.com/track",
+  "courier_phone": "3300444",
+  "tracking_required_fields": []
+ },
+ {
+  "courier_code": "ecom-express",
+  "courier_name": "Ecom Express",
+  "courier_country_iso2": "IN",
+  "courier_url": "https://ecomexpress.in/tracking/?awb_field=******",
+  "courier_phone": "+91-8376888888",
+  "tracking_required_fields": []
+ },
+ {
+  "courier_code": "ekart",
+  "courier_name": "Ekart",
+  "courier_country_iso2": "IN",
+  "courier_url": "https://www.ekartlogistics.com/shipmenttrack/******",
+  "courier_phone": "+91 18004201111",
+  "tracking_required_fields": []
+ },
+ {
+  "courier_code": "first-flight",
+  "courier_name": "First Flight",
+  "courier_country_iso2": "IN",
+  "courier_url": "https://firstflight.net/domestictracking.php",
+  "courier_phone": "+91 022-39576666",
+  "tracking_required_fields": []
+ },
+ {
+  "courier_code": "gati-kwe",
+  "courier_name": "Gati-KWE",
+  "courier_country_iso2": "IN",
+  "courier_url": "https://www.gati.com/track-by-docket/",
+  "courier_phone": "+91 1800-180-4284",
+  "tracking_required_fields": []
+ },
+ {
+  "courier_code": "gmsworldwide",
+  "courier_name": "GMS Worldwide Express",
+  "courier_country_iso2": "IN",
+  "courier_url": "https://www.gmsworldwide.com/",
+  "courier_phone": "",
+  "tracking_required_fields": []
+ },
+ {
+  "courier_code": "goswift",
+  "courier_name": "Go Swift",
+  "courier_country_iso2": "IN",
+  "courier_url": "https://checkout.goswift.in/tracking",
+  "courier_phone": "",
+  "tracking_required_fields": []
+ },
+ {
+  "courier_code": "gojavas",
+  "courier_name": "GoJavas",
+  "courier_country_iso2": "IN",
+  "courier_url": "http://gojavas.com/docket_details.php?pop=docno&docno=******",
+  "courier_phone": "0124-4405730",
+  "tracking_required_fields": []
+ },
+ {
+  "courier_code": "grandslamexpress",
+  "courier_name": "Grand Slam Express",
+  "courier_country_iso2": "IN",
+  "courier_url": "http://icms.grandslamexpress.in/webtracking/WebTracking.aspx",
+  "courier_phone": "+91 22 2850 9877",
+  "tracking_required_fields": []
+ },
+ {
+  "courier_code": "india-post",
+  "courier_name": "India Post",
+  "courier_country_iso2": "IN",
+  "courier_url": "https://www.indiapost.gov.in/",
+  "courier_phone": "1800 266 6868",
+  "tracking_required_fields": []
+ },
+ {
+  "courier_code": "jetline-couriers",
+  "courier_name": "Jetline Couriers",
+  "courier_country_iso2": "IN",
+  "courier_url": "https://jetlinecouriers.in/track.aspx",
+  "courier_phone": "",
+  "tracking_required_fields": []
+ },
+ {
+  "courier_code": "lexship",
+  "courier_name": "Lexship",
+  "courier_country_iso2": "IN",
+  "courier_url": "",
+  "courier_phone": "+91 8660390631",
+  "tracking_required_fields": []
+ },
+ {
+  "courier_code": "madhur-couriers",
+  "courier_name": "madhur-couriers",
+  "courier_country_iso2": "IN",
+  "courier_url": "https://www.madhurcouriers.in/(S(1tkrac5ipfqkadybqcvniki3))/CNoteTracking",
+  "courier_phone": "",
+  "tracking_required_fields": []
+ },
+ {
+  "courier_code": "markexpress",
+  "courier_name": "Mark Express",
+  "courier_country_iso2": "IN",
+  "courier_url": "https://markexpress.co.in/",
+  "courier_phone": "",
+  "tracking_required_fields": []
+ },
+ {
+  "courier_code": "movin",
+  "courier_name": "Movin",
+  "courier_country_iso2": "IN",
+  "courier_url": "https://www.movin.in/shipment/track?tracking_id=******&tracking_type=shipment",
+  "courier_phone": "",
+  "tracking_required_fields": []
+ },
+ {
+  "courier_code": "overseas-logistics",
+  "courier_name": "Overseas Logistics",
+  "courier_country_iso2": "IN",
+  "courier_url": "http://www.overseaslogistics.in/tracking.aspx",
+  "courier_phone": "+91-11-47244444",
+  "tracking_required_fields": []
+ },
+ {
+  "courier_code": "pickrr",
+  "courier_name": "pickrr",
+  "courier_country_iso2": "IN",
+  "courier_url": "https://pickrr.com/tracking/#/?tracking_id=******",
+  "courier_phone": "",
+  "tracking_required_fields": []
+ },
+ {
+  "courier_code": "pidge",
+  "courier_name": "Pidge",
+  "courier_country_iso2": "IN",
+  "courier_url": "https://tracking.pidge.in/login",
+  "courier_phone": "+91-9319482670",
+  "tracking_required_fields": []
+ },
+ {
+  "courier_code": "pushpak-courier",
+  "courier_name": "pushpak-courier",
+  "courier_country_iso2": "IN",
+  "courier_url": "https://www.pushpakcourier.net/query.php",
+  "courier_phone": "+91 9214097167",
+  "tracking_required_fields": []
+ },
+ {
+  "courier_code": "rivigo",
+  "courier_name": "Rivigo",
+  "courier_country_iso2": "IN",
+  "courier_url": "https://tracking.mahindralogistics.com/support/",
+  "courier_phone": "",
+  "tracking_required_fields": []
+ },
+ {
+  "courier_code": "royal-international",
+  "courier_name": "Royal International",
+  "courier_country_iso2": "IN",
+  "courier_url": "http://www.royal-international.cc/",
+  "courier_phone": "852-53401851",
+  "tracking_required_fields": []
+ },
+ {
+  "courier_code": "safexpress",
+  "courier_name": "Safexpress",
+  "courier_country_iso2": "IN",
+  "courier_url": "http://www.safexpress.com/Portal/faces/TrackShipment.jspx?",
+  "courier_phone": "+911800113113",
+  "tracking_required_fields": []
+ },
+ {
+  "courier_code": "sap-express",
+  "courier_name": "Sap express",
+  "courier_country_iso2": "IN",
+  "courier_url": "https://www.sap-express.id/layanan/tracking/track",
+  "courier_phone": "021 2280 6611",
+  "tracking_required_fields": []
+ },
+ {
+  "courier_code": "shadowfax",
+  "courier_name": "shadowfax",
+  "courier_country_iso2": "IN",
+  "courier_url": "https://tracker.shadowfax.in/#/",
+  "courier_phone": "",
+  "tracking_required_fields": []
+ },
+ {
+  "courier_code": "shipglobal",
+  "courier_name": "ShipGlobal",
+  "courier_country_iso2": "IN",
+  "courier_url": "https://shipglobal.in/tracking/",
+  "courier_phone": "",
+  "tracking_required_fields": []
+ },
+ {
+  "courier_code": "shiprocket",
+  "courier_name": "Shiprocket",
+  "courier_country_iso2": "IN",
+  "courier_url": "https://www.shiprocket.in/shipment-tracking/",
+  "courier_phone": "",
+  "tracking_required_fields": []
+ },
+ {
+  "courier_code": "shreeanjanicourier",
+  "courier_name": "Shree Anjani Courier",
+  "courier_country_iso2": "IN",
+  "courier_url": "http://anjanicourier.in/Doc_Track.aspx?No=******",
+  "courier_phone": "",
+  "tracking_required_fields": []
+ },
+ {
+  "courier_code": "shree-mahabali-express",
+  "courier_name": "Shree Mahabali Express",
+  "courier_country_iso2": "IN",
+  "courier_url": "",
+  "courier_phone": "+91 (0261)2410414",
+  "tracking_required_fields": []
+ },
+ {
+  "courier_code": "shreemahavir",
+  "courier_name": "SHREE MAHAVIR EXPRESS SERVICES",
+  "courier_country_iso2": "IN",
+  "courier_url": "http://shreemahavircourier.com/",
+  "courier_phone": "",
+  "tracking_required_fields": []
+ },
+ {
+  "courier_code": "shreemaruticourier",
+  "courier_name": "Shree Maruti Courier",
+  "courier_country_iso2": "IN",
+  "courier_url": "https://shreemaruti.com/",
+  "courier_phone": "+91 9712 666 666",
+  "tracking_required_fields": []
+ },
+ {
+  "courier_code": "shree-nandan",
+  "courier_name": "Shree Nandan Courier",
+  "courier_country_iso2": "IN",
+  "courier_url": "https://www.shreenandancourier.com/",
+  "courier_phone": "",
+  "tracking_required_fields": []
+ },
+ {
+  "courier_code": "shree-tirupati",
+  "courier_name": "Shree Tirupati Courier",
+  "courier_country_iso2": "IN",
+  "courier_url": "http://www.shreetirupaticourier.net/",
+  "courier_phone": "+9102613995227",
+  "tracking_required_fields": []
+ },
+ {
+  "courier_code": "sm-express",
+  "courier_name": "SM Express",
+  "courier_country_iso2": "IN",
+  "courier_url": "https://smexpresslogistics.com/tracking-result/?reqCode=showTrackYourCosignmentPage&searchType=AWBNO&searchValue={tn}",
+  "courier_phone": "",
+  "tracking_required_fields": []
+ },
+ {
+  "courier_code": "smartr",
+  "courier_name": "Smartr Logistics",
+  "courier_country_iso2": "IN",
+  "courier_url": "",
+  "courier_phone": "1860-210-1999",
+  "tracking_required_fields": []
+ },
+ {
+  "courier_code": "spoton",
+  "courier_name": "Spoton",
+  "courier_country_iso2": "IN",
+  "courier_url": "",
+  "courier_phone": "1800 102 1414",
+  "tracking_required_fields": []
+ },
+ {
+  "courier_code": "st-courier",
+  "courier_name": "ST Courier",
+  "courier_country_iso2": "IN",
+  "courier_url": "https://stcourier.com/track/shipment",
+  "courier_phone": "",
+  "tracking_required_fields": []
+ },
+ {
+  "courier_code": "tci",
+  "courier_name": "TCI Express",
+  "courier_country_iso2": "IN",
+  "courier_url": "https://www.tciexpress.in/trackingdocket.asp",
+  "courier_phone": "+91 1800 2000 977",
+  "tracking_required_fields": []
+ },
+ {
+  "courier_code": "professional-couriers",
+  "courier_name": "The Professional Couriers",
+  "courier_country_iso2": "IN",
+  "courier_url": "",
+  "courier_phone": "+91-22-278 13309",
+  "tracking_required_fields": []
+ },
+ {
+  "courier_code": "time-bound",
+  "courier_name": "Timebound",
+  "courier_country_iso2": "IN",
+  "courier_url": "https://time-bound.com/Tracking.html",
+  "courier_phone": "",
+  "tracking_required_fields": []
+ },
+ {
+  "courier_code": "trackon",
+  "courier_name": "Trackon Courier",
+  "courier_country_iso2": "IN",
+  "courier_url": "https://trackon.in/courier-tracking",
+  "courier_phone": "079 - 40242100 /101 /102 /103",
+  "tracking_required_fields": []
+ },
+ {
+  "courier_code": "v-xpress",
+  "courier_name": "v-xpress",
+  "courier_country_iso2": "IN",
+  "courier_url": "http://www.vxpress.in/track/",
+  "courier_phone": "9870 242 243",
+  "tracking_required_fields": []
+ },
+ {
+  "courier_code": "vrl",
+  "courier_name": "VRL",
+  "courier_country_iso2": "IN",
+  "courier_url": "https://www.vrlgroup.in/Tracking/TrackShipment",
+  "courier_phone": "",
+  "tracking_required_fields": []
+ },
+ {
+  "courier_code": "vtransgroup",
+  "courier_name": "VTrans India",
+  "courier_country_iso2": "IN",
+  "courier_url": "https://vtransgroup.com/tools/track-trace/",
+  "courier_phone": "",
+  "tracking_required_fields": []
+ },
+ {
+  "courier_code": "xpressbees",
+  "courier_name": "XpressBees",
+  "courier_country_iso2": "IN",
+  "courier_url": "http://www.xpressbees.com/",
+  "courier_phone": "+91 020 46608 105",
+  "tracking_required_fields": []
+ }
+]

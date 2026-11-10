@@ -68,4 +68,7 @@ async function usageToday() {
   });
 }
 
-module.exports = { take, remaining, usageToday, BudgetError, PROVIDERS };
+/** Calls background jobs may make in a day (the rest are kept for people). */
+const backgroundAllowance = (provider) => Math.max(0, limitOf(provider) - PROVIDERS[provider].reserve);
+
+module.exports = { take, remaining, usageToday, backgroundAllowance, BudgetError, PROVIDERS };
