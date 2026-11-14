@@ -151,17 +151,31 @@ const PLAN_CHANGES = [
       settings.updatedByName = 'Plan update (100 a month)';
     },
   },
+  {
+    // The plan refills on the 12th, not the 14th - same credits used, new refill day.
+    id: 'plan-refill-12th-2026-11-14',
+    apply: async (settings) => {
+      const used = (await status()).used;
+      const start = new Date('2026-11-12T00:00:00+05:30');
+      settings.resetsMonthly = true;
+      settings.periodStart = start;
+      settings.usedOffset = used - (await Use.countDocuments({ at: { $gte: start } }));
+      settings.usedOffsetFor = start;
+      settings.updatedByName = 'Plan update (refills on the 12th)';
+    },
+  },
 ];
 
 async function applyPlanChanges() {
   const settings = await getSettings();
   const due = PLAN_CHANGES.filter((c) => !settings.appliedChanges.includes(c.id));
   if (!due.length) return;
+  // Saved one at a time: a later change may read the count the earlier one left.
   for (const c of due) {
     await c.apply(settings);
     settings.appliedChanges.push(c.id);
+    await settings.save();
   }
-  await settings.save();
   logger.info(`TrackingMore credit plan updated: ${due.map((c) => c.id).join(', ')}`);
   broadcast();
 }

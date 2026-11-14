@@ -28,7 +28,9 @@ import {
   formatDuration,
   formatINR,
   formatWeight,
+  isSelfPickup,
   processingTime,
+  untrackedNote,
 } from '../utils/logistics';
 import type { Shipment } from '../types/shipment';
 import { InvoiceDocuments } from '../components/InvoiceDocuments';
@@ -139,10 +141,13 @@ export function ShipmentDetail() {
                 {del.isPending ? 'Deleting…' : s.isArchived ? 'Restoring…' : 'Saving…'}
               </span>
             )}
-            <button className={actionButton} onClick={() => refresh.mutate(s._id)} disabled={refresh.isPending} aria-busy={refresh.isPending}>
-              <RefreshIcon spinning={refresh.isPending} />
-              <span className="hidden sm:inline">{refresh.isPending ? 'Refreshing…' : 'Refresh'}</span>
-            </button>
+            {/* Self pickup / Porter / transport: no courier to ask. */}
+            {!untrackedNote(s) && (
+              <button className={actionButton} onClick={() => refresh.mutate(s._id)} disabled={refresh.isPending} aria-busy={refresh.isPending}>
+                <RefreshIcon spinning={refresh.isPending} />
+                <span className="hidden sm:inline">{refresh.isPending ? 'Refreshing…' : 'Refresh'}</span>
+              </button>
+            )}
             <Menu
               label="More actions"
               triggerClassName={clsx(actionButton, 'w-9 justify-center px-0')}
@@ -527,17 +532,24 @@ function DeliveryCard({ shipment: s, onEdit }: { shipment: Shipment; onEdit: () 
         )}
       </div>
 
+      {untrackedNote(s) && (
+        <p className="mt-4 flex items-start gap-2 rounded-lg bg-slate-50 px-3 py-2.5 text-[13px] leading-relaxed text-slate-700 ring-1 ring-inset ring-slate-200">
+          <span aria-hidden className="mt-px">{isSelfPickup(s) ? '🏢' : '🛵'}</span>
+          <span>{untrackedNote(s)}</span>
+        </p>
+      )}
+
       <dl className="mt-4 grid grid-cols-2 gap-3 border-t border-slate-100 pt-3 text-[13px]">
         <div>
           <dt className="text-[12px] text-slate-500">Weight</dt>
           <dd className={clsx('mt-0.5 font-medium tabular-nums', s.weightKg == null ? 'text-slate-400' : 'text-slate-900')}>
-            {formatWeight(s.weightKg)}
+            {s.weightKg == null && isSelfPickup(s) ? 'Not needed - self pickup' : formatWeight(s.weightKg)}
           </dd>
         </div>
         <div>
           <dt className="text-[12px] text-slate-500">Freight</dt>
           <dd className={clsx('mt-0.5 font-medium tabular-nums', s.freightAmount == null ? 'text-slate-400' : 'text-slate-900')}>
-            {formatINR(s.freightAmount)}
+            {s.freightAmount == null && isSelfPickup(s) ? 'None - no courier' : formatINR(s.freightAmount)}
           </dd>
         </div>
       </dl>

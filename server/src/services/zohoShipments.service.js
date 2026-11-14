@@ -25,18 +25,21 @@ const { syncDeliveredAt } = require('../utils/deliveredAt');
  */
 
 const DAY = 24 * 60 * 60 * 1000;
-/** How far back the first run reads (later runs read the same window - Zoho sorts newest first). */
-const FIRST_LOOKBACK_DAYS = 7;
+/** The import reads at least back to here (every November shipment), then a rolling window. */
+const BACKFILL_FROM = new Date('2026-11-01T00:00:00+05:30');
 const WINDOW_DAYS = 21;
-const MAX_NEW_PER_RUN = 15;
+const MAX_NEW_PER_RUN = 25;
+/** Only shipments this fresh are tracked live on import (1 credit each); older ones wait for "Refresh". */
+const LIVE_DAYS = 3;
+/** Bumped when imports start reading more of Zoho's record - older imports are repaired once. */
+const DETAIL_VERSION = 2;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const str = (v, max = 200) => String(v ?? '').trim().slice(0, max);
 const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 const money = (v) => (v !== '' && v != null && Number.isFinite(Number(v)) ? Number(v) : null);
 const validDate = (v) => (v && !Number.isNaN(new Date(v).getTime()) ? new Date(v) : null);
 
-/** Couriers the app records but TrackingMore can't track (same list as the sheet import). */
-const NOT_TRACKABLE = ['bus', 'transport', 'other', 'skyking-india', 'porter', 'self'];
+const { isTrackable, APP_COURIERS } = require('../utils/couriers');
 
 /** Zoho's free-text carrier ("shree maruti", "Mark Courier", "self") -> the app's courier. */
 const ALIASES = [
@@ -73,8 +76,8 @@ async function resolveZohoCarrier(raw) {
   const catalog = await getCatalog();
   for (const [re, code, name] of ALIASES) {
     if (!re.test(text)) continue;
-    const c = catalog.find((x) => x.code === code);
-    return { carrierCode: code, carrierName: name || c?.name || raw };
+    const c = APP_COURIERS.find((x) => x.code === code) || catalog.find((x) => x.code === code);
+    return { carrierCode: code, carrierName: c?.name || name || raw };
   }
   // Exact or close courier name from TrackingMore's list.
   const n = norm(text);
@@ -211,18 +214,70 @@ function fillGaps(s, f) {
   for (const k of ['line', 'city', 'state', 'pincode']) fill(`deliveryAddress.${k}`, f.deliveryAddress?.[k]);
   if (f.zohoInvoice && !s.zohoInvoice?.invoiceId) s.zohoInvoice = f.zohoInvoice;
   fill('ewayBill.number', f.ewayBill);
-  s.zohoShipment = f.zohoShipment;
+  s.zohoShipment = { ...f.zohoShipment, detailVersion: DETAIL_VERSION };
 }
 
 /** Zoho says delivered: a hand-entered "delivered" scan, the way the app records it by hand. */
 function markDelivered(s, at) {
   if (s.status === 'delivered') return false;
-  const when = at || new Date();
+  const when = at || s.shippingDate || new Date();
   s.checkpoints.push({ status: 'delivered', statusRaw: 'zoho books', description: 'Delivered (marked in Zoho Books)', checkpointTime: when, source: 'manual' });
   s.checkpoints.sort((a, b) => new Date(a.checkpointTime) - new Date(b.checkpointTime));
   s.status = 'delivered';
   syncDeliveredAt(s);
   return true;
+}
+
+/** The list row and the full record together - the full record wins where it has a value. */
+function merged(pkg, full) {
+  const a = shipmentOf(pkg);
+  const b = shipmentOf(full || {});
+  const out = {};
+  for (const k of Object.keys(a)) out[k] = b[k] || b[k] === 0 ? b[k] : a[k];
+  return out;
+}
+
+/** Fixes an import made from the list alone: real ship / delivery dates, the real AWB or shipment number. */
+function repair(s, sh) {
+  if (sh.shipmentDate) {
+    s.shippingDate = sh.shipmentDate;
+    for (const c of s.checkpoints) if (c.statusRaw === 'zoho books' && c.status !== 'delivered') c.checkpointTime = sh.shipmentDate;
+  }
+  const deliveredAt = sh.deliveredAt || sh.shipmentDate;
+  const zohoDelivered = s.checkpoints.find((c) => c.statusRaw === 'zoho books' && c.status === 'delivered');
+  if (zohoDelivered && deliveredAt) {
+    zohoDelivered.checkpointTime = deliveredAt;
+    s.deliveredAt = deliveredAt;
+  }
+  if (/^ZOHO-/.test(s.trackingNumber) && (sh.trackingNumber || sh.shipmentNumber)) s.trackingNumber = sh.trackingNumber || sh.shipmentNumber;
+  if (!s.zohoShipment.shipmentNumber && sh.shipmentNumber) s.zohoShipment.shipmentNumber = sh.shipmentNumber;
+  if (!s.zohoShipment.shipmentId && sh.shipmentId) s.zohoShipment.shipmentId = sh.shipmentId;
+  if (s.carrierCode === 'self') s.freightAmount = null;
+  s.zohoShipment.detailVersion = DETAIL_VERSION;
+}
+
+/**
+ * The same shipment already in SureShip (typed in, or from the master sheet): by AWB,
+ * or - for a self pickup / Porter with no AWB - same customer, same way, within 2 days.
+ */
+async function findExisting(sh, carrier, f, shippedAt) {
+  const free = { 'zohoShipment.packageId': { $in: ['', null] } };
+  if (sh.trackingNumber) {
+    const byAwb = await Shipment.findOne({ trackingNumber: sh.trackingNumber, ...free });
+    if (byAwb) return byAwb;
+  }
+  const cust = norm(f.customerInfo.name);
+  if (!cust) return null;
+  const near = await Shipment.find({
+    ...free,
+    carrierCode: carrier.carrierCode,
+    shippingDate: { $gte: new Date(shippedAt - 2 * DAY), $lte: new Date(shippedAt.getTime() + 2 * DAY) },
+  }).limit(20);
+  const same = near.filter((x) => {
+    const n = norm(x.customerInfo?.name);
+    return n && (n === cust || n.includes(cust) || cust.includes(n));
+  });
+  return same.length === 1 ? same[0] : null;
 }
 
 let running = null;
@@ -241,7 +296,9 @@ async function run() {
   const budget = require('./apiBudget');
   const result = { listed: 0, created: 0, linked: 0, delivered: 0, tracked: 0, untracked: 0 };
   const now = new Date();
-  if (!conn.shipmentImportSince) conn.shipmentImportSince = new Date(now - FIRST_LOOKBACK_DAYS * DAY);
+  // Reads back to 1 November at least (asked for: every shipment this month), then a
+  // rolling window - Zoho lists newest first, so later runs cost one call.
+  if (!conn.shipmentImportSince || conn.shipmentImportSince > BACKFILL_FROM) conn.shipmentImportSince = BACKFILL_FROM;
   const since = new Date(Math.max(conn.shipmentImportSince.getTime(), now - WINDOW_DAYS * DAY));
 
   let packages;
@@ -269,19 +326,30 @@ async function run() {
     return isShipped(sh.status) && day >= sinceDay;
   });
   result.listed = shipped.length;
+  // Oldest first, so a backlog fills in date order across runs.
+  shipped.reverse();
 
   for (const pkg of shipped) {
-    const sh = shipmentOf(pkg);
+    let sh = shipmentOf(pkg);
     try {
-      // Already imported: only Zoho's later "delivered" is news.
       const known = await Shipment.findOne({ 'zohoShipment.packageId': String(pkg.package_id) });
       if (known) {
         let changed = false;
+        // Imported before the full Zoho record was read (wrong date / placeholder AWB): repair once.
+        if ((known.zohoShipment.detailVersion || 0) < DETAIL_VERSION) {
+          await budget.take('zohoShipments');
+          const full = await zoho.getPackage(conn, pkg.package_id).catch(() => null);
+          if (full) {
+            sh = merged(pkg, full);
+            repair(known, sh);
+            changed = true;
+          }
+        }
         if (known.zohoShipment.status !== sh.status) {
           known.zohoShipment.status = sh.status;
           changed = true;
         }
-        if (isDelivered(sh.status) && markDelivered(known, sh.deliveredAt)) {
+        if (isDelivered(sh.status) && markDelivered(known, sh.deliveredAt || sh.shipmentDate)) {
           result.delivered += 1;
           changed = true;
         }
@@ -290,57 +358,64 @@ async function run() {
       }
       if (result.created + result.linked >= MAX_NEW_PER_RUN) continue; // the rest next run
 
-      const carrier = await resolveZohoCarrier(sh.carrier);
-      const trackable = !NOT_TRACKABLE.includes(carrier.carrierCode) && /[a-z0-9]{6,}/i.test(sh.trackingNumber);
-      const trackingNumber = sh.trackingNumber || sh.shipmentNumber || `ZOHO-${pkg.package_number || pkg.package_id}`;
-
-      // Added by hand already (same AWB): link it and fill its blanks - no duplicate.
-      const existing = sh.trackingNumber
-        ? await Shipment.findOne({ trackingNumber: sh.trackingNumber, 'zohoShipment.packageId': { $in: ['', null] } })
-        : null;
+      // The full record first: the list leaves out the AWB, dates and address.
       const d = await details(conn, pkg, budget);
+      sh = merged(pkg, d.full);
       const f = fieldsFrom(pkg, d, sh);
+      const carrier = await resolveZohoCarrier(sh.carrier);
+      const handled = !isTrackable(carrier.carrierCode);
+      const trackingNumber = sh.trackingNumber || sh.shipmentNumber || `ZOHO-${pkg.package_number || pkg.package_id}`;
+      const shippedAt = sh.shipmentDate || validDate(pkg.date) || now;
+      const delivered = isDelivered(sh.status);
+
+      // Already in SureShip (added by hand / the sheet): link it and fill its blanks - no duplicate.
+      const existing = await findExisting(sh, carrier, f, shippedAt);
       if (existing) {
         fillGaps(existing, f);
-        if (isDelivered(sh.status)) markDelivered(existing, sh.deliveredAt);
+        if (delivered) markDelivered(existing, sh.deliveredAt || shippedAt);
         await existing.save();
         result.linked += 1;
         continue;
       }
 
-      const shippedAt = sh.shipmentDate || validDate(pkg.date) || now;
-      const delivered = isDelivered(sh.status);
-      const live = trackable && !delivered;
-      const checkpoints = live
-        ? []
-        : [
-            {
-              status: 'in_transit',
-              statusRaw: 'zoho books',
-              description: `Shipped${carrier.carrierName ? ` by ${carrier.carrierName}` : ''} (from Zoho Books ${sh.shipmentNumber})`.trim(),
-              checkpointTime: shippedAt,
-              source: 'manual',
-            },
-          ];
+      // Tracked live (1 credit) only while it's fresh: older ones may long be delivered,
+      // so they come in untracked - "Refresh" on the shipment tracks one on purpose.
+      const fresh = now - shippedAt <= LIVE_DAYS * DAY;
+      const live = !handled && !delivered && fresh && /[a-z0-9]{6,}/i.test(sh.trackingNumber);
       const shipment = new Shipment({
         trackingNumber,
         ...carrier,
         customerInfo: f.customerInfo,
         productDetails: f.productDetails,
-        ...(f.freightAmount != null ? { freightAmount: f.freightAmount } : {}),
+        ...(f.freightAmount != null && carrier.carrierCode !== 'self' ? { freightAmount: f.freightAmount } : {}),
         ...(f.deliveryAddress ? { deliveryAddress: f.deliveryAddress } : {}),
         ...(f.zohoInvoice ? { zohoInvoice: f.zohoInvoice } : {}),
         ...(f.ewayBill ? { ewayBill: { number: f.ewayBill } } : {}),
-        zohoShipment: f.zohoShipment,
+        zohoShipment: { ...f.zohoShipment, detailVersion: DETAIL_VERSION },
         booking: { source: 'Zoho Books', invoiceNumber: f.zohoInvoice?.number || '', notes: sh.notes },
         shippingDate: shippedAt,
         status: live ? 'pending' : 'in_transit',
-        checkpoints,
+        checkpoints: live
+          ? []
+          : [
+              {
+                status: carrier.carrierCode === 'self' ? 'delivered' : 'in_transit',
+                statusRaw: 'zoho books',
+                description:
+                  carrier.carrierCode === 'self'
+                    ? `Collected from the office by the client (Zoho Books ${sh.shipmentNumber})`.trim()
+                    : `Shipped by ${carrier.carrierName} (from Zoho Books ${sh.shipmentNumber})${!handled && !delivered && !fresh ? ' - not tracked live; press Refresh to track it (1 credit)' : ''}`,
+                checkpointTime: shippedAt,
+                source: 'manual',
+              },
+            ],
         // Zoho has already told the customer it's booked; stage messages go as normal.
         bookedNoticeSentAt: now,
         createdBy: ownerId,
       });
-      if (delivered) markDelivered(shipment, sh.deliveredAt);
+      if (carrier.carrierCode === 'self') shipment.status = 'delivered';
+      if (delivered) markDelivered(shipment, sh.deliveredAt || shippedAt);
+      syncDeliveredAt(shipment);
       await shipment.save();
       result.created += 1;
 

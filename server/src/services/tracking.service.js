@@ -8,6 +8,28 @@ const logger = require('../config/logger');
 const { deductForShipment } = require('./stock.service');
 const { syncDeliveredAt } = require('../utils/deliveredAt');
 const { PROGRESS } = require('../utils/statusMap');
+const { isTrackable } = require('../utils/couriers');
+
+/**
+ * A shipment no courier tracks gets its status from how it went: collected at the
+ * office is delivered there and then; Porter / transport / bus is on its way until
+ * someone (or Zoho) marks it delivered.
+ */
+function markHandled(shipment) {
+  const at = shipment.shippingDate ? new Date(shipment.shippingDate) : new Date();
+  const self = shipment.carrierCode === 'self';
+  shipment.checkpoints.push({
+    status: self ? 'delivered' : 'in_transit',
+    statusRaw: 'manual',
+    description: self ? 'Collected from the office by the client (self pickup)' : `Sent by ${shipment.carrierName || shipment.carrierCode} - not tracked by a courier`,
+    checkpointTime: at,
+    source: 'manual',
+  });
+  shipment.status = self ? 'delivered' : 'in_transit';
+  // Nothing to tell the client about a parcel they carried out themselves.
+  if (self) shipment.bookedNoticeSentAt = new Date();
+  syncDeliveredAt(shipment);
+}
 
 /** Creates a shipment record and registers it with the appropriate tracking adapter. */
 async function registerShipment(payload, userId) {
@@ -19,6 +41,13 @@ async function registerShipment(payload, userId) {
   // Booked goods leave the shelf: if the product code is linked to a stock line, take
   // the quantity off now. Runs for every entry path (manual, CSV, ingest API).
   await deductForShipment(shipment, userId);
+
+  // Self pickup / Porter / transport: nothing to track - no TrackingMore call, no credit.
+  if (!isTrackable(shipment.carrierCode)) {
+    markHandled(shipment);
+    await shipment.save();
+    return shipment;
+  }
 
   const adapter = getAdapterForCarrier(shipment.carrierCode);
   const byName = userId ? (await User.findById(userId, 'name').lean())?.name || '' : '';
@@ -286,6 +315,13 @@ async function changeCourier(shipment, { carrierCode, carrierName, trackingNumbe
   shipment.trackingRegisterTriedAt = null;
   shipment.lastCheckedAt = null;
   syncDeliveredAt(shipment);
+  // Changed to self pickup / Porter / transport: nothing to register.
+  if (!isTrackable(carrierCode)) {
+    markHandled(shipment);
+    await shipment.save();
+    emitShipmentUpdate(shipment.createdBy.toString(), shipment);
+    return { shipment, warning: undefined };
+  }
   await shipment.save();
 
   const byName = userId ? (await User.findById(userId, 'name').lean())?.name || '' : '';

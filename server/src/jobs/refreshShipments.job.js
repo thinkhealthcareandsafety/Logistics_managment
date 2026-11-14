@@ -35,6 +35,8 @@ async function runRefreshCycle() {
   const dueShipments = await Shipment.find({
     isArchived: false,
     status: { $nin: TERMINAL_STATUSES },
+    // Self pickup / Porter / transport: no courier to ask - don't spend calls on them.
+    carrierCode: { $nin: require('../utils/couriers').NOT_TRACKABLE },
   });
   if (dueShipments.length === 0) return;
 

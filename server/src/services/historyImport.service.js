@@ -189,8 +189,7 @@ async function trackLive(ids) {
 }
 
 // Delivered with no delivery date (the sheet left it blank): ask the courier.
-const HAND_DELIVERED = ['porter', 'self'];
-const NOT_TRACKABLE = ['bus', 'transport', 'other', 'skyking-india', ...HAND_DELIVERED];
+const { HAND_DELIVERED, NOT_TRACKABLE } = require('../utils/couriers');
 const backfill = { running: false, startedAt: null, finishedAt: null, total: 0, done: 0, found: 0, sameDay: 0, notFound: [] };
 
 function backfillStatus() {

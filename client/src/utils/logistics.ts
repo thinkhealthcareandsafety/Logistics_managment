@@ -1,5 +1,20 @@
 import type { Shipment } from '../types/shipment';
 
+/**
+ * Shipments no courier tracks (server: utils/couriers.js) - what to tell the logistics
+ * team instead of an empty weight / freight / tracking.
+ */
+const UNTRACKED: Record<string, string> = {
+  self: 'Self pickup - the client collected this from the office. No courier partner, so there’s no weight, freight or AWB.',
+  porter: 'Sent with a Porter rider - no courier partner or AWB to track. Mark it delivered by hand (or in Zoho).',
+  transport: 'Sent through a transport company - not tracked by a courier. Update its status by hand.',
+  bus: 'Sent as a bus parcel - not tracked by a courier. Update its status by hand.',
+  other: 'Not tracked by a courier - update its status by hand.',
+  'skyking-india': 'Skyking isn’t tracked automatically - update its status by hand.',
+};
+export const untrackedNote = (s: Pick<Shipment, 'carrierCode'>): string | null => UNTRACKED[s.carrierCode] ?? null;
+export const isSelfPickup = (s: Pick<Shipment, 'carrierCode'>) => s.carrierCode === 'self';
+
 export function formatWeight(kg?: number | null): string {
   if (kg == null) return '—';
   return `${kg.toLocaleString('en-IN', { maximumFractionDigits: 2 })} kg`;

@@ -3,6 +3,7 @@ const { DEFAULT_CARRIER_CODE, DEFAULT_CARRIER_NAME } = require('../config/carrie
 const ApiError = require('../utils/ApiError');
 const logger = require('../config/logger');
 const CourierCatalog = require('../models/CourierCatalog');
+const { APP_COURIERS } = require('../utils/couriers');
 
 /**
  * TrackingMore's courier catalog (~1,700 couriers in 160 countries). Every shipment
@@ -85,6 +86,7 @@ async function findCourier(code) {
   const list = await getCatalog();
   const key = String(code || '').trim().toLowerCase();
   return (
+    APP_COURIERS.find((c) => c.code === key) ||
     (cache.byCode && cache.byCode.get(key)) ||
     list.find((c) => c.code === key) ||
     FALLBACK.find((c) => c.code === key) ||

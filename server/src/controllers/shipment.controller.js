@@ -225,6 +225,9 @@ const refreshShipmentNow = asyncHandler(async (req, res) => {
     createdBy: req.userId,
   });
   if (!shipment) throw new ApiError(404, 'Shipment not found');
+  if (!require('../utils/couriers').isTrackable(shipment.carrierCode)) {
+    throw new ApiError(400, `${shipment.carrierName || 'This shipment'} isn't tracked by a courier - use "Update status by hand"`);
+  }
 
   const { shipment: updated } = await refreshShipment(shipment);
   res.json({ shipment: updated });

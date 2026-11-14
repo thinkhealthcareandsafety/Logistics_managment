@@ -1,6 +1,7 @@
 const asyncHandler = require('../utils/asyncHandler');
 const { DEFAULT_CARRIER_CODE } = require('../config/carrier');
 const { getCatalog, detectCouriers } = require('../services/courierCatalog.service');
+const { APP_COURIERS } = require('../utils/couriers');
 
 /**
  * Well-known Indian couriers, in the order they're offered first in the picker and
@@ -31,7 +32,8 @@ const listCarriers = asyncHandler(async (req, res) => {
   const catalog = await getCatalog();
   // Changes rarely; let the browser reuse it for an hour.
   res.set('Cache-Control', 'private, max-age=3600');
-  res.json({ carriers: catalog, featured: FEATURED_IN, defaultCode: DEFAULT_CARRIER_CODE });
+  // Self pickup / Porter / transport first-class in the picker - never tracked, never a credit.
+  res.json({ carriers: [...APP_COURIERS, ...catalog], featured: [...FEATURED_IN, 'self', 'porter', 'transport'], defaultCode: DEFAULT_CARRIER_CODE });
 });
 
 /** Staff: couriers whose AWB format matches - suggestions only. */

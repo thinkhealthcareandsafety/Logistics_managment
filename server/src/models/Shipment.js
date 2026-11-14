@@ -122,6 +122,8 @@ const shipmentSchema = new mongoose.Schema(
       /** Zoho's own status for it (shipped / delivered). */
       status: { type: String, default: '' },
       syncedAt: { type: Date, default: null },
+      /** How much of Zoho's record the import read (see zohoShipments DETAIL_VERSION). */
+      detailVersion: { type: Number, default: 0 },
     },
 
     /** When an older shipment was looked for in Zoho invoices and none matched (not retried). */
