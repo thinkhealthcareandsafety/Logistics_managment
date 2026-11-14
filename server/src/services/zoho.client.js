@@ -8,8 +8,19 @@ const { seal, open } = require('../utils/secretBox');
  * endpoints the stock sync needs. Read-only scope - this app never writes to the books.
  */
 
-// Read-only: items/stock, invoices (freight, e-way bill) and Zoho Inventory items (reorder points).
-const SCOPES = ['ZohoBooks.settings.READ', 'ZohoBooks.invoices.READ', 'ZohoInventory.items.READ'];
+// Read-only: items/stock, invoices (freight, e-way bill), Zoho Inventory items (reorder
+// points), and shipments - packages, shipment orders and the sales orders behind them.
+const SCOPES = [
+  'ZohoBooks.settings.READ',
+  'ZohoBooks.invoices.READ',
+  'ZohoBooks.salesorders.READ',
+  'ZohoInventory.items.READ',
+  'ZohoInventory.packages.READ',
+  'ZohoInventory.shipmentorders.READ',
+  'ZohoInventory.salesorders.READ',
+];
+/** Scopes the shipment import needs - a connection made before them has to reconnect. */
+const SHIPMENT_SCOPES = ['ZohoInventory.packages.READ', 'ZohoInventory.salesorders.READ'];
 
 /** Zoho runs separate data centres; accounts and API hosts differ per region. */
 const DC_DOMAINS = {
@@ -109,9 +120,18 @@ async function accessToken(conn, { force = false } = {}) {
 }
 
 /** GET against Zoho Books v3, retrying once with a new token on 401. */
-async function booksGet(conn, path, params = {}) {
+function booksGet(conn, path, params = {}) {
+  return apiGet(conn, '/books/v3', path, params);
+}
+
+/** GET against Zoho Inventory v1 (same organisation, same sign-in) - packages and shipments live here. */
+function inventoryGet(conn, path, params = {}) {
+  return apiGet(conn, '/inventory/v1', path, params);
+}
+
+async function apiGet(conn, base, path, params = {}) {
   const run = async (token) =>
-    axios.get(`${conn.apiDomain || defaultApiDomain()}/books/v3${path}`, {
+    axios.get(`${conn.apiDomain || defaultApiDomain()}${base}${path}`, {
       params,
       headers: { Authorization: `Zoho-oauthtoken ${token}` },
       timeout: 20000,
@@ -132,9 +152,44 @@ async function booksGet(conn, path, params = {}) {
   const body = res.data || {};
   if (res.status >= 400 || (body.code !== undefined && body.code !== 0)) {
     const msg = body.message || `HTTP ${res.status}`;
-    throw new ApiError(res.status === 429 ? 429 : 502, `Zoho Books: ${msg}`);
+    throw new ApiError(res.status === 429 ? 429 : 502, `Zoho Books: ${msg}`, { zohoCode: body.code, httpStatus: res.status });
   }
   return body;
+}
+
+/**
+ * Packages (each shipped package carries its shipment: carrier, tracking number,
+ * shipment date, status), newest first, back to `since`. Zoho Inventory's endpoint,
+ * with Zoho Books' own as a fallback for organisations where that one answers.
+ */
+async function listPackages(conn, { since, maxPages = 3 }) {
+  const out = [];
+  const sinceDay = since.toISOString().slice(0, 10);
+  for (let page = 1; page <= maxPages; page += 1) {
+    const params = { organization_id: conn.organizationId, page, per_page: 200, sort_column: 'date', sort_order: 'D' };
+    const body = await inventoryGet(conn, '/packages', params).catch((err) =>
+      booksGet(conn, '/packages', params).catch(() => Promise.reject(err))
+    );
+    const list = body.packages || [];
+    out.push(...list);
+    const oldest = list.length ? String(list[list.length - 1].date || list[list.length - 1].shipment_date || '') : '';
+    if (!body.page_context?.has_more_page || (oldest && oldest < sinceDay)) break;
+  }
+  return out;
+}
+
+async function getPackage(conn, packageId) {
+  const params = { organization_id: conn.organizationId };
+  const path = `/packages/${encodeURIComponent(packageId)}`;
+  const body = await inventoryGet(conn, path, params).catch((err) => booksGet(conn, path, params).catch(() => Promise.reject(err)));
+  return body.package || {};
+}
+
+async function getSalesOrder(conn, salesorderId) {
+  const params = { organization_id: conn.organizationId };
+  const path = `/salesorders/${encodeURIComponent(salesorderId)}`;
+  const body = await booksGet(conn, path, params).catch((err) => inventoryGet(conn, path, params).catch(() => Promise.reject(err)));
+  return body.salesorder || {};
 }
 
 async function listOrganizations(conn) {
@@ -269,6 +324,10 @@ async function revoke(conn) {
 
 module.exports = {
   SCOPES,
+  SHIPMENT_SCOPES,
+  listPackages,
+  getPackage,
+  getSalesOrder,
   isConfigured,
   redirectUri,
   authorizeUrl,

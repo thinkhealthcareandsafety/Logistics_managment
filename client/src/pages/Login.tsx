@@ -47,7 +47,7 @@ export function Login() {
         <Link to="/" className="mb-8 flex flex-col items-center gap-3 text-center">
           <BrandMark size={52} className="drop-shadow-sm" />
           <span>
-            <span className="block text-xl font-semibold text-slate-900">ThinkHealth Logistics</span>
+            <span className="block text-xl font-semibold text-slate-900">SureShip</span>
             <span className="mt-1 block text-sm text-slate-500">Shipment tracking dashboard</span>
           </span>
         </Link>

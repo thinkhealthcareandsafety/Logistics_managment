@@ -40,6 +40,14 @@ async function statusView(conn) {
     syncing: isSyncing(),
     inventory: { at: conn.inventoryReorderAt, count: conn.inventoryReorderCount, error: conn.inventoryError },
     invoices: { at: conn.invoiceMatchAt, summary: conn.invoiceMatchSummary, error: conn.invoiceError },
+    shipments: {
+      at: conn.shipmentImportAt,
+      summary: conn.shipmentImportSummary,
+      error: conn.shipmentImportError,
+      // Connected before shipments were read: Zoho has to be asked for that permission.
+      needsReconnect:
+        Boolean(conn.refreshToken) && !zoho.SHIPMENT_SCOPES.every((s) => (conn.scopes || []).includes(s)),
+    },
     stockSource: conn.zohoStockSource || '',
     linkedItems,
   };
@@ -85,7 +93,7 @@ const oauthCallback = async (req, res) => {
     if (!req.query.code) return back('error', 'Zoho didn’t send an authorisation code');
 
     const tokens = await zoho.exchangeCode(String(req.query.code));
-    Object.assign(conn, tokens, { oauthState: '', oauthStateExpiresAt: null });
+    Object.assign(conn, tokens, { oauthState: '', oauthStateExpiresAt: null, scopes: zoho.SCOPES, shipmentImportError: '' });
     const user = await User.findById(conn.oauthUser).select('name email');
     conn.connectedBy = user?.name || user?.email || '';
     conn.connectedAt = new Date();
@@ -140,6 +148,9 @@ const runSync = asyncHandler(async (req, res) => {
   const conn = await ZohoConnection.get();
   if (!conn.isConnected) throw new ApiError(400, 'Connect Zoho Books first');
   const job = syncNow({ reason: 'manual' });
+  // "Sync now" also brings in Zoho shipments and their invoices straight away.
+  require('../services/zohoShipments.service').importZohoShipments().catch(() => {});
+  require('../services/invoiceMatch.service').matchInvoices().catch(() => {});
   const result = await Promise.race([job, new Promise((r) => setTimeout(() => r('__running__'), SYNC_WAIT_MS))]);
   if (result === '__running__') {
     job.catch(() => {}); // finishes in the background; the status shows how it went

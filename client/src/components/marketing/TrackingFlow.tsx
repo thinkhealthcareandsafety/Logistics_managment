@@ -106,7 +106,7 @@ export function TrackingFlow({ active }: { active?: FlowStage }) {
               stageClass(1, active)
             )}
           >
-            <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-brand-300">ThinkHealth</span>
+            <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-brand-300">SureShip</span>
             <span className="text-lg font-semibold text-white">Tracking hub</span>
             <span className="text-[11px] leading-snug text-brand-200">
               Normalised status · checkpoints · alerts
@@ -124,7 +124,7 @@ export function TrackingFlow({ active }: { active?: FlowStage }) {
         <Card tone="source" label="1,600+ couriers" hint="Shree Maruti, Delhivery, Blue Dart…" />
         <Arrow />
         <div className="w-full rounded-2xl bg-brand-900 px-4 py-3 text-center">
-          <p className="text-sm font-semibold text-white">ThinkHealth tracking hub</p>
+          <p className="text-sm font-semibold text-white">SureShip tracking hub</p>
           <p className="mt-0.5 text-[11px] text-brand-200">Normalised status · checkpoints · alerts</p>
         </div>
         <Arrow />

@@ -12,7 +12,9 @@ const logger = require('../config/logger');
  */
 
 /** Lines that are a freight charge, not goods. */
-const FREIGHT_LINE = /\b(freight|courier|transport(ation)?|shipping|delivery charges?|cartage|logistics? charges?)\b/i;
+// "Packing, Shipping & Forwarding" / "Packing & Forwarding" / "P&F" are how this business bills freight.
+const FREIGHT_LINE =
+  /\b(freight|courier|transport(ation)?|shipping|forwarding|delivery charges?|cartage|logistics? charges?)\b|\bp\s*&\s*f\b|packing\s*(&|and|,)\s*(forwarding|shipping)/i;
 const HISTORY_MONTHS = 18;
 const GAP_MS = 700;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));

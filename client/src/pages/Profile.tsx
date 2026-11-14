@@ -34,7 +34,7 @@ export function Profile() {
     <div className="space-y-8">
       <div>
         <h1 className="text-[24px] font-semibold tracking-[-0.02em] text-slate-950">Profile</h1>
-        <p className="mt-1 text-[13px] text-slate-500">Your account on ThinkHealth Logistics.</p>
+        <p className="mt-1 text-[13px] text-slate-500">Your account on SureShip.</p>
       </div>
 
       <section className="grid grid-cols-1 gap-4 border-t border-slate-200 pt-8 lg:grid-cols-3 lg:gap-10">
@@ -271,7 +271,7 @@ function Team({ myId }: { myId: string }) {
                 onClick={() => {
                   navigator.clipboard
                     ?.writeText(
-                      `Your ThinkHealth Logistics account is ready.\nSign in: ${window.location.origin}/login\nEmail: ${added.email}\nPassword: ${added.password}\nPlease change the password from Profile after signing in.`
+                      `Your SureShip account is ready.\nSign in: ${window.location.origin}/login\nEmail: ${added.email}\nPassword: ${added.password}\nPlease change the password from Profile after signing in.`
                     )
                     .then(() => toast.success('Copied'), () => toast.error('Could not copy'));
                 }}

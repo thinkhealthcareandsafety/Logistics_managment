@@ -8,6 +8,7 @@ import { ProgressRail } from '../components/ProgressRail';
 import { Skeleton, SkeletonRegion } from '../components/ui/Loading';
 import { STATUS_LABELS } from '../utils/status';
 import type { ShipmentStatus } from '../types/shipment';
+import { BrandLockup } from '../components/ui/BrandMark';
 
 export function PublicTracking() {
   const { trackingNumber } = useParams<{ trackingNumber: string }>();
@@ -24,13 +25,7 @@ export function PublicTracking() {
       <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/85 backdrop-blur-xl">
         <div className="mx-auto flex max-w-3xl items-center justify-between gap-4 px-4 py-3.5">
           <Link to="/" className="flex shrink-0 items-center gap-2.5">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-900 text-sm font-bold text-white">
-              TH
-            </span>
-            <span className="leading-tight">
-              <span className="block text-sm font-semibold text-slate-900">ThinkHealth</span>
-              <span className="block text-[10px] uppercase tracking-[0.16em] text-slate-400">Logistics</span>
-            </span>
+            <BrandLockup />
           </Link>
           <div className="hidden w-72 sm:block">
             <TrackLookup size="sm" />
@@ -160,7 +155,7 @@ export function PublicTracking() {
             </section>
 
             <p className="pb-4 text-center text-xs text-slate-400">
-              Shared by ThinkHealth Logistics. This page shows delivery progress only — no account details.
+              Shared by ThinkHealth via SureShip. This page shows delivery progress only — no account details.
             </p>
           </div>
         )}

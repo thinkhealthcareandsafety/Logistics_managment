@@ -18,6 +18,8 @@ const PROVIDERS = {
   whatsapp: { name: 'WhatsApp (Anantya)', env: 'WHATSAPP_API_DAILY_LIMIT', reserve: 0 },
   // Free (part of Zoho Books), but Zoho caps calls a day and the stock sync needs most of them.
   zohoInvoices: { name: 'Zoho Books invoice history (free)', env: 'ZOHO_INVOICE_READS_PER_DAY', reserve: 0, default: 100 },
+  // Free too: one list call per run (every 30 min) plus ~3 reads per new Zoho shipment.
+  zohoShipments: { name: 'Zoho Books shipments (free)', env: 'ZOHO_SHIPMENT_READS_PER_DAY', reserve: 0, default: 150 },
 };
 const DEFAULT_LIMIT = 40;
 

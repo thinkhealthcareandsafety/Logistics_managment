@@ -63,6 +63,13 @@ const zohoConnectionSchema = new mongoose.Schema(
     invoiceMatchAt: { type: Date, default: null },
     invoiceMatchSummary: { type: String, default: '' },
     invoiceError: { type: String, default: '' },
+    /** Shipment import from Zoho Books: last run, result, and how far back it reads. */
+    shipmentImportAt: { type: Date, default: null },
+    shipmentImportSummary: { type: String, default: '' },
+    shipmentImportError: { type: String, default: '' },
+    shipmentImportSince: { type: Date, default: null },
+    /** Scopes granted at the last connect - older connections lack the shipment ones. */
+    scopes: { type: [String], default: [] },
     /** Last full one-by-one read, and the figures it found (item id -> stock). */
     zohoDetailAt: { type: Date, default: null },
     zohoStockCache: { type: mongoose.Schema.Types.Mixed, default: {} },

@@ -262,15 +262,26 @@ function Connected({ zoho }: { zoho: ZohoStatus }) {
 
       {/* Reorder points and invoices (freight, e-way bill) - need the newer permissions */}
       {(() => {
-        const needsReconnect = [zoho.inventory?.error, zoho.invoices?.error].some((e) => e && /scope|permission|authori[sz]|invalid_oauth|not authorized/i.test(e));
+        const needsReconnect =
+          Boolean(zoho.shipments?.needsReconnect) ||
+          [zoho.inventory?.error, zoho.invoices?.error, zoho.shipments?.error].some((e) => e && /scope|permission|authori[sz]|invalid_oauth|not authorized/i.test(e));
         return (
           <div className="space-y-2 rounded-lg border border-slate-200 p-4 text-[13px]">
             {needsReconnect && (
               <p className="rounded-md bg-amber-50 px-3 py-2 text-[12px] leading-relaxed text-amber-900 ring-1 ring-inset ring-amber-200">
-                To read reorder points from Zoho Inventory and freight / e-way bills from invoices, Zoho needs two more read-only
-                permissions: click <strong>Disconnect</strong> below, then <strong>Connect Zoho Books</strong> again and accept.
+                To bring in <strong>Zoho shipments</strong> automatically (with customer, products, address, freight, invoice and
+                e-way bill), Zoho needs a few more read-only permissions: click <strong>Disconnect</strong> below, then{' '}
+                <strong>Connect Zoho Books</strong> again and accept. Nothing in Zoho is changed - SureShip only reads.
               </p>
             )}
+            <p>
+              <span className="font-medium text-slate-900">Shipments from Zoho: </span>
+              {zoho.shipments?.error
+                ? <span className="text-slate-500">{zoho.shipments.error}</span>
+                : zoho.shipments?.at
+                  ? <span className="text-slate-600">{zoho.shipments.summary || 'none new'}</span>
+                  : <span className="text-slate-500">read every 30 minutes and on Sync now</span>}
+            </p>
             <p>
               <span className="font-medium text-slate-900">Reorder points: </span>
               {zoho.inventory?.error
@@ -288,7 +299,9 @@ function Connected({ zoho }: { zoho: ZohoStatus }) {
                   : <span className="text-slate-500">matched on the next sync</span>}
             </p>
             <p className="text-[12px] text-slate-500">
-              Tip: put the AWB in the invoice’s <strong>Reference#</strong> for a guaranteed match; otherwise the invoice for the same customer within 3 days of shipping is used.
+              Shipments made in Zoho Books come with their sales order’s invoice, so freight and e-way bill are exact. For
+              shipments added here by hand: put the AWB in the invoice’s <strong>Reference#</strong> for a guaranteed match;
+              otherwise the invoice for the same customer within 3 days of shipping is used.
             </p>
           </div>
         );

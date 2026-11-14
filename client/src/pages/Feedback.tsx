@@ -7,6 +7,7 @@ import { feedbackApi } from '../api/feedback';
 import { StarRating } from '../components/StarRating';
 import { STATUS_LABELS } from '../utils/status';
 import { Skeleton, SkeletonRegion, Spinner } from '../components/ui/Loading';
+import { BrandLockup } from '../components/ui/BrandMark';
 
 /**
  * Public feedback form, reached from the "thank you for choosing ThinkHealth" message
@@ -62,13 +63,7 @@ export function Feedback() {
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-xl items-center gap-2.5 px-4 py-3.5">
           <Link to="/" className="flex items-center gap-2.5">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-900 text-sm font-bold text-white">
-              TH
-            </span>
-            <span className="leading-tight">
-              <span className="block text-sm font-semibold text-slate-900">ThinkHealth</span>
-              <span className="block text-[10px] uppercase tracking-[0.16em] text-slate-400">Logistics</span>
-            </span>
+            <BrandLockup />
           </Link>
         </div>
       </header>

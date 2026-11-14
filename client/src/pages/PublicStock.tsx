@@ -32,7 +32,7 @@ export function PublicStock() {
             <BrandMark size={32} />
             <span className="leading-tight">
               <span className="block text-[14px] font-semibold text-slate-900">Stock available</span>
-              <span className="block text-[11px] text-slate-500">ThinkHealth Logistics · internal</span>
+              <span className="block text-[11px] text-slate-500">SureShip · ThinkHealth internal</span>
             </span>
           </div>
           {data && (

@@ -112,6 +112,18 @@ const shipmentSchema = new mongoose.Schema(
       total: { type: Number, default: null },
     },
 
+    /** The Zoho Books shipment this was imported from (or linked to by its AWB). */
+    zohoShipment: {
+      shipmentId: { type: String, default: '' },
+      shipmentNumber: { type: String, default: '' },
+      packageId: { type: String, default: '' },
+      salesorderId: { type: String, default: '' },
+      salesorderNumber: { type: String, default: '' },
+      /** Zoho's own status for it (shipped / delivered). */
+      status: { type: String, default: '' },
+      syncedAt: { type: Date, default: null },
+    },
+
     /** When an older shipment was looked for in Zoho invoices and none matched (not retried). */
     invoiceCheckedAt: { type: Date, default: null },
 
@@ -197,5 +209,6 @@ shipmentSchema.post('insertMany', bump);
 
 shipmentSchema.index({ createdBy: 1, isArchived: 1, status: 1 });
 shipmentSchema.index({ trackingNumber: 1, carrierCode: 1 });
+shipmentSchema.index({ 'zohoShipment.packageId': 1 }, { partialFilterExpression: { 'zohoShipment.packageId': { $gt: '' } } });
 
 module.exports = mongoose.model('Shipment', shipmentSchema);

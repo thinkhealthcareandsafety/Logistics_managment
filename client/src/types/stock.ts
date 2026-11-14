@@ -120,6 +120,8 @@ export interface ZohoStatus {
   lastSyncSample?: Record<string, unknown>[];
   inventory?: { at: string | null; count: number; error: string };
   invoices?: { at: string | null; summary: string; error: string };
+  /** Shipments imported from Zoho Books (with their invoice, freight and e-way bill). */
+  shipments?: { at: string | null; summary: string; error: string; needsReconnect: boolean };
   /** A sync is running right now (reading items one by one can take minutes). */
   syncing?: boolean;
   stockSource?: '' | 'list' | 'location-list' | 'detail';

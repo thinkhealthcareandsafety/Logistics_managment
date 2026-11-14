@@ -34,7 +34,7 @@ function shell(inner) {
   return `
     <div style="font-family: -apple-system, Segoe UI, Roboto, sans-serif; max-width: 480px; margin: auto;">
       <div style="background:#0f4c5c; padding: 20px 24px; border-radius: 8px 8px 0 0;">
-        <h2 style="color:#fff; margin:0; font-size:18px;">ThinkHealth Logistics</h2>
+        <h2 style="color:#fff; margin:0; font-size:18px;">SureShip by ThinkHealth</h2>
       </div>
       <div style="border:1px solid #e5e7eb; border-top:none; padding: 24px; border-radius: 0 0 8px 8px;">
         ${inner}

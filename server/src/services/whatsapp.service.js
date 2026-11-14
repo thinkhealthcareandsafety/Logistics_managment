@@ -43,7 +43,7 @@ const attr = (v) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, 900) ||
 function buildStatusText({ shipment, checkpoint, trackingUrl }) {
   const statusLabel = STATUS_LABELS[checkpoint.status] || checkpoint.status;
   const lines = [
-    `*ThinkHealth Logistics*`,
+    `*SureShip by ThinkHealth*`,
     `Shipment ${shipment.trackingNumber} is now *${statusLabel}*.`,
   ];
   if (checkpoint.location) lines.push(`Location: ${checkpoint.location}`);
@@ -55,7 +55,7 @@ function buildStatusText({ shipment, checkpoint, trackingUrl }) {
 function buildDeliveryText({ shipment, trackingUrl, feedbackUrl, receiptUrl }) {
   const name = shipment.customerInfo?.name;
   return [
-    `*ThinkHealth Logistics*`,
+    `*SureShip by ThinkHealth*`,
     name ? `Hi ${name},` : 'Hello,',
     '',
     `*Thank you for choosing ThinkHealth.* Your order ${shipment.trackingNumber} has been delivered.`,
@@ -275,7 +275,7 @@ function sendWhatsAppBookedMessage({ to, shipment, trackingUrl }) {
   return sendWhatsApp({
     to,
     text: [
-      '*ThinkHealth Logistics*',
+      '*SureShip by ThinkHealth*',
       `Hello ${name}, your shipment has been created.`,
       '',
       `• Shipment date: ${values.date}`,
@@ -293,7 +293,7 @@ function sendWhatsAppCustomerStatus({ to, shipment, status, trackingUrl }) {
   const label = STATUS_LABELS[status] || status;
   return sendWhatsApp({
     to,
-    text: ['*ThinkHealth Logistics*', `Your shipment is ${label.toLowerCase()}.`, `Tracking ID: ${shipment.trackingNumber}`, `Tracking link: ${trackingUrl}`].join('\n'),
+    text: ['*SureShip by ThinkHealth*', `Your shipment is ${label.toLowerCase()}.`, `Tracking ID: ${shipment.trackingNumber}`, `Tracking link: ${trackingUrl}`].join('\n'),
     template: { kind: 'customerStatus', values: { status: label, awb: shipment.trackingNumber, link: trackingUrl }, contactName: shipment.customerInfo?.name },
     context: 'sendWhatsAppCustomerStatus',
   });

@@ -11,7 +11,7 @@ const logger = require('../config/logger');
  */
 
 const SITE = 'https://www.buyaedindia.com';
-const UA = { 'User-Agent': 'Mozilla/5.0 (ThinkHealth Logistics media sync)' };
+const UA = { 'User-Agent': 'Mozilla/5.0 (SureShip media sync)' };
 const MIN_SCORE = 0.55;
 
 const STOP = new Set(['the', 'and', 'for', 'with', 'of', 'a', 'an', 'in', 'to', 'by', 'standard', 'pack', 'set', 'new', 'n', 'pcs', 'piece', 'pieces']);

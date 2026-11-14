@@ -75,7 +75,7 @@ export function Landing() {
             </h1>
 
             <p className="mt-6 max-w-lg text-[17px] leading-relaxed text-slate-600">
-              ThinkHealth watches every consignment you’ve booked, whichever courier carries it, puts the ones that
+              SureShip watches every consignment you’ve booked, whichever courier carries it, puts the ones that
               slipped at the top of your list, and gives customers a tracking page so they stop calling to ask.
             </p>
 
@@ -263,7 +263,7 @@ export function Landing() {
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-5 py-10 text-[13px] text-slate-500 sm:px-8">
           <span className="flex items-center gap-2.5">
             <BrandMark size={24} />
-            ThinkHealth Logistics
+            SureShip
           </span>
           <span className="tabular-nums">© {new Date().getFullYear()}</span>
         </div>
@@ -430,7 +430,7 @@ function WhatsAppVisual() {
   return (
     <div aria-hidden className="w-full max-w-[250px]">
       <div className="rounded-2xl rounded-tl-sm bg-[#dcf8c6] p-3 shadow-sm">
-        <p className="text-[11px] font-semibold text-slate-900">ThinkHealth Logistics</p>
+        <p className="text-[11px] font-semibold text-slate-900">SureShip by ThinkHealth</p>
         <p className="mt-1 text-[11px] leading-snug text-slate-800">
           Shipment SM1234567890 is now <b>Out for Delivery</b>. Bengaluru Hub.
         </p>

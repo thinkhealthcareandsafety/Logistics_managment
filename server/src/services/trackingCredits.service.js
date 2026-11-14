@@ -133,4 +133,37 @@ async function updateSettings(patch, byName) {
   return status({ recent: 20 });
 }
 
-module.exports = { take, status, updateSettings, period, CreditError };
+/**
+ * Plan changes the user asked for, applied once on start-up (no one has to type them
+ * into the live site). Each runs a single time, recorded in appliedChanges.
+ */
+const PLAN_CHANGES = [
+  {
+    // 2026-11-14: moved to the 100-credits-a-month plan, starting today with all 100 left.
+    id: 'plan-100-monthly-2026-11-14',
+    apply: async (settings) => {
+      const start = new Date('2026-11-14T00:00:00+05:30');
+      settings.allowance = 100;
+      settings.resetsMonthly = true;
+      settings.periodStart = start;
+      settings.usedOffset = -(await Use.countDocuments({ at: { $gte: start } }));
+      settings.usedOffsetFor = start;
+      settings.updatedByName = 'Plan update (100 a month)';
+    },
+  },
+];
+
+async function applyPlanChanges() {
+  const settings = await getSettings();
+  const due = PLAN_CHANGES.filter((c) => !settings.appliedChanges.includes(c.id));
+  if (!due.length) return;
+  for (const c of due) {
+    await c.apply(settings);
+    settings.appliedChanges.push(c.id);
+  }
+  await settings.save();
+  logger.info(`TrackingMore credit plan updated: ${due.map((c) => c.id).join(', ')}`);
+  broadcast();
+}
+
+module.exports = { take, status, updateSettings, period, applyPlanChanges, CreditError };

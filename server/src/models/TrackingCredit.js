@@ -24,6 +24,8 @@ const settingsSchema = new mongoose.Schema(
      */
     autoRegister: { type: Boolean, default: false },
     updatedByName: { type: String, default: '' },
+    /** One-time plan changes already applied on start-up (see trackingCredits.applyPlanChanges). */
+    appliedChanges: { type: [String], default: [] },
   },
   { timestamps: true }
 );
