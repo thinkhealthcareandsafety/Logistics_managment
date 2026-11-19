@@ -193,12 +193,29 @@
   }
 }
 
+/* Phones: the main tabs sit in a bar at the bottom of the screen (thumb reach), above the
+   iPhone home indicator. Everything pinned to the bottom stacks above it via --bottom-nav. */
+:root {
+  --bottom-nav: 0px;
+}
+@media (max-width: 639px) {
+  :root {
+    --bottom-nav: calc(3.75rem + env(safe-area-inset-bottom));
+  }
+  /* iPhone zooms the page into any text box under 16px - keep phones at 16px. */
+  input:not([type='checkbox']):not([type='radio']):not([type='range']),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
 /* A page's save bar is showing: lift the assistant above it so neither covers the other. */
 body:has([data-bottom-bar='open']) .assistant-fab {
-  bottom: 5rem;
+  bottom: calc(var(--bottom-nav) + 5rem);
 }
 body:has([data-bottom-bar='open']) .assistant-panel:not(.is-max) {
-  bottom: 8.5rem;
+  bottom: calc(var(--bottom-nav) + 8.5rem);
 }
 
 /* Loading placeholders: a soft light sweeps across grey blocks (skeletons only - the

@@ -159,7 +159,7 @@ export function AssistantWidget() {
             'assistant-panel fixed z-50 flex flex-col overflow-hidden rounded-2xl border border-orange-200 bg-white shadow-[0_16px_48px_rgba(15,23,42,0.22)]',
             maximized
               ? 'is-max inset-3 sm:inset-x-[max(1.5rem,calc((100vw-60rem)/2))] sm:inset-y-6'
-              : 'inset-x-3 bottom-20 max-h-[min(640px,calc(100vh-7rem))] sm:inset-x-auto sm:right-5 sm:w-[400px]'
+              : 'inset-x-3 bottom-[calc(var(--bottom-nav)+4.5rem)] max-h-[min(640px,calc(100dvh-var(--bottom-nav)-6.5rem))] sm:bottom-20 sm:inset-x-auto sm:right-5 sm:w-[400px]'
           )}
         >
           <header className="flex items-center justify-between gap-3 bg-gradient-to-r from-orange-500 to-rose-500 px-4 py-3 text-white">
@@ -295,7 +295,7 @@ export function AssistantWidget() {
           onClick={() => setOpen((o) => !o)}
           aria-label={open ? 'Close assistant' : 'Open assistant'}
           aria-expanded={open}
-          className="assistant-fab fixed bottom-5 right-5 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-orange-500 to-rose-500 text-white shadow-[0_8px_24px_rgba(244,63,94,0.45)] ring-4 ring-white transition hover:scale-105 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500"
+          className="assistant-fab fixed bottom-[calc(var(--bottom-nav)+1rem)] right-4 z-50 flex h-12 w-12 items-center sm:bottom-5 sm:right-5 sm:h-14 sm:w-14 justify-center rounded-full bg-gradient-to-br from-orange-500 to-rose-500 text-white shadow-[0_8px_24px_rgba(244,63,94,0.45)] ring-4 ring-white transition hover:scale-105 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500"
         >
           {open ? (
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>

@@ -80,7 +80,8 @@ if (fs.existsSync(path.join(clientDist, 'index.html'))) {
       maxAge: '1y',
       immutable: true,
       setHeaders: (res, file) => {
-        if (file.endsWith('.html')) noCache(res);
+        // The home-screen app manifest has no hash in its name either.
+        if (file.endsWith('.html') || file.endsWith('.webmanifest')) noCache(res);
       },
     })
   );

@@ -178,7 +178,7 @@ export function Settings() {
       {/* Sticky save bar - appears only with unsaved changes. */}
       <div
         className={clsx(
-          'fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-white/95 backdrop-blur transition-transform duration-200',
+          'fixed inset-x-0 bottom-[var(--bottom-nav)] z-20 border-t border-slate-200 bg-white/95 backdrop-blur transition-transform duration-200',
           dirty ? 'translate-y-0' : 'pointer-events-none translate-y-full'
         )}
         aria-hidden={!dirty}

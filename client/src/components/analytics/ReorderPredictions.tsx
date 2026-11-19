@@ -53,7 +53,7 @@ export function ReorderPredictions() {
           <h2 className="text-[15px] font-semibold text-slate-950">Reorder predictions</h2>
           <p className="mt-0.5 text-[13px] text-slate-500">Clients who buy the same item on a rhythm - when their next order should come, and how much.</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
           <SegmentedControl<View>
             label="Show"
             value={view}

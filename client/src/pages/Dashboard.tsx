@@ -515,17 +515,17 @@ export function Dashboard() {
                 </button>
               )}
 
-              <div className="flex flex-1 items-center justify-end gap-2">
+              <div className="flex w-full min-w-0 flex-1 items-center justify-end gap-2 sm:w-auto">
                 {/* Couriers you ship with first (with counts), then every courier on TrackingMore. */}
                 {(
-                  <label className="relative">
+                  <label className="relative min-w-0 flex-1 sm:flex-none">
                     <span className="sr-only">Filter by courier</span>
                     <select
                       value={courierActive ? courier : 'all'}
                       onChange={(e) => setCourier(e.target.value)}
                       className={clsx(
                         toolbarButton,
-                        'max-w-[200px] cursor-pointer appearance-none truncate pr-7',
+                        'w-full cursor-pointer appearance-none truncate pr-7 sm:w-auto sm:max-w-[200px]',
                         courierActive && 'border-brand-300 bg-brand-50 text-brand-900'
                       )}
                     >
@@ -560,12 +560,12 @@ export function Dashboard() {
                     </svg>
                   </label>
                 )}
-                <label className="relative">
+                <label className="relative min-w-0 flex-1 sm:flex-none">
                   <span className="sr-only">Sort shipments</span>
                   <select
                     value={sort}
                     onChange={(e) => setSort(e.target.value as Sort)}
-                    className={clsx(toolbarButton, 'cursor-pointer appearance-none pr-7')}
+                    className={clsx(toolbarButton, 'w-full cursor-pointer appearance-none truncate pr-7 sm:w-auto')}
                   >
                     {Object.entries(SORT_LABELS).map(([key, label]) => (
                       <option key={key} value={key}>

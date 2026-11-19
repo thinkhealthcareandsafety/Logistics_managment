@@ -24,7 +24,8 @@ export function SegmentedControl<T extends string>({
   onChange: (value: T) => void;
 }) {
   return (
-    <div role="radiogroup" aria-label={label} className="inline-flex items-center gap-0.5 rounded-lg bg-slate-100 p-0.5">
+    <div role="radiogroup" aria-label={label} // Never wider than the screen: on a phone the options scroll sideways instead.
+      className="inline-flex max-w-full items-center gap-0.5 overflow-x-auto rounded-lg bg-slate-100 p-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       {segments.map((segment) => {
         const checked = segment.value === value;
         const empty = segment.count === 0 && !checked;

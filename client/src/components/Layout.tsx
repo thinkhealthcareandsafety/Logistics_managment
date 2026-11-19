@@ -21,14 +21,64 @@ const AssistantWidget = lazy(() => import('./assistant/AssistantWidget').then((m
  * notification settings, signing out - live under the avatar, where every SaaS user
  * already looks for them.
  */
-const NAV = [
+const NAV: { to: string; label: string; short?: string; icon: TabIconName; match: string[] }[] = [
   // A shipment's detail page is part of Shipments, so the tab stays lit there.
-  { to: '/dashboard', label: 'Shipments', match: ['/dashboard', '/shipments'] },
-  { to: '/stock', label: 'Stock', match: ['/stock'] },
-  { to: '/manual-stock', label: 'Manual stock', match: ['/manual-stock'] },
-  { to: '/couriers', label: 'Couriers', match: ['/couriers'] },
-  { to: '/analytics', label: 'Analytics', match: ['/analytics'] },
+  { to: '/dashboard', label: 'Shipments', icon: 'truck', match: ['/dashboard', '/shipments'] },
+  { to: '/stock', label: 'Stock', icon: 'box', match: ['/stock'] },
+  { to: '/manual-stock', label: 'Manual stock', short: 'Manual', icon: 'clipboard', match: ['/manual-stock'] },
+  { to: '/couriers', label: 'Couriers', icon: 'route', match: ['/couriers'] },
+  { to: '/analytics', label: 'Analytics', icon: 'chart', match: ['/analytics'] },
 ];
+
+type TabIconName = 'truck' | 'box' | 'clipboard' | 'route' | 'chart';
+
+/** The phone tab bar's icons - filled in lightly when that tab is open. */
+function TabIcon({ name, active }: { name: TabIconName; active: boolean }) {
+  const p = { width: 22, height: 22, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: active ? 2.1 : 1.8, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true } as const;
+  const fill = active ? 'currentColor' : 'none';
+  switch (name) {
+    case 'truck':
+      return (
+        <svg {...p}>
+          <path d="M3 6.5h11v9H3z" fill={fill} fillOpacity={0.12} />
+          <path d="M14 9.5h3.6l3.4 3.4v2.6h-7" />
+          <circle cx="7" cy="17.5" r="1.8" />
+          <circle cx="17.5" cy="17.5" r="1.8" />
+        </svg>
+      );
+    case 'box':
+      return (
+        <svg {...p}>
+          <path d="m12 3 8 4.5v9L12 21l-8-4.5v-9z" fill={fill} fillOpacity={0.12} />
+          <path d="m4 7.5 8 4.5 8-4.5M12 12v9" />
+        </svg>
+      );
+    case 'clipboard':
+      return (
+        <svg {...p}>
+          <rect x="5" y="4.5" width="14" height="16.5" rx="2" fill={fill} fillOpacity={0.12} />
+          <path d="M9 4.5V3.5h6v1M8.5 10h7M8.5 13.5h7M8.5 17h4" />
+        </svg>
+      );
+    case 'route':
+      return (
+        <svg {...p}>
+          <circle cx="6" cy="18" r="2.2" fill={fill} fillOpacity={0.2} />
+          <circle cx="18" cy="6" r="2.2" fill={fill} fillOpacity={0.2} />
+          <path d="M8.2 18H15a3 3 0 0 0 0-6H9a3 3 0 0 1 0-6h6.8" />
+        </svg>
+      );
+    case 'chart':
+      return (
+        <svg {...p}>
+          <path d="M4 20h16" />
+          <rect x="5.5" y="11" width="3" height="6.5" rx="0.8" fill={fill} fillOpacity={0.2} />
+          <rect x="10.5" y="7" width="3" height="10.5" rx="0.8" fill={fill} fillOpacity={0.2} />
+          <rect x="15.5" y="13" width="3" height="4.5" rx="0.8" fill={fill} fillOpacity={0.2} />
+        </svg>
+      );
+  }
+}
 
 export function Layout() {
   const { user, logout } = useAuth();
@@ -114,16 +164,10 @@ export function Layout() {
             </Menu>
           </div>
         </div>
-        <nav aria-label="Main" className="flex gap-6 border-t border-slate-100 px-4 sm:hidden">
-          {nav.map((item) => (
-            <NavItem key={item.to} to={item.to} active={item.active}>
-              {item.label}
-            </NavItem>
-          ))}
-        </nav>
       </header>
 
-      <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8">
+      {/* Room at the bottom for the phone tab bar (--bottom-nav is 0 on bigger screens). */}
+      <main className="mx-auto max-w-7xl px-4 pb-[calc(var(--bottom-nav)+1.5rem)] pt-5 sm:px-6 sm:py-8">
         <ErrorBoundary key={pathname}>
           {/* A page opened for the first time downloads first - show its shape meanwhile. */}
           <Suspense
@@ -138,6 +182,28 @@ export function Layout() {
           </Suspense>
         </ErrorBoundary>
       </main>
+      {/* Phones: the main tabs at the bottom, in thumb reach, like an installed app. */}
+      <nav
+        aria-label="Main"
+        className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-slate-200 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur sm:hidden"
+      >
+        {nav.map((item) => (
+          <NavLink
+            key={item.to}
+            to={item.to}
+            aria-current={item.active ? 'page' : undefined}
+            className={clsx(
+              'relative flex h-[3.75rem] flex-col items-center justify-center gap-1 text-[10.5px] font-medium transition-colors',
+              item.active ? 'text-brand-900' : 'text-slate-500 active:text-slate-900'
+            )}
+          >
+            {item.active && <span aria-hidden className="absolute inset-x-5 top-0 h-[3px] rounded-b-full bg-brand-700" />}
+            <TabIcon name={item.icon} active={item.active} />
+            <span className="leading-none">{item.short || item.label}</span>
+          </NavLink>
+        ))}
+      </nav>
+
       {/* Rule-based assistant - answers from the live data, no AI service or cost. */}
       <Suspense fallback={null}>
         <AssistantWidget />
